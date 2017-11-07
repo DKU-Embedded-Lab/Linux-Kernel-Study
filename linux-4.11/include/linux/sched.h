@@ -485,11 +485,38 @@ struct task_struct {
 	/*
 	 * For reasons of header soup (see current_thread_info()), this
 	 * must be the first element of task_struct.
-	 */
+	 */ 
+    // context switch 시에 필요한  내용들을 가지고 있기때문에 arch 별로 다르게 정의됨 
+    // 기존에는 아래와 같이 kernel stack 과 thread_info 구조체가 같은 메모리 공간을 공유해서 쓰고 있었지만
+    //
+    // union thread_union {
+    //  struct thread_info thread_info;
+    //      unsigned long stack[THREAD_SIZE/sizeof(long)];
+    //      };
+    // }
+    //
+    // 기존 : 
+    // kernel stack start  ----------------
+    //                    |     stack    | 
+    //            SP  ->  |              |      ----------------
+    //                    |              |  |-->| task_struct{ |
+    //   THREAD_SIZE      | ...          |  | |-|-- *stack     |
+    //      (8KB)         | thread_info{ |  | | |              |
+    //                    |     *task----|--| | | }            |
+    //                    | }            |    | ---------------
+    //                    ----------------<---|
+    //
+    // 2016 년 9 월 patch(v4.9 부터) 로 CONFIG_THREAD_INFO_IN_TASK 가 설정되어 있다면, 
+    // 기존 kernel stack 에 포함되어 있던thread_info 를 task_struct 의 안으로 넣으며, 
+    // 첫번째 변수로 설정해여 type cast 를 통해 접근이 가능하도록 함.
+    // thread_info 가 task_struct 내부에 있으므로 v4.8 에 있던 thread_info->task, thread_info->cpu 도 무의미
+    //
 	struct thread_info		thread_info;
 #endif
 	/* -1 unrunnable, 0 runnable, >0 stopped: */
 	volatile long			state;
+    // kernel stack 은 2 page 크기의 kernel stack 을 가지며, 각 process 마다THREAD_STACK 크기만큼 kernel stack 
+    // 이 생성됨. context switch 시에 USER STACK 을 가리키던 SP 가 KERNEL STACK 을 가리키게 됨.
 	void				*stack;
 	atomic_t			usage;
 	/* Per task flags (PF_*), defined further below: */
@@ -513,7 +540,7 @@ struct task_struct {
 
 	int				prio;
 	int				static_prio;
-	int				normal_prio;
+	nt				normal_prio;
 	unsigned int			rt_priority;
 
 	const struct sched_class	*sched_class;
@@ -744,6 +771,7 @@ struct task_struct {
 
 	/* Signal handlers: */
 	struct signal_struct		*signal;
+    // signal handler 등록 정보를 가지고 있는 구조체
 	struct sighand_struct		*sighand;
 	sigset_t			blocked;
 	sigset_t			real_blocked;

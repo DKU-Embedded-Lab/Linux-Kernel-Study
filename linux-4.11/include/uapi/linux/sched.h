@@ -4,6 +4,12 @@
 /*
  * cloning flags:
  */
+
+// 
+// namespace 관련 flag 로 fork&clone 을 통해 새로운 process 를 생성하려 할 시,
+// flag 로 주어 사용 할 수 있다. 
+//
+
 #define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
 #define CLONE_VM	0x00000100	/* set if VM shared between processes */
 #define CLONE_FS	0x00000200	/* set if fs info shared between processes */

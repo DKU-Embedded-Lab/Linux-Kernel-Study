@@ -196,6 +196,33 @@ struct signal_struct {
 	 * have no need to disable irqs.
 	 */
 	struct rlimit rlim[RLIM_NLIMITS];
+    // process 가 가질 수있는 resource 의 soft limit, hard limit 정보를 가진 struct rlmit 으로
+    // struct rusage 의 entry 개수만큼의 element 를 가진다. (총 16개)
+    //
+    // sys_setrlimit, sys_getrlimit 의 두 system call 에 의해 설정 가능 
+    //
+    // 0	/* CPU time in sec */
+    // 1	/* Maximum filesize */
+    // 2	/* max data size */
+    // 3	/* max stack size */
+    // 4	/* max core file size */
+    // 5	/* max resident set size */
+    // 6	/* max number of processes */
+    // 7	/* max number of open files */
+    // 8	/* max locked-in-memory address space */
+    // 9	/* address space limit */
+    // 10	/* maximum file locks held */
+    // 11	/* max number of pending signals */
+    // 12	/* maximum bytes in POSIX mqueues */
+    // 13	/* max nice prio allowed to raise to 0-39 for nice level 19 .. -20 */
+    // 14	/* maximum realtime priority */
+    // 15	/* timeout for RT tasks in us */
+    // 16   // rusage 의 element 개수만큼의
+    //
+    // 따로 설정 없을 시, struct rlimit 의 rlim_max 가 RLIMIT_INFINITY 로 
+    // 초기화됨. 7 번 number of open file 은 1024 개가 default 이고 6 번 
+    // number of process 는 kernel/fork.c 의 전역변수인 max_threads 값의
+    // 1/2 값임.
 
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	struct pacct_struct pacct;	/* per-process accounting information */

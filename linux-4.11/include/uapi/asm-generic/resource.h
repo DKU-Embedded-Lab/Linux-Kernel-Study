@@ -45,7 +45,7 @@
 					   0-39 for nice level 19 .. -20 */
 #define RLIMIT_RTPRIO		14	/* maximum realtime priority */
 #define RLIMIT_RTTIME		15	/* timeout for RT tasks in us */
-#define RLIM_NLIMITS		16
+#define RLIM_NLIMITS		16 // rusage 의 element 개수 만큼 
 
 /*
  * SuS says limits have to be unsigned.
@@ -56,6 +56,7 @@
 #ifndef RLIM_INFINITY
 # define RLIM_INFINITY		(~0UL)
 #endif
-
+// resource 가 limit 없이 설정되었을 경우,  struct rlimit 의 rlim_max 에 
+// 초기화 된다. 
 
 #endif /* _UAPI_ASM_GENERIC_RESOURCE_H */

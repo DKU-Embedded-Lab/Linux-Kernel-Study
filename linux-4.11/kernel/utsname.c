@@ -88,6 +88,11 @@ fail:
  * utsname of this process won't be seen by parent, and vice
  * versa.
  */
+// 
+// FORK&CLONE 시에 flag 로 CLONE_NEWUTS 가 설정 된다면, task_struct 의
+// nsproxy 의 uts_ns 를 새로 생성하며 이때부터 uts_namespace 는 부모와 
+// 분리됨  
+//
 struct uts_namespace *copy_utsname(unsigned long flags,
 	struct user_namespace *user_ns, struct uts_namespace *old_ns)
 {

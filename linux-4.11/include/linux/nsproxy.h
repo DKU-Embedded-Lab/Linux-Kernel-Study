@@ -29,9 +29,13 @@ struct fs_struct;
  */
 struct nsproxy {
 	atomic_t count;
-	struct uts_namespace *uts_ns;
-	struct ipc_namespace *ipc_ns;
+	struct uts_namespace *uts_ns; // uts - unix timesharing system
+    // 현재 kernel 의 name, version, architecture type ...
+    // uname system call 로 확인하는 정보들
+	struct ipc_namespace *ipc_ns;    
+    // IPC 관련
 	struct mnt_namespace *mnt_ns;
+    // mounted file system 관련
 	struct pid_namespace *pid_ns_for_children;
 	struct net 	     *net_ns;
 	struct cgroup_namespace *cgroup_ns;

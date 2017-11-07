@@ -8,7 +8,13 @@ struct key;
 
 /*
  * Some day this will be a full-fledged user tracking system..
- */
+ */ 
+
+// 
+// individual resource consumption 을 관리
+// 새로운 user_struct 생성시, current user, root user 를 위한 user_struct 가
+// 둘다 생성되므로 root user, current user 가 모두 다른 namespace 와 분리 가능
+//
 struct user_struct {
 	atomic_t __count;	/* reference count */
 	atomic_t processes;	/* How many processes does this user have? */

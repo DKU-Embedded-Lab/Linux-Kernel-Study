@@ -19,11 +19,15 @@ enum uts_proc {
 
 struct user_namespace;
 extern struct user_namespace init_user_ns;
-
+// running kernel 의 version, name, architecture type 등 관련
 struct uts_namespace {
 	struct kref kref;
+    // kernel 에서 uts_namespace 의 사용 횟수(reference counting)
 	struct new_utsname name;
+    // uts 관련 정보로 새로 초기화한 값 e.g. release, version ...
 	struct user_namespace *user_ns;
+    // 기존(v2.6.39)에 nsproxy 에 있던 user_namespace 와 많이 다름.
+    // 보안과 관련된 식별자(uid,gid,key) 속성들을 독립적으로 구성
 	struct ucounts *ucounts;
 	struct ns_common ns;
 };

@@ -22,8 +22,12 @@ extern int version_string(LINUX_VERSION_CODE);
 int version_string(LINUX_VERSION_CODE);
 #endif
 
+// ute_namespace 의 초기 setting 으로 현재 running kernel, version, archtype
+// 등의 정보를 초기화함. 이후, ushare, fork&clone 시의 flag 등을 통해 다른
+// namespace 를 만들고 정보를 초기화 할 수 있음 
 struct uts_namespace init_uts_ns = {
 	.kref = KREF_INIT(2),
+    // kernel source tree 의 root Makefile 통해 결정
 	.name = {
 		.sysname	= UTS_SYSNAME,
 		.nodename	= UTS_NODENAME,

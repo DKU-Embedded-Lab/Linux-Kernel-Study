@@ -28,7 +28,7 @@
 #include <linux/cgroup.h>
 
 static struct kmem_cache *nsproxy_cachep;
-
+// 초기의 global namespace 
 struct nsproxy init_nsproxy = {
 	.count			= ATOMIC_INIT(1),
 	.uts_ns			= &init_uts_ns,

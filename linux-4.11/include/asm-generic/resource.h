@@ -6,6 +6,8 @@
 
 /*
  * boot-time rlimit defaults for the init task:
+ *
+ * init task 의 boot time resource limit 설정값
  */
 #define INIT_RLIMITS							\
 {									\
