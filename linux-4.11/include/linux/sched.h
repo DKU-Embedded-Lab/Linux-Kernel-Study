@@ -490,7 +490,7 @@ struct task_struct {
     // 기존에는 아래와 같이 kernel stack 과 thread_info 구조체가 같은 메모리 공간을 공유해서 쓰고 있었지만
     //
     // union thread_union {
-    //  struct thread_info thread_info;
+    //  struct thread_info thread_info{
     //      unsigned long stack[THREAD_SIZE/sizeof(long)];
     //      };
     // }
@@ -663,10 +663,41 @@ struct task_struct {
 	 * Children/sibling form the list of natural children:
 	 */
 	struct list_head		children;
-	struct list_head		sibling;
+	struct list_head		sibling;    
 	struct task_struct		*group_leader;
+    // 현재 process 가 여러개의 thread 를 생성하였을 경우, 같은 thread group id 를 가지게 된다. 
+    // 이 때, process 내에서 처음 thread 를 생성한 thread 를 main thread 라 하며, 같은 thread group 
+    // 내의 여러 thread 들(각각 task_struct 를 가짐)은 group_leader 를 통해 main thread 를 가리킨다.
+    // 
+    //  pid_link-----|
+    //  I            | 
+    // 
+    //
+    //  session leader
+    // task_struct{
+    //      pid_link     
+    // }
+    //
+    //  group_leader 
+    // task_struct{
+    //
+    // }
+    //
+    // 같은p 내의 t             같은 p 내의 t
+    // task_struct{             task_struct{
+    //    ...group_leader <--|      ...group_leader <---|
+    //       pid_link        |         pid_link         |
+    // }                     |  }                       |
+    // task_struct{          |  task_struct{            |
+    //   ... group_leader ---|      ...group_leader ----|
+    //       pid_link        |         pid_link         |
+    // }                     |  }                       |
+    // task_struct{          |  task_struct{            |
+    //    ...group_leader ---|      ...group_leader ----|
+    //      pid_link                   pid_link 
+    // }                        }
 
-	/*
+    /*
 	 * 'ptraced' is the list of tasks this task is using ptrace() on.
 	 *
 	 * This includes both natural children and PTRACE_ATTACH targets.
@@ -677,6 +708,11 @@ struct task_struct {
 
 	/* PID/PID hash table linkage. */
 	struct pid_link			pids[PIDTYPE_MAX];
+    // pid_link 는 각 task 가 자신의 pid 를 참조하기 위한, 
+    // 자신의 process 가 속한 proces group 의 다른 pid 를 
+    // 참조하기 위한 구조체이다.
+    // pid_link 구조체는 내부에 struct pid 를 가진 node 형태이다. 
+
 	struct list_head		thread_group;
 	struct list_head		thread_node;
 
@@ -788,6 +824,9 @@ struct task_struct {
 #ifdef CONFIG_AUDITSYSCALL
 	kuid_t				loginuid;
 	unsigned int			sessionid;
+    // 현재 task_struct 가 속한 sessionid 를 의미한다. 
+    // session 이란, 같은 terminal(tty) 를 가지고 하나의 proces 만이 active terminal 을 
+    // 가지는 즉 foreground process 인 일련의 process-group 들을 의미한다.
 #endif
 	struct seccomp			seccomp;
 
