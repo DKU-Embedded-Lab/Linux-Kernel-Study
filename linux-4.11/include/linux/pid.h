@@ -47,28 +47,105 @@ enum pid_type
  * find_pid_ns() using the int nr and struct pid_namespace *ns.
  */
 
+//specific name space 에서만 visible 한 구조 이며 hash table 으로 관리됨
 struct upid {
 	/* Try to keep pid_chain in the same cacheline as nr for find_vpid */
 	int nr;
+    // pid, tgid, pgid, sid 등등...각 namespace 별 local id 값
 	struct pid_namespace *ns;
+    // 해당 pid 가 속한 namespace 
 	struct hlist_node pid_chain;
+    // pid hash table 에서 같은 index 에 속한 upid 들을 연결
 };
 
+// kernel-internal representation of pid 
+// 모든 해당 pid 값을 공유하는 task 들은 struct pid 를 공유
+// (e.g. process group 내의 process 들은 process group id 에 해당하는 pid 가 같으므로
+// process group 내의 모든 proces 들이task_struct.pids[PIDTYPE_PGID].pid 가 같은 struct pid 를 가리키며
+// process group leader 의 경우 task_struct.pis[PIDTYPE_PID].pid 도 해당 struct pid 를 가리킨다.)
+//
+// 이런 공유 구조는 pid, pgid, sid 에만 해당. tgid 는 해당되지 않음 tgid 의 경우 단순히 task_struct.group_leader 가 
+// 가리키는 task_struct 의 pid 값만 가져오면 됨.(task_struct 에 해당 task_struct 를 가리키는 변수가 바로 있음)
 struct pid
 {
 	atomic_t count;
+    // reference counter 
 	unsigned int level;
 	/* lists of tasks that use this pid */
-	struct hlist_head tasks[PIDTYPE_MAX];
+    // 하나의 process 가 각각의 namsespace 에 다른 local id 값으로 존재 가능
+    // level 은 process 가 local id 로  보여질 수 있는 namespace 의 수를 의미 
+    // (struct pid 를 사용중인 pid_namespace hierarchy 가 지금 얼만큼 level 까지 존재하는가)
+	struct hlist_head tasks[PIDTYPE_MAX]; 
+    // 이 struct pid 값을 공유하는 task_struct 들을 type 별로 list 로 관리됨
+    // 아래 그림의 예시의 경우에 
+    // pid 가 100 인 struct pid 는
+    //
+    //  tasks[PIDTYPE_PID] <-> task A's task_struct.pids[PIDTYPE_PID].node 와 연결
+    //  tasks[PIDTYPE_PGID] <-> task A.s task_struct.pids[PIDTYPE_PGID].node <-> task B's task_struct.pids[PIDTYPE_PGID].node 와 연결
+    //
+    // 이거 통해서 struct pid 를 통해 task_struct 를 결과적으로 찾을 수 있음.
+    //
 	struct rcu_head rcu;
 	struct upid numbers[1];
+    // struct pid 가 속한 각 namespace 에게 보여질 id 값.
+    // 지금 배열 크기가 1로 설정. 즉 procss 가 global namespace 에 속해있는 경우엔 struct pid 가 이렇게만 
+    // 사용되지만, struct pid 가 속한 namespace 가 추가될 경우, struct pid 내에 numbers 가 마지막에 오기 때문에
+    // 
+    // namespace 가 여러개 사용 된다면 이 배열의  첫번째가 global id 임.
+    //
 };
+
+//      자신의 task_struct, session leader 의 task_struct, process 
+//      group_leader 의 task_struct 에 해당하는
+//      task_struct->pid_link->node 와 연결됨
+// 
+//                 그룹 속한 프로세스                                                 그룹 리더 프로세스 
+//                      pid 101                                                 pid 100
+//                      pid {                     ----------------------------->pid {   
+//                          ...                   |                             ...
+//                          hlist_head tasks      |                             hlist_head tasks [PIDTYPE_MAX]
+//                          [PIDTYPE_MAX]         |                             [PIDTYPE_MAX]
+//    --------------------------0 PIDTYPE_PID,    |        -------------------------0 PIDTYPE_PID, 
+//    |                         1 PIDTYPE_PGID,---|-----   |  ----------------------1 PIDTYPE_PGID, 
+//    |                         2 PIDTYPE_SID-----|--- |   |  |                     2 PIDTYPE_SID --------------------- 
+//    |                 } <---------------------  |  | |   |  |                 } <------------------------           |
+//    |                                        |  |  | |   |  |                                            |          |
+//    |                                        |  |  | |   |  |                                            |          |
+//    |   task B                               |  |  | |   |  |   task A                                   |          |
+//    |   task_struct{                         |  |  | |   |  |   task_struct{                             |          |
+//    |       ...                              |  |  | |   |  |      ...                                   |          |
+//    |       pids[PIDTYPE_MAX]                |  |  | |   |  |      pids[PIDTYPE_MAX]                     |          |
+//    |       ------------------- PIDTYPE_PID  |  |  | |   |  |      ------------------- PIDTYPE_PID       |          |
+//    |       | 자신 pid        |              |  |  | |   |  |      | 자신 pid        |                   |          |
+//    |       | pid_link{       |              |  |  | |   |  |      | pid_link{       |                   |          |
+//    |       |   pid-----------|---------------  |  | |   |  |      |   pid-----------|-------------------|          |
+//    --------|-->node          |                 |  | |   ---|------|-->node          |                   |          |
+//            | }               |                 |  | |      |      | }               |                   |          |
+//            ------------------- PIDTYPE_PGID    |  | |      |      ------------------- PIDTYPE_PGID      |          |
+//            | 속한 p 그룹리더 |                 |  | |      |      | 속한 p 그룹리더 |                   |          |
+//            | pid_link{       |                 |  | |      |      | pid_link{       |                   |          |
+//            |   pid-----------|-----------------   | |      |      |   pid-----------|--------------------          |
+//            |   node          |                    | --------------|-->node          |                              |
+//            | }               |                    |               | }               |                              |
+//            ------------------- PIDTYPE_SID        |               ------------------- PIDTYPE_SID                  |
+//            | 속한 s 그룹 리더|                    |               | 속한 s 그룹 리더|                              |
+//            | pid_link{       |                    |               | pid_link{       |                              |
+//            |  pid            |                    |               |  pid            |                              |
+//            |  node           |                    |               |  node           |                              |
+//            | }               |                    |               | }               |                              |
+//            -------------------                    |               -------------------                              |
+//            ...                                    |               ...                                              |
+//        }                                          |           }                                                    |
+//                                                   |                                                                |
+//                                                   ---> 세션 리더 프로ㅔ스의 task_struct->pids[PIDTYPE_SID].node <---
+
 
 extern struct pid init_struct_pid;
 
 struct pid_link
 {
-	struct hlist_node node;
+	struct hlist_node node; 
+    // pis.tasks 를 통해 type 별 task_struct 가 연결되는데 pids.tasks 에 연결되는 hlist_node 가 이거임
 	struct pid *pid;
 };
 
@@ -161,6 +238,14 @@ static inline bool is_child_reaper(struct pid *pid)
  * see also task_xid_nr() etc in include/linux/sched.h
  */
 
+
+//
+// struct pid 에 해당하는 여러개의 namespace 가 있을 수 있음 즉 각각 namespace 마다 
+// 다른 local pid 를 가지는 것임 
+// 이 함수는 그 struct pid 에서 pid 를 처음 할당받아 진짜 init process 에 의해 보여지는 
+// global id 값을 가져옴 
+// (global id 값은 numbers 배열 즉 upid 배열의 첫번째 element 임)
+//
 static inline pid_t pid_nr(struct pid *pid)
 {
 	pid_t nr = 0;

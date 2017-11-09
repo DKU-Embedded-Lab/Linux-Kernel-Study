@@ -642,6 +642,12 @@ struct task_struct {
 
 	pid_t				pid;
 	pid_t				tgid;
+    // 
+    // task_struct 의 pid, tgid 정보.
+    // process group id , session groupd id 는 각각
+    // pids[PIDTYPE_PGID]->pid.numbers.nr 
+    // pids[PIDTYPE_SID]->pid.numbers.nr
+    // 을 통해 구할 수 있음.
 
 #ifdef CONFIG_CC_STACKPROTECTOR
 	/* Canary value for the -fstack-protector GCC feature: */
@@ -668,21 +674,7 @@ struct task_struct {
     // 현재 process 가 여러개의 thread 를 생성하였을 경우, 같은 thread group id 를 가지게 된다. 
     // 이 때, process 내에서 처음 thread 를 생성한 thread 를 main thread 라 하며, 같은 thread group 
     // 내의 여러 thread 들(각각 task_struct 를 가짐)은 group_leader 를 통해 main thread 를 가리킨다.
-    // 
-    //  pid_link-----|
-    //  I            | 
-    // 
-    //
-    //  session leader
-    // task_struct{
-    //      pid_link     
-    // }
-    //
-    //  group_leader 
-    // task_struct{
-    //
-    // }
-    //
+    //        
     // 같은p 내의 t             같은 p 내의 t
     // task_struct{             task_struct{
     //    ...group_leader <--|      ...group_leader <---|
@@ -1119,6 +1111,15 @@ struct task_struct {
 	 * Do not put anything below here!
 	 */
 };
+
+//
+//  task_struct 로부터pid_type 인 PIDTYPE_PID, PIDTYPE_PGID, PIDTYPE_SID 에
+//  따라 해당하는 struct pid 를 가져오는 함수들임.
+//
+//   thread 에 해당하는 task_struct 일 수도 있으니, process group 의 
+//   struct pid 를 가져오고 싶으면 group_leader 를 참조함
+//
+//
 
 static inline struct pid *task_pid(struct task_struct *task)
 {

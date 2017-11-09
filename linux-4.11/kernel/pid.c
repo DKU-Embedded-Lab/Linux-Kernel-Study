@@ -43,6 +43,11 @@
 #define pid_hashfn(nr, ns)	\
 	hash_long((unsigned long)nr + (unsigned long)ns, pidhash_shift)
 static struct hlist_head *pid_hash;
+// 
+// 주어진 numeric pid 값,namespace 을 통해 struct pid 를 찾아내기 위해 hash table 사용.
+// pid_hash 는 hlist_head 의 배열로 구성되며 pidhash_init 함수에서 배열 element 의 수가
+// 게산됨. 배열 element 의 개수는 2^4 ~ 2^16 까지 사이에서 RAM configuration 에 의해 결정
+//
 static unsigned int pidhash_shift = 4;
 struct pid init_struct_pid = INIT_STRUCT_PID;
 
@@ -101,6 +106,9 @@ EXPORT_SYMBOL_GPL(init_pid_ns);
 
 static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(pidmap_lock);
 
+//
+// pid bitmap 에서 free 할 pid 위치의 bit 를 clear 함
+//
 static void free_pidmap(struct upid *upid)
 {
 	int nr = upid->nr;
@@ -149,7 +157,10 @@ static void set_last_pid(struct pid_namespace *pid_ns, int base, int pid)
 		last_write = cmpxchg(&pid_ns->last_pid, prev, pid);
 	} while ((prev != last_write) && (pid_before(base, last_write, pid)));
 }
-
+//
+// namespace 에 해당하는 pid bitmap 으로부터 free 한 
+// pid number 를 알아내고, 해당되는 bit 를 0 으로 설정함
+//
 static int alloc_pidmap(struct pid_namespace *pid_ns)
 {
 	int i, offset, max_scan, pid, last = pid_ns->last_pid;
@@ -293,6 +304,11 @@ void free_pid(struct pid *pid)
 	call_rcu(&pid->rcu, delayed_put_pid);
 }
 
+//
+// struct pid 를 생성하며 
+// 여러개의 namespace 가 존재할 경우 namespace 별 local pid 를 생성해 줌 
+// pid 가 생성된 ns 부터 시작하여 initial global namespace  까지 level 하나씩 줄여가며
+//
 struct pid *alloc_pid(struct pid_namespace *ns)
 {
 	struct pid *pid;
@@ -309,6 +325,7 @@ struct pid *alloc_pid(struct pid_namespace *ns)
 	tmp = ns;
 	pid->level = ns->level;
 	for (i = ns->level; i >= 0; i--) {
+        // namespace 별 local pid 를 생성
 		nr = alloc_pidmap(tmp);
 		if (nr < 0) {
 			retval = nr;
@@ -385,10 +402,20 @@ EXPORT_SYMBOL_GPL(find_vpid);
 /*
  * attach_pid() must be called with the tasklist_lock write-held.
  */
+
+// pid_type 은 PIDTYPE_PID, PIDTYPE_PGID, PIDTYPE_SID 중의 하나임
+//
 void attach_pid(struct task_struct *task, enum pid_type type)
 {
 	struct pid_link *link = &task->pids[type];
+    // task_struct.pids[type] 에 해당하는 pid_link 주소 가져옴
 	hlist_add_head_rcu(&link->node, &link->pid->tasks[type]);
+    // task_struct.pids[type]->node  와 task_struct.pids[type]->pid->tasks[type] 
+    // 를 연결
+    // 즉 같은 type 의 struct pid 끼리 연결
+    // 
+    // v2.6.39 에서는 매개변수에서 struct pid 가 있어서 link->pid 를 설정 해 주었는데 
+    // 여긴 그 과정이 없는거 보니 다른 함수에서 pis 를 alloc 해주나?
 }
 
 static void __change_pid(struct task_struct *task, enum pid_type type,
@@ -495,11 +522,18 @@ struct pid *find_get_pid(pid_t nr)
 	return pid;
 }
 EXPORT_SYMBOL_GPL(find_get_pid);
-
+//
+// struct pid, pid_namespace 를 통해 struct pid 가 속한 여러 namespaces 들 중
+// ns 에 해당하는 local id 를 가져옴 
+//
 pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns)
 {
 	struct upid *upid;
 	pid_t nr = 0;
+
+    // parent namespace 는 child namespace 의 pid 를 볼 수 있지만, 
+    // child namespace 는 parent namespace 의 pid 를 볼 수 없음
+    // 땨라서 ns
 
 	if (pid && ns->level <= pid->level) {
 		upid = &pid->numbers[ns->level];
@@ -509,7 +543,9 @@ pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns)
 	return nr;
 }
 EXPORT_SYMBOL_GPL(pid_nr_ns);
-
+//
+// 현재 current task 가 속한 namespace 에 해당하는 local id 를 가져옴
+//
 pid_t pid_vnr(struct pid *pid)
 {
 	return pid_nr_ns(pid, task_active_pid_ns(current));

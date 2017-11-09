@@ -37,7 +37,9 @@ struct nsproxy {
 	struct mnt_namespace *mnt_ns;
     // mounted file system 관련
 	struct pid_namespace *pid_ns_for_children;
+    // 독립적인 process 공간 할당
 	struct net 	     *net_ns;
+    // namespace 간 network 충돌 방지 (중복 포트 바인딩)
 	struct cgroup_namespace *cgroup_ns;
 };
 extern struct nsproxy init_nsproxy;
