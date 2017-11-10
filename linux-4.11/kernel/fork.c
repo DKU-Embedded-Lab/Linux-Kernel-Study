@@ -2027,7 +2027,22 @@ long _do_fork(unsigned long clone_flags,
 
 #ifndef CONFIG_HAVE_COPY_THREAD_TLS
 /* For compatibility with architectures that call do_fork directly rather than
- * using the syscall entry points below. */
+ * using the syscall entry points below. */ 
+
+//
+// arch dependent 한 sys_fork 관련 함수가 arch independent 한 do_fork 를 호출 
+// arch 별 userspace 에서 전달되는 register 정보가 다른기 때문
+//
+// clone_flags   : duplication policy 를 지정하며, low byte 는 child process 가 종료 될 때 parent process 에게 보낼 signal 종류를 의미
+// stack_start   : user mode stack 의 시작 주소 - cloone 으로 thread 생성시에는 thread 는 개별 stack 을 가지므로 새로운 stack p 를 넘겨줌
+// stack_size    : user mode stack 의 크기, 주로 사용 안하며, 0 임(왜? 필요할 것 같은데) - sys_fork, sys_vfork, sys_clone 모두 다 0 임
+// parent_tidptr : parent process 의 tid (Native Posix Thread Library) 에대한 address
+// child_tidptr  : child process 의 tid (NPTL) 에 대한 address 
+//
+//  __user MACRO 는 이 address space 를 믿을 수 없다. 
+//
+// 성공시 pid 값 반환
+//
 long do_fork(unsigned long clone_flags,
 	      unsigned long stack_start,
 	      unsigned long stack_size,
@@ -2048,6 +2063,10 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 		(unsigned long)arg, NULL, NULL, 0);
 }
 
+
+// 
+// sys_fork, sys_vfork, sys_clone
+//
 #ifdef __ARCH_WANT_SYS_FORK
 SYSCALL_DEFINE0(fork)
 {
@@ -2092,6 +2111,7 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 unsigned long, tls)
 #endif
 {
+    // thread 의 경우, parent 와 address space 공유하지만 stack 은 다르므로 newsp 넘겨줌
 	return _do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
 }
 #endif

@@ -51,7 +51,7 @@ enum pid_type
 struct upid {
 	/* Try to keep pid_chain in the same cacheline as nr for find_vpid */
 	int nr;
-    // pid, tgid, pgid, sid 등등...각 namespace 별 local id 값
+    // 각 namespace 별 local id 값
 	struct pid_namespace *ns;
     // 해당 pid 가 속한 namespace 
 	struct hlist_node pid_chain;

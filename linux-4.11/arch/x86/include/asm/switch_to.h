@@ -64,7 +64,9 @@ struct fork_frame {
 	struct inactive_task_frame frame;
 	struct pt_regs regs;
 };
-
+//
+// prev 라고 명시된 process state 를 저장하고 next 라고 명시된 process state 를 activate
+//
 #define switch_to(prev, next, last)					\
 do {									\
 	prepare_switch_to(prev, next);					\

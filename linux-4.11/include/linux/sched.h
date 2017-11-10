@@ -1161,16 +1161,26 @@ static inline struct pid *task_session(struct task_struct *task)
  */
 pid_t __task_pid_nr_ns(struct task_struct *task, enum pid_type type, struct pid_namespace *ns);
 
+// 
+// _nr 뒤에 붙은 함수들은 global pid 값 관련 함수
+//
 static inline pid_t task_pid_nr(struct task_struct *tsk)
 {
 	return tsk->pid;
 }
 
+//
+// _nr_ns 붙은 함수들은 parameter 로 지정된 namespace 에 해당하는 local id 를 가져옴
+//
 static inline pid_t task_pid_nr_ns(struct task_struct *tsk, struct pid_namespace *ns)
 {
 	return __task_pid_nr_ns(tsk, PIDTYPE_PID, ns);
 }
 
+// 
+// _vnr 붙은 함수들은 local pid 값 관련 함수
+// 현재 namespace 에 해당하는 tsk 의 local id 를 가져옴
+//
 static inline pid_t task_pid_vnr(struct task_struct *tsk)
 {
 	return __task_pid_nr_ns(tsk, PIDTYPE_PID, NULL);
