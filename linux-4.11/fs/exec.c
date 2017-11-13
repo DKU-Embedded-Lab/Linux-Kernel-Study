@@ -1656,7 +1656,13 @@ static int exec_binprm(struct linux_binprm *bprm)
 
 /*
  * sys_execve() executes a new program.
- */
+ */ 
+
+// 
+// 1. filename 경로에 있는 실행될 file 의 inode 를 찾아 file descriptors 생성
+//
+//
+
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
@@ -1668,6 +1674,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	struct files_struct *displaced;
 	int retval;
 
+    // filename 에 대한 잚못참조 검사 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
 
@@ -1677,6 +1684,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	 * don't check setuid() return code.  Here we additionally recheck
 	 * whether NPROC limit is still exceeded.
 	 */
+    // rlimit 의 제한을 넘지 않는지 검사
 	if ((current->flags & PF_NPROC_EXCEEDED) &&
 	    atomic_read(&current_user()->processes) > rlimit(RLIMIT_NPROC)) {
 		retval = -EAGAIN;
@@ -1684,9 +1692,11 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 	/* We're below the limit (still or again), so we don't want to make
-	 * further execve() calls fail. */
+	 * further execve() calls fail. */ 
+    // rlimit 검사 끝났으니 PF_NPROC_EXCEEDED flag 를 제거
 	current->flags &= ~PF_NPROC_EXCEEDED;
 
+    // current task 의 file 들을 복사?...
 	retval = unshare_files(&displaced);
 	if (retval)
 		goto out_ret;
@@ -1803,12 +1813,19 @@ out_ret:
 	return retval;
 }
 
+// 
+// do_exec 계열의 함수들의 __argv, __envp 는 각각 argument 에 대한 pointer, environment 에 대한 pointer 값이며,
+// userspace 에 있는 값이므로, __user annotation 으로 user space 의 영역에 있는 값임을 알림 
+// 
+//
 int do_execve(struct filename *filename,
 	const char __user *const __user *__argv,
 	const char __user *const __user *__envp)
 {
 	struct user_arg_ptr argv = { .ptr.native = __argv };
-	struct user_arg_ptr envp = { .ptr.native = __envp };
+	struct user_arg_ptr envp = { .ptr.native = __envp }; 
+    // AT_FDCWD : given pathname is interpreted relative to the current working directory of the calling process 
+    //flag : 0 으로 넘겨줌
 	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 }
 

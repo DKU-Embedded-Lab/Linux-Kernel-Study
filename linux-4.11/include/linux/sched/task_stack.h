@@ -30,7 +30,10 @@ static inline unsigned long *end_of_stack(const struct task_struct *task)
 #elif !defined(__HAVE_THREAD_FUNCTIONS)
 
 #define task_stack_page(task)	((void *)(task)->stack)
-
+//
+// org task_struct 로부터 thread_info 구조체의 내용, kernel stack pointer 를 
+// 가져와 task_struct p 에 채움
+//
 static inline void setup_thread_stack(struct task_struct *p, struct task_struct *org)
 {
 	*task_thread_info(p) = *task_thread_info(org);
@@ -108,7 +111,12 @@ static inline unsigned long stack_not_used(struct task_struct *p)
 #endif
 extern void set_task_stack_end_magic(struct task_struct *tsk);
 
-#ifndef __HAVE_ARCH_KSTACK_END
+#ifndef __HAVE_ARCH_KSTACK_END 
+
+//
+// thread_info 가 task_struct->stack 에 포함된 상태에서 kernel stack 이계속 너무 많이 자라면, 
+// thread_info 의 내용까지 침범하여 바꿔 버릴 수 있다. 이를 방지하기 위한 범위 검사 함수
+// 
 static inline int kstack_end(void *addr)
 {
 	/* Reliable end of stack detection:

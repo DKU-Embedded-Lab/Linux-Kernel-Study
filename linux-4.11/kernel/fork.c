@@ -1488,6 +1488,46 @@ static inline void rcu_copy_process(struct task_struct *p)
  * parts of the process environment (as per the clone
  * flags). The actual kick-off is left to the caller.
  */
+
+//
+// sys_fork, sys_vfork, sys_clone 의 핵심 함수로 proces 복제
+//
+// __latent_entropy : gcc attribute 로 아래와 같은 이유로 도입 but 이해 못함 
+//  This plugin mitigates the problem of the kernel having too little entropy during 
+//  and after boot for generating crypto keys. 
+//  The latent_entropy gcc attribute can be only on functions and variables.
+//  If it is on a function then the plugin will instrument it. If the attribute
+//  is on a variable then the plugin will initialize it with a random value.
+//  The variable must be an integer, an integer array type or a structure with integer fields.
+//  
+// 
+//  PTR_ERR macro 에 대해 ....
+//
+//   VITUAL ADDR SPACE (32bit)
+//  --------------------- 4G
+//  |                   |
+//  |  KERNEL SPACE     |
+//  |                   |
+//  ---------------------
+//  | STACK             |
+//  | ...               |
+//  | MEMORY MAPPING    |
+//  | ...               |      
+//  | HEAP              |
+//  | ...               |
+//  | BSS SEGMENT       |
+//  | ...               |
+//  | DATA SEGMENT      |
+//  | ...               |
+//  | TEXT SEGMENT(ELF) |
+//  - - - - - - - - - - |
+//  | EINVAL            | error code area 
+//  | ...               |                
+//  |                   |
+//  --------------------- 0
+//
+//
+//
 static __latent_entropy struct task_struct *copy_process(
 					unsigned long clone_flags,
 					unsigned long stack_start,
@@ -1501,6 +1541,11 @@ static __latent_entropy struct task_struct *copy_process(
 	int retval;
 	struct task_struct *p;
 
+    // 다양한 flag 설정값들이 clone_flags 로 넘어오기 때문에, 말도 안되는 값들을 잡아내야 함
+    // e.g. CLONE_NEWNS 와 CLONE_FS 가 조합된 flag 
+    //  - CLONE_NEWNS : 새로운 namespace 를 생성 
+    //  - CLONE_FS : parent&child process 가 같은 fs 를 공유
+    //
 	if ((clone_flags & (CLONE_NEWNS|CLONE_FS)) == (CLONE_NEWNS|CLONE_FS))
 		return ERR_PTR(-EINVAL);
 
@@ -1510,6 +1555,8 @@ static __latent_entropy struct task_struct *copy_process(
 	/*
 	 * Thread groups must share signals as well, and detached threads
 	 * can only be started up within the thread group.
+     *
+     *  CLONE_THREAD 로 thread 를 생성해야 한다면 CLONE_SIGHAND flag 가 설정되어 있어야 한다.
 	 */
 	if ((clone_flags & CLONE_THREAD) && !(clone_flags & CLONE_SIGHAND))
 		return ERR_PTR(-EINVAL);
@@ -1518,6 +1565,9 @@ static __latent_entropy struct task_struct *copy_process(
 	 * Shared signal handlers imply shared VM. By way of the above,
 	 * thread groups also imply shared VM. Blocking this case allows
 	 * for various simplifications in other code.
+     *
+     * CLONE_SIGHAND 로 shared signal handler 설정을 주려면 CLONE_VM 이 설정되어 VM 이 부모,자식간
+     * 공유되는 상황이어야 한다.
 	 */
 	if ((clone_flags & CLONE_SIGHAND) && !(clone_flags & CLONE_VM))
 		return ERR_PTR(-EINVAL);
@@ -1534,7 +1584,8 @@ static __latent_entropy struct task_struct *copy_process(
 
 	/*
 	 * If the new process will be in a different pid or user namespace
-	 * do not allow it to share a thread group with the forking task.
+	 * do not allow it to share a thread group with the forking task. 
+     *
 	 */
 	if (clone_flags & CLONE_THREAD) {
 		if ((clone_flags & (CLONE_NEWUSER | CLONE_NEWPID)) ||
@@ -1547,7 +1598,9 @@ static __latent_entropy struct task_struct *copy_process(
 	if (retval)
 		goto fork_out;
 
-	retval = -ENOMEM;
+	retval = -ENOMEM; 
+    // parent process 의 task_struct  와 동일한 task_struct 생성 및 thread_info 생성
+    // task_struct->stack 은 복사하고 새로 생성한 thread_info 로 설정
 	p = dup_task_struct(current, node);
 	if (!p)
 		goto fork_out;
@@ -1560,9 +1613,14 @@ static __latent_entropy struct task_struct *copy_process(
 	DEBUG_LOCKS_WARN_ON(!p->hardirqs_enabled);
 	DEBUG_LOCKS_WARN_ON(!p->softirqs_enabled);
 #endif
-	retval = -EAGAIN;
+	retval = -EAGAIN; 
+    // user 에게 제한된 process 의 개수가 초과하였는지 검사
 	if (atomic_read(&p->real_cred->user->processes) >=
-			task_rlimit(p, RLIMIT_NPROC)) {
+			task_rlimit(p, RLIMIT_NPROC)) { 
+        // 현재 생성한 task_struct 의 결과로 p->real_cred->user->processes 즉
+        // user_struct 에 명시된 user 가 생성한 process 의 수가 p->signal->rlim 
+        // 의 PLIMIT_NPROC  에 해당하는resource limit 즉 user 가 생성 가능한 
+        // process 의 수보다 많을 경우
 		if (p->real_cred->user != INIT_USER &&
 		    !capable(CAP_SYS_RESOURCE) && !capable(CAP_SYS_ADMIN))
 			goto bad_fork_free;
@@ -1668,6 +1726,7 @@ static __latent_entropy struct task_struct *copy_process(
 
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = sched_fork(clone_flags, p);
+    // 
 	if (retval)
 		goto bad_fork_cleanup_policy;
 
@@ -1679,31 +1738,53 @@ static __latent_entropy struct task_struct *copy_process(
 		goto bad_fork_cleanup_perf;
 	/* copy all the process information */
 	shm_init_task(p);
+    // copy_xzy 루틴 
 	retval = copy_semundo(clone_flags, p);
+    // COPY_SYSVSEM  관련, parent process 의 System V semaphore 공유 여부
 	if (retval)
 		goto bad_fork_cleanup_audit;
 	retval = copy_files(clone_flags, p);
+    // CLONE_FILES 설정 시, parent process 의 file descriptor 공유
+    // 공유되지 않느다면, 부모의 struct file 과 내용이 같은 복사본의 
+    // struct file 을 생성하며독립적으로 수정 가능 
+    // task_struct->files
+    //
 	if (retval)
 		goto bad_fork_cleanup_semundo;
 	retval = copy_fs(clone_flags, p);
+    // CLONOE_FS 설정 시, 부모와 자식이 같은 file system 정보 공유 
+    // task_struct->fs
 	if (retval)
 		goto bad_fork_cleanup_files;
 	retval = copy_sighand(clone_flags, p);
+    // CLONE_THREAD 또는 CLONE_SIGHAND 설정 시,  부모 process 의 signal handler 를 공유 
+    // task_struct->sighand
 	if (retval)
 		goto bad_fork_cleanup_fs;
 	retval = copy_signal(clone_flags, p);
+    // CLONE_THREAD 설정 시, signal handling 부분 중 non-handler-specific 한 부분을 공유 
+    // task_struct->signal
 	if (retval)
 		goto bad_fork_cleanup_sighand;
 	retval = copy_mm(clone_flags, p);
+    // COPY_MM 설정 시, address space 를 parent 와 공유 (즉 같은 mm 사용) 
+    // COPY_MM 설정되어 있지 않아도, COW MECHANISM 때문에 page table 만 복제하고, pt 가 가르키고 있는 page 복제는 안함,
+    // mm 등 복제 안함 
+    // task_struct->mm
 	if (retval)
 		goto bad_fork_cleanup_signal;
 	retval = copy_namespaces(clone_flags, p);
+    // 위의 CLONE_xyz flag 들과는 달리 CLONE_NEWxyz 가 설정 되어 있지 않다면 부모와 namespace 공유
 	if (retval)
 		goto bad_fork_cleanup_mm;
 	retval = copy_io(clone_flags, p);
 	if (retval)
 		goto bad_fork_cleanup_namespaces;
 	retval = copy_thread_tls(clone_flags, stack_start, stack_size, p, tls);
+    // x86, s390 을 제외하고 copy_thread_tls 함수가 따로 정의되어 있지 않음 그냥 copy_thread 의 wrapper 함수임
+    // (thread local storage 는 무시하고 copy_thread 를 그냥 호출함)
+    // copy_thread 
+    //   - architectures-specific execution context 를 복제 (task_struct->thread)
 	if (retval)
 		goto bad_fork_cleanup_io;
 
@@ -1716,10 +1797,22 @@ static __latent_entropy struct task_struct *copy_process(
 	}
 
 	p->set_child_tid = (clone_flags & CLONE_CHILD_SETTID) ? child_tidptr : NULL;
+    // NPTL 관련..
+    // user space pointer 로 넘어온 child_tidptr 의 주소가 task_struct 의 set_child_tid 에 저장됨
+    // task_struct->set_child_tid 
+    //      : child process 가 생성될 때, 자신의 pid 를 적을 user space 영역의 주소
 	/*
 	 * Clear TID on mm_release()?
 	 */
-	p->clear_child_tid = (clone_flags & CLONE_CHILD_CLEARTID) ? child_tidptr : NULL;
+	p->clear_child_tid = (clone_flags & CLONE_CHILD_CLEARTID) ? child_tidptr : NULL; 
+    //
+    // NPTL 관련 ... 
+    // user space pointer 로 넘어온 child_tidptr 의 주소가 task_struct 의 clear_child_tid 에 저장됨 
+    // task_struct->clear_child_tid 
+    //      : child process 가 자신의 pid 를 clear 하고, child process 의 종료 시 0으로 clear 하며 thread termination 을 
+    //        기다리는 process 를 깨우기 위해 sys_futex 사용 
+    // kernel 에서 user space 로 thread 의 종료를 알리기 위해 사용
+    //
 #ifdef CONFIG_BLOCK
 	p->plug = NULL;
 #endif
@@ -1788,8 +1881,9 @@ static __latent_entropy struct task_struct *copy_process(
 	 */
 	write_lock_irq(&tasklist_lock);
 
-	/* CLONE_PARENT re-uses the old parent */
+	/* CLONE_PARENT re-uses the old parent */    
 	if (clone_flags & (CLONE_PARENT|CLONE_THREAD)) {
+        // thread 일 경우, parent 의 parent 가 부모임
 		p->real_parent = current->real_parent;
 		p->parent_exec_id = current->parent_exec_id;
 	} else {
@@ -1821,11 +1915,13 @@ static __latent_entropy struct task_struct *copy_process(
 		goto bad_fork_cancel_cgroup;
 	}
 
+    // 새로 생성한 child process 의 child, sibling 등을 연결하는 작업
 	if (likely(p->pid)) {
 		ptrace_init_task(p, (clone_flags & CLONE_PTRACE) || trace);
 
 		init_task_pid(p, PIDTYPE_PID, pid);
 		if (thread_group_leader(p)) {
+            // p 의 pid 와 tgit 가 같은 경우 즉, thread group 의 leader 인지 검사
 			init_task_pid(p, PIDTYPE_PGID, task_pgrp(current));
 			init_task_pid(p, PIDTYPE_SID, task_session(current));
 
@@ -1959,6 +2055,7 @@ long _do_fork(unsigned long clone_flags,
 	      int __user *parent_tidptr,
 	      int __user *child_tidptr,
 	      unsigned long tls)
+    // tls 는thread-specific-storage
 {
 	struct task_struct *p;
 	int trace = 0;
@@ -1970,6 +2067,8 @@ long _do_fork(unsigned long clone_flags,
 	 * requested, no event is reported; otherwise, report if the event
 	 * for the type of forking is enabled.
 	 */
+    //
+    // ptrace monitoring 중인지 검사
 	if (!(clone_flags & CLONE_UNTRACED)) {
 		if (clone_flags & CLONE_VFORK)
 			trace = PTRACE_EVENT_VFORK;
@@ -1991,28 +2090,39 @@ long _do_fork(unsigned long clone_flags,
 	 */
 	if (!IS_ERR(p)) {
 		struct completion vfork;
+        // vfork 일 경우, wait_queue 에서 parent 가 child 의 exit&exec 대기
 		struct pid *pid;
 
 		trace_sched_process_fork(current, p);
 
 		pid = get_task_pid(p, PIDTYPE_PID);
+        // fork 는  생성한 process 의 pid 를 가져오기 때문에
+        // fork 를 호출한 부모 process 가 속한 namespace 에서 보이는 자식 process 의 local id 를 가져옴
 		nr = pid_vnr(pid);
 
+        // NPTL 를 위한 부분 parameter 로 넘겨준 userspace 공간의 변수인 parent_tidptr 에 nr 즉 부모 process 가 속한 
+        // namespace 에서 보이는 child process 의 pid 를 넘겨줌
 		if (clone_flags & CLONE_PARENT_SETTID)
 			put_user(nr, parent_tidptr);
 
+        // vfork 인 경우 ...
 		if (clone_flags & CLONE_VFORK) {
 			p->vfork_done = &vfork;
+            // completion 등록
 			init_completion(&vfork);
 			get_task_struct(p);
 		}
 
+        // child process 가 wake up 됨(child process 의 task_struct 가 scheduler queue 에 추가됨)
+        // 바로 child process 를 실행한다는 말이 아니라, shceduler 가 child process 를 선택 할 수 있도록
+        // 되어진 상태라는 것
 		wake_up_new_task(p);
 
 		/* forking complete and child started to run, tell ptracer */
 		if (unlikely(trace))
 			ptrace_event_pid(trace, pid);
 
+        // vfork 인 경우...
 		if (clone_flags & CLONE_VFORK) {
 			if (!wait_for_vfork_done(p, &vfork))
 				ptrace_event_pid(PTRACE_EVENT_VFORK_DONE, pid);
@@ -2056,7 +2166,16 @@ long do_fork(unsigned long clone_flags,
 
 /*
  * Create a kernel thread.
- */
+ */ 
+
+// 
+// 고전적인 kernel thread 생성 방법으로 kernel_thread 호출 후에 daemonize 함수로 daemon 화 함으로 kernel 호출 후에 daemonize 함수로 daemon 화 함.
+//   fn :kernel thread 에서 수행할 일임.
+//   arg : fn 함수의 argument
+//   flag : clone flag 
+//
+// 다른 더 많이 사용되는 방법은 kthread_xyz interface 임.
+//
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
 	return _do_fork(flags|CLONE_VM|CLONE_UNTRACED, (unsigned long)fn,
@@ -2065,7 +2184,9 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 
 
 // 
-// sys_fork, sys_vfork, sys_clone
+// sys_fork  : full copy , COW
+// sys_vfork : data area 공유, parent process 는 child process 가 exit & exec 되기까지 block 됨
+// sys_clone : 공유속성 설정, thread
 //
 #ifdef __ARCH_WANT_SYS_FORK
 SYSCALL_DEFINE0(fork)

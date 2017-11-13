@@ -486,6 +486,8 @@ struct task_struct {
 	 * For reasons of header soup (see current_thread_info()), this
 	 * must be the first element of task_struct.
 	 */ 
+    // 
+    // KERNEL STACK 에 관하여 ...
     // context switch 시에 필요한  내용들을 가지고 있기때문에 arch 별로 다르게 정의됨 
     // 기존에는 아래와 같이 kernel stack 과 thread_info 구조체가 같은 메모리 공간을 공유해서 쓰고 있었지만
     //
@@ -518,6 +520,7 @@ struct task_struct {
     // kernel stack 은 2 page 크기의 kernel stack 을 가지며, 각 process 마다THREAD_STACK 크기만큼 kernel stack 
     // 이 생성됨. context switch 시에 USER STACK 을 가리키던 SP 가 KERNEL STACK 을 가리키게 됨.
 	void				*stack;
+    // stack 즉 kernel stack 은 dup_task_struct 함수에서 thread 든, process 든 관련 없이 새로 생성됨 
 	atomic_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
@@ -587,7 +590,36 @@ struct task_struct {
 #endif
 
 	struct mm_struct		*mm;
-	struct mm_struct		*active_mm;
+    // user space 에서 실행되던 process 의 memory context
+	struct mm_struct		*active_mm; 
+    // 
+    // task_struct 는 mm 과 active_mm 의 두개의 가지고 있다. 
+    // 이는 LAZY TLB HANDLING 관련된 optimize 임.
+    //  - 원래 scheduling 결과 다른 proces 가 선택되면 virtual address space 는 교체되고 memory 관련 context 가 교체되며
+    //    TLB entry 등이 교체 되어야 함 (mm 교체)
+    //  - kernel thread 로 scheduling 되어 질 경우에는 kernel thread 는 그전에 돌던 user process 와는 관련이 없는 process 
+    //    이기 때문에 그전 돌던 mm 들을 버리지 않아보는 optimization 을 해보자 라는 취지.
+    //  - 하지만 kernel thread 가 user process 의 memory context 를 맘대로 침범해서는 안되기 때문에 mm=NULL 로 하고 mm 의 내용을 
+    //    active_mm 에 백업해 놓고 TLB flush 등 안함 
+    //
+    //  TLB clear : TC
+    //  ex1)
+    //     A process        ->      B process           ->      A process 
+    //     mm : a           TC      mm : b              TC      mm : a
+    //     active_mm : a            active_mm : b               active_mm : a
+    //  ex2)
+    //     A process        ->      kernel process      ->      B process 
+    //     mm : a                   mm : null           TC      mm : b
+    //     active_mm : a            active_mm : a               active_mm : b
+    //  ex3)
+    //     A process        ->      kernel process      ->      A process 
+    //     mm : a                   mm : null                   mm : a
+    //     active_mm : a            active_mm : a               active_mm : a
+    //  ex4)
+    //     A process        ->      kernel process      ->      kernel process 
+    //     mm : a                   mm : null                   mm : null
+    //     active_mm : a            active_mm : a               active_mm : a
+    //
 
 	/* Per-thread vma caching: */
 	struct vmacache			vmacache;
@@ -661,9 +693,11 @@ struct task_struct {
 
 	/* Real parent process: */
 	struct task_struct __rcu	*real_parent;
+    // parent process 
 
 	/* Recipient of SIGCHLD, wait4() reports: */
 	struct task_struct __rcu	*parent;
+    // parent proces, 부모 먼저 죽으면 init 으로 변경
 
 	/*
 	 * Children/sibling form the list of natural children:
@@ -709,7 +743,10 @@ struct task_struct {
 	struct list_head		thread_node;
 
 	struct completion		*vfork_done;
-
+    // sys_vfork 호출시, parent process 는 child process 가 exit & exec 될 때 까지 block 된다. 
+    // 이를 위한 wait_queue
+  
+    // set_child_tid 와 clear_child_tid 는 user space 에서 thread 의 생성 및 삭제를 바로 알기 위한 변수들임 
 	/* CLONE_CHILD_SETTID: */
 	int __user			*set_child_tid;
 
@@ -766,9 +803,14 @@ struct task_struct {
 
 	/* Objective and real subjective task credentials (COW): */
 	const struct cred __rcu		*real_cred;
+    // 다른 task 가 이 task_struct 에 접근하기 위해 가지고 있어야 하는 권한
 
 	/* Effective (overridable) subjective task credentials (COW): */
-	const struct cred __rcu		*cred;
+	const struct cred __rcu		*cred; 
+    // 현재 task_struct 가 다른 task_struct 에 접근하거나 특정 작업을 수행할
+    // 때 행사하는 권한 
+    // 일시적을 다른 security context 를 가리키도록 override 될 수 있으나
+    // 기본적으로 cred == real_cred
 
 	/*
 	 * executable name, excluding path.
@@ -799,8 +841,9 @@ struct task_struct {
 
 	/* Signal handlers: */
 	struct signal_struct		*signal;
-    // signal handler 등록 정보를 가지고 있는 구조체
+    // signal handling 중 non-handler-specific part
 	struct sighand_struct		*sighand;
+    // signal handler 등록 정보를 가지고 있는 구조체
 	sigset_t			blocked;
 	sigset_t			real_blocked;
 	/* Restored if set_restore_sigmask() was used: */
@@ -1103,6 +1146,7 @@ struct task_struct {
 #endif
 	/* CPU-specific state of this task: */
 	struct thread_struct		thread;
+    // low-level switching 시 필요한 register  정보를 restore & store 하는 곳
 
 	/*
 	 * WARNING: on x86, 'thread_struct' contains a variable-sized
@@ -1441,12 +1485,15 @@ union thread_union {
 	unsigned long stack[THREAD_SIZE/sizeof(long)];
 };
 
-#ifdef CONFIG_THREAD_INFO_IN_TASK
+#ifdef CONFIG_THREAD_INFO_IN_TASK 
+// CONFIG_THREAD_INFO_IN_TASK 가 설정될 경우,task_struct 의 첫번째 변수로 
+// 되어 있는 thread_info 를 typecast 를 통해 가져옴
 static inline struct thread_info *task_thread_info(struct task_struct *task)
 {
 	return &task->thread_info;
 }
-#elif !defined(__HAVE_THREAD_FUNCTIONS)
+#elif !defined(__HAVE_THREAD_FUNCTIONS) 
+// task_struct 로부터 kernel stack 을 가져옴
 # define task_thread_info(task)	((struct thread_info *)(task)->stack)
 #endif
 

@@ -14,13 +14,18 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
  * kthread_create - create a kthread on the current node
  * @threadfn: the function to run in the thread
  * @data: data pointer for @threadfn()
- * @namefmt: printf-style format string for the thread name
+ * @namefmt: printf-style format string for the thread name : kernel thread 이름
  * @...: arguments for @namefmt.
  *
  * This macro will create a kthread on the current node, leaving it in
  * the stopped state.  This is just a helper for kthread_create_on_node();
  * see the documentation there for more details.
  */
+
+// 
+// stop 된 상태로 namefmt 라는 이름의 kernel thread 가 생성되며, wake_up_process 를 통해 kernel thread 가 
+// threadfn 를 수행하도록 할 수 있음 
+//
 #define kthread_create(threadfn, data, namefmt, arg...) \
 	kthread_create_on_node(threadfn, data, NUMA_NO_NODE, namefmt, ##arg)
 
@@ -39,6 +44,7 @@ struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
  * Description: Convenient wrapper for kthread_create() followed by
  * wake_up_process().  Returns the kthread or ERR_PTR(-ENOMEM).
  */
+// kthread_create 를 통해 kernel thread 를 생성하는 것과는 다르게, kthread_create 하고 바로 wake up 해줌 
 #define kthread_run(threadfn, data, namefmt, ...)			   \
 ({									   \
 	struct task_struct *__k						   \

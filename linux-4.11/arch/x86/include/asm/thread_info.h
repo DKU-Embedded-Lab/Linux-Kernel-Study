@@ -54,6 +54,7 @@ struct task_struct;
 
 struct thread_info {
 	unsigned long		flags;		/* low level flags */
+    // process specific flag
 };
 
 #define INIT_THREAD_INFO(tsk)			\

@@ -106,7 +106,10 @@ extern bool may_setgroups(void);
  * that task is going to act upon another object.  This may be overridden
  * temporarily to point to another security context, but normally points to the
  * same context as task->real_cred.
- */
+ */ 
+// 
+// task_struct 의 보안정보 관련 context 
+//
 struct cred {
 	atomic_t	usage;
 #ifdef CONFIG_DEBUG_CREDENTIALS

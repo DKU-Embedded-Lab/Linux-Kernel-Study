@@ -48,10 +48,16 @@ struct cpu_context_save {
  */
 struct thread_info {
 	unsigned long		flags;		/* low level flags */
-	int			preempt_count;	/* 0 => preemptable, <0 => bug */
-	mm_segment_t		addr_limit;	/* address limit */
-	struct task_struct	*task;		/* main task structure */
+    // process specific flag
+	int			preempt_count;	/* 0 => preemptable, <0 => bug */ 
+    // preemptable kernel 인지 구분
+	mm_segment_t		addr_limit;	/* address limit */ 
+    // process 가 사용 가능한 virtual address limit  
+    // (e.g. normal process 는 kernel 영역 접근 불가능)
+	struct task_struct	*task;		/* main task structure */ 
+    // process 의 task_struct instance
 	__u32			cpu;		/* cpu */
+    // process 가 실행중인 cpu
 	__u32			cpu_domain;	/* cpu domain */
 	struct cpu_context_save	cpu_context;	/* cpu context */
 	__u32			syscall;	/* syscall number */
@@ -87,7 +93,10 @@ register unsigned long current_stack_pointer asm ("sp");
  * how to get the thread information struct from C
  */
 static inline struct thread_info *current_thread_info(void) __attribute_const__;
-
+//
+// thread_info 는 kernel stack 의 top 에 존재하기 때문에 top 위치 bit 를 제외한 나머지 부분을 0으로 만들어 주어
+// stack pointer 가 어디에 현재 어디에 있더라도 top 으로 이동
+//
 static inline struct thread_info *current_thread_info(void)
 {
 	return (struct thread_info *)

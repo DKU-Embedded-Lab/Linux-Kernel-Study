@@ -18,6 +18,8 @@
  * including <asm/current.h> can cause a circular dependency on some platforms.
  */
 #include <asm/current.h>
+// CONFIG_THREAD_INFO_IN_TASK 가 설정되어 있을 경우,thread_info 가 task_struct 내에 있기 때문에, 
+// current process 의 task_struct 주소를 가진 current 를 통해 thread_info 접근 가능
 #define current_thread_info() ((struct thread_info *)current)
 #endif
 
