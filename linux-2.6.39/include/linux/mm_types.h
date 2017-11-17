@@ -150,11 +150,12 @@ struct vm_area_struct {
 	union {
 		struct {
 			struct list_head list;
-			void *parent;	/* aligns with prio_tree_node parent */
+			void *parent;	/* aligns with prio_tree_node parent */ 
+            // 여기까지가 prio_tree_node 와 겹치는 부분
 			struct vm_area_struct *head;
 		} vm_set;
 
-		struct raw_prio_tree_node prio_tree_node;
+		struct raw_prio_tree_node prio_tree_node; // left, right, parent
 	} shared;
 
 	/*

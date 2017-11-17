@@ -214,12 +214,16 @@ void __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
 		struct vm_area_struct *prev, struct rb_node *rb_parent)
 {
 	struct vm_area_struct *next;
-
+    // prev - vma - container_of(rb_parent) : vma 아직 연결안됨
+    //              next
 	vma->vm_prev = prev;
+    // vma 에서 prev 연결
 	if (prev) {
 		next = prev->vm_next;
 		prev->vm_next = vma;
+        // prev 에서 vma 연결
 	} else {
+        // prev 가 없다면 맨 처음의 것이므로 mm->mmap 을 새로 설정
 		mm->mmap = vma;
 		if (rb_parent)
 			next = rb_entry(rb_parent,
@@ -228,8 +232,10 @@ void __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
 			next = NULL;
 	}
 	vma->vm_next = next;
+    // vma 에서 next 로 연결 설정
 	if (next)
 		next->vm_prev = vma;
+    // next 에서 vma 로 연결 설정
 }
 
 /* Check if the vma is being used as a stack by this task */

@@ -285,13 +285,17 @@ struct vm_area_struct {
 	/* The first cache line has the info for VMA tree walking. */
 
 	unsigned long vm_start;		/* Our start address within vm_mm. */
-	unsigned long vm_end;		/* The first byte after our end address
-					   within vm_mm. */
+    // virtual address 시작 주소
+	unsigned long vm_end;		/* The first byte after our end address within vm_mm. */
+    // virtual address 끝 주소
 
 	/* linked list of VM areas per task, sorted by address */
-	struct vm_area_struct *vm_next, *vm_prev;
+	struct vm_area_struct *vm_next, *vm_prev; 
+    // vm_area_struct 의 linear liking pointer 
 
 	struct rb_node vm_rb;
+    // red black tree 에서의 현재 vm_area_struct 가 속한 node 로 
+    // rb tree 에서 찾아서 container of 로 vm_area_struct 찾음
 
 	/*
 	 * Largest free memory gap in bytes to the left of this VMA.
@@ -299,13 +303,24 @@ struct vm_area_struct {
 	 * VMAs below us in the VMA rbtree and its ->vm_prev. This helps
 	 * get_unmapped_area find a free area of the right size.
 	 */
-	unsigned long rb_subtree_gap;
+	unsigned long rb_subtree_gap; 
+    // 지금 vma 와 바로 전 vma 사이의 gap 또는 그전 vma 들 사이에서의 gap 들 
+    // 중 가장 큰 gap 으로 get_unmapped_area 에서 현재 vma 들사이에 낄 수 있긴
+    // 한지 확인 할 때 사용
 
 	/* Second cache line starts here. */
 
-	struct mm_struct *vm_mm;	/* The address space we belong to. */
-	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
+	struct mm_struct *vm_mm;	/* The address space we belong to. */ 
+    // vm_area_struct 가 속한 mm 을 가르키기 위한 back-pointer 
+	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */ 
+    // 해당 address 에 대한 접근 권한
 	unsigned long vm_flags;		/* Flags, see mm.h. */
+    // vm region 에 대한 properties 
+    //  e.g. VM_READ, VM_WRITE, VM_EXEC, VM_SHARED : page 내용에 대한 read,write,exec,shared 가능 여부 
+    //       VM_MAYREAD, VM_MAYWRITE, VM_MAYEXEC, VM_MAYSHARE : VM_ 위 플래그들이 설정될수 있다?(mprotect) 
+    //       VM_GROWSDOWN, VM_GROWSUP : stack 은 VM_GROWSDOWN, heapd 은 VM_GROWSUP 
+    //       VM_DONTCOPY : fork 시 해당 vm  영역을 copy 하지 말것 
+    //       VM_DONTEXPAND : vm 영역 rmremap 등으로 확장 불가능
 
 	/*
 	 * For areas with an address space and backing store,
@@ -315,26 +330,33 @@ struct vm_area_struct {
 		struct rb_node rb;
 		unsigned long rb_subtree_last;
 	} shared;
-
+    // 옛날엔 prio_tree 로 관리 되었지만, rb_tree 로 관리되도록 patch 됨
 	/*
 	 * A file's MAP_PRIVATE vma can be in both i_mmap tree and anon_vma
 	 * list, after a COW of one of the file pages.	A MAP_SHARED vma
 	 * can only be in the i_mmap tree.  An anonymous MAP_PRIVATE, stack
 	 * or brk vma (with NULL file) can only be in an anon_vma list.
 	 */
-	struct list_head anon_vma_chain; /* Serialized by mmap_sem &
-					  * page_table_lock */
+	struct list_head anon_vma_chain; /* Serialized by mmap_sem & * page_table_lock */ 
+    // heap, stack, vma chain 
+    // swap 되기 전의 dirty anon, dirty data 관리
+    
 	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
+    // anonymous page COW handling, shared page 관리 
+    // reverse mapping 관련 
 
 	/* Function pointers to deal with this struct. */
 	const struct vm_operations_struct *vm_ops;
+    // demand paging 을 위한 open, close, mmap 함수등 
 
 	/* Information about our backing store: */
-	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
-					   units */
-	struct file * vm_file;		/* File we map to (can be NULL). */
+	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE units */
+    // file mapping 시에 전체 file 이 mapping 된 것이라면 0 으로, 부분만 mapping 
+    // 된 것이라면 그offset 을 의미(page 수 기준)
+	struct file * vm_file;		/* File we map to (can be NULL). */ 
+    // virtual address space 에 mapping 된 struct file
 	void * vm_private_data;		/* was vm_pte (shared mem) */
-
+    
 #ifndef CONFIG_MMU
 	struct vm_region *vm_region;	/* NOMMU mapping region */
 #endif
@@ -357,18 +379,36 @@ struct core_state {
 
 struct kioctx_table;
 struct mm_struct {
-	struct vm_area_struct *mmap;		/* list of VMAs */
+	struct vm_area_struct *mmap;		/* list of VMAs */ 
+    // mm 이 가진 vm area 의 정보를 나타내는 single linked list 
 	struct rb_root mm_rb;
-	u32 vmacache_seqnum;                   /* per-thread vmacache */
+    // vm_area_struct 와 관련된 rb- tree 로 rb tree 의 root 를 가리킴
+	u32 vmacache_seqnum;                   /* per-thread vmacache */ 
+    // task_struct 별로 가지고 있는 VMCACHE_SIZE 크기(vm_area_struct 4개)의  I
+    // vmacache 에 해당하는 sequence number 
 #ifdef CONFIG_MMU
 	unsigned long (*get_unmapped_area) (struct file *filp,
 				unsigned long addr, unsigned long len,
-				unsigned long pgoff, unsigned long flags);
+				unsigned long pgoff, unsigned long flags); 
+    // 빈 주소 주간을 찾는 함수  
+    // (len 에 맞는 larget linear free address space 찾음)
 #endif
 	unsigned long mmap_base;		/* base of mmap area */
-	unsigned long mmap_legacy_base;         /* base of mmap area in bottom-up allocations */
+    // memory mapping 영역 start address
+	unsigned long mmap_legacy_base;         /* base of mmap area in bottom-up allocations */ 
+    // legacy vm layout 일 경우, mmap 영역의 시작 start address 
 	unsigned long task_size;		/* size of task vm space */
-	unsigned long highest_vm_end;		/* highest vma end address */
+    // task size 를 의미하며 보통 TASK_SIZE 
+    // 
+    //  32bit 의 경우
+    //   --------------------
+    //  | kernel memory (1g)|
+    //  | ------------------|
+    //  | user memory (3g)  | 이 크기가 3g = 0xc0000000 = TASK_SIZE = PAGE_OFFSET 
+    //  ---------------------
+    //
+	unsigned long highest_vm_end;		/* highest vma end address */ 
+    // vma 중 맨 끝 
 	pgd_t * pgd;
 
 	/**
@@ -395,7 +435,8 @@ struct mm_struct {
 #if CONFIG_PGTABLE_LEVELS > 2
 	atomic_long_t nr_pmds;			/* PMD page table pages */
 #endif
-	int map_count;				/* number of VMAs */
+	int map_count;				/* number of VMAs */ 
+    // mm 에 포함되어 있는 vma 의 개수
 
 	spinlock_t page_table_lock;		/* Protects page tables and some counters */
 	struct rw_semaphore mmap_sem;
@@ -415,10 +456,18 @@ struct mm_struct {
 	unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
 	unsigned long exec_vm;		/* VM_EXEC & ~VM_WRITE & ~VM_STACK */
 	unsigned long stack_vm;		/* VM_STACK */
-	unsigned long def_flags;
-	unsigned long start_code, end_code, start_data, end_data;
+	unsigned long def_flags; 
+    // 여기 아래 변수들은 ELF binary 가 address_space 에 map 되면  변하지 않음
+	unsigned long start_code, end_code, start_data, end_data; 
+    // start_code, end_code : code 영역 start ~ end address 
+    // start_data, end_data : data 영역 start ~ end address
 	unsigned long start_brk, brk, start_stack;
-	unsigned long arg_start, arg_end, env_start, env_end;
+    // start_brk : heap start address
+    // brk : heap data 의 현재 end address
+    // start_stack : 
+	unsigned long arg_start, arg_end, env_start, env_end; 
+    // arg_start, arg_end : argument list 영역 start ~ end address
+    // env_start, env_end : envvironment 영역 start ~ end address 
 
 	unsigned long saved_auxv[AT_VECTOR_SIZE]; /* for /proc/PID/auxv */
 

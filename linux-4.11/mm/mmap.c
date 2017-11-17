@@ -478,31 +478,53 @@ static int find_vma_links(struct mm_struct *mm, unsigned long addr,
 {
 	struct rb_node **__rb_link, *__rb_parent, *rb_prev;
 
-	__rb_link = &mm->mm_rb.rb_node;
+	__rb_link = &mm->mm_rb.rb_node; 
 	rb_prev = __rb_parent = NULL;
-
-	while (*__rb_link) {
+    // root node 부터 시작하여 rb tree 검색
+	while (*__rb_link) {         
 		struct vm_area_struct *vma_tmp;
 
 		__rb_parent = *__rb_link;
 		vma_tmp = rb_entry(__rb_parent, struct vm_area_struct, vm_rb);
-
-		if (vma_tmp->vm_end > addr) {
-			/* Fail if an existing vma overlaps the area */
+// start_addr 보다 큰 vm_end 를 가진 첫번째 vm_area_struct 를 반환
+// 아래와 같은 상황 가능
+//  ...     vm_end~ c1)vm_start  c2)vm_start  c3)vm_start  vm_end ~vm_start
+//                       |            |            |         |
+// 0 <- ... +++++++++++++*+++++*++++++*++++++*+++++*+++++++++*+ -> 3G
+//                             |             |
+//                            addr          end
+//
+//       ...vm_end~ c4)vm_start  c5)vm_start  vm_end    
+//                       |            |         |           
+//  0 <- ... ++++++++++++*+++++*++++++*+++++++++*++++++++++++++ -> 3G
+//                             |                             |
+//                            addr                          end
+//
+//  ...     vm_end~ c6)vm_start      vm_end          
+//                       |              |             
+//  0<- ... +++++++++++++*++++++++++++++*++++*+++++++++++++++*+ -> 3G
+//                                           |               |
+//                                          addr            end
+		if (vma_tmp->vm_end > addr) { 
+			/* Fail if an existing vma overlaps the area */ 
 			if (vma_tmp->vm_start < end)
 				return -ENOMEM;
+                // case 1, 2, 4, 5  => 겹치는 상황
 			__rb_link = &__rb_parent->rb_left;
-		} else {
+            // case 3 => left child 로 이동 
+		} else { 
+            // case 6 => right child 로 이동
 			rb_prev = __rb_parent;
+            // rb_prev 를 이동전 left parent 로 설정
 			__rb_link = &__rb_parent->rb_right;
 		}
 	}
-
 	*pprev = NULL;
 	if (rb_prev)
-		*pprev = rb_entry(rb_prev, struct vm_area_struct, vm_rb);
-	*rb_link = __rb_link;
-	*rb_parent = __rb_parent;
+		*pprev = rb_entry(rb_prev, struct vm_area_struct, vm_rb); 
+    // rb_preb NULL 이면 처음 위치(그림의 맨 왼쪽 처음자리)
+	*rb_link = __rb_link; 
+	*rb_parent = __rb_parent; // rb_parent 가 오른쪽 vm
 	return 0;
 }
 
@@ -537,11 +559,14 @@ static unsigned long count_vma_pages_range(struct mm_struct *mm,
 void __vma_link_rb(struct mm_struct *mm, struct vm_area_struct *vma,
 		struct rb_node **rb_link, struct rb_node *rb_parent)
 {
+    // vma - container_of(rb_parent) : vma 아직 연결안됨
 	/* Update tracking information for the gap following the new vma. */
 	if (vma->vm_next)
 		vma_gap_update(vma->vm_next);
+    // gap?.. 뭐하는 함수임? 
 	else
 		mm->highest_vm_end = vma->vm_end;
+    // next 가 없다면 즉 vma 가 마지막이라면 mm 의 마지막 vm 주소 update
 
 	/*
 	 * vma->vm_prev wasn't known when we followed the rbtree to find the
@@ -563,13 +588,16 @@ static void __vma_link_file(struct vm_area_struct *vma)
 	struct file *file;
 
 	file = vma->vm_file;
-	if (file) {
+	if (file) { 
+        // file backed page 라면
 		struct address_space *mapping = file->f_mapping;
 
 		if (vma->vm_flags & VM_DENYWRITE)
 			atomic_dec(&file_inode(file)->i_writecount);
 		if (vma->vm_flags & VM_SHARED)
 			atomic_inc(&mapping->i_mmap_writable);
+        // 현재 vm 이 shared memory 접근이면 address_space 의 
+        // shared mapping count 증가
 
 		flush_dcache_mmap_lock(mapping);
 		vma_interval_tree_insert(vma, &mapping->i_mmap);
@@ -582,8 +610,11 @@ __vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
 	struct vm_area_struct *prev, struct rb_node **rb_link,
 	struct rb_node *rb_parent)
 {
+    // prev - vma - container_of(rb_parent) : vma 아직 연결안됨
 	__vma_link_list(mm, vma, prev, rb_parent);
-	__vma_link_rb(mm, vma, rb_link, rb_parent);
+    // vma 를 prev ~ container_of(rb_parent) 와 서로 연결
+	__vma_link_rb(mm, vma, rb_link, rb_parent); 
+    // vma 를 rb tree 에 추가
 }
 
 static void vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
@@ -591,15 +622,17 @@ static void vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
 			struct rb_node *rb_parent)
 {
 	struct address_space *mapping = NULL;
-
+    // prev - vma - container_of(rb_parent) : vma 아직 연결안됨
 	if (vma->vm_file) {
+        // file backed page 일 경우 먼저 rwsem 잡음
 		mapping = vma->vm_file->f_mapping;
 		i_mmap_lock_write(mapping);
 	}
 
 	__vma_link(mm, vma, prev, rb_link, rb_parent);
+    // vma 와 prev,container_of(rb_parent) 서로 list 연결 및 rbtree 추가
 	__vma_link_file(vma);
-
+    
 	if (mapping)
 		i_mmap_unlock_write(mapping);
 
@@ -969,13 +1002,23 @@ static inline int is_mergeable_vma(struct vm_area_struct *vma,
 	 * extended instead.
 	 */
 	if ((vma->vm_flags ^ vm_flags) & ~VM_SOFTDIRTY)
-		return 0;
+		return 0; 
+    // 이건 뭔지 모르겠음
 	if (vma->vm_file != file)
 		return 0;
+    // 그전 vma 가 현재 요청된 file backed page 와 같은 file 관련
+    // vm 인지 검사, 그 전이 anon page 라면 어차피 vma->vm_file,
+    // file 둘다 null 임
 	if (vma->vm_ops && vma->vm_ops->close)
-		return 0;
+		return 0; 
+    // vm_ops->close operation 을 가지고 있다면 merge 불가능? 왜?  
+    // vm_ops 들중 close 가... (굉장히 많은데 몇개만..)
+    //      없는 것 - generic_file_vm_ops, vmcore_mmap_ops, shmem_vm_ops ... 
+    //      있는 것 - special_mapping_vmops, legacy_special_mapping_vmops ..
 	if (!is_mergeable_vm_userfaultfd_ctx(vma, vm_userfaultfd_ctx))
-		return 0;
+		return 0; 
+    // vma->vm_userfaultfd_ctx 와 vm_userfaultfd_ctx 가 같은 놈이 아닌지 
+    // 검사 
 	return 1;
 }
 
@@ -1011,9 +1054,12 @@ can_vma_merge_before(struct vm_area_struct *vma, unsigned long vm_flags,
 		     struct vm_userfaultfd_ctx vm_userfaultfd_ctx)
 {
 	if (is_mergeable_vma(vma, file, vm_flags, vm_userfaultfd_ctx) &&
-	    is_mergeable_anon_vma(anon_vma, vma->anon_vma, vma)) {
+	    is_mergeable_anon_vma(anon_vma, vma->anon_vma, vma)) { 
+        // can_vma_merge_after 와 같은 검사 
 		if (vma->vm_pgoff == vm_pgoff)
-			return 1;
+			return 1; 
+        // vm_pgoff 즉 현재 생성하려는 vma 의 pg_off 에 page 개수를 더한 
+        // 값이 다음 vma 의 vm_pgoff 와 같은지 즉 연속적인지 검사
 	}
 	return 0;
 }
@@ -1032,17 +1078,23 @@ can_vma_merge_after(struct vm_area_struct *vma, unsigned long vm_flags,
 		    struct vm_userfaultfd_ctx vm_userfaultfd_ctx)
 {
 	if (is_mergeable_vma(vma, file, vm_flags, vm_userfaultfd_ctx) &&
-	    is_mergeable_anon_vma(anon_vma, vma->anon_vma, vma)) {
+	    is_mergeable_anon_vma(anon_vma, vma->anon_vma, vma)) { 
+        // file backed 라면 같은 파일인지, anon 이라면 같은 anon_vma 
 		pgoff_t vm_pglen;
 		vm_pglen = vma_pages(vma);
 		if (vma->vm_pgoff + vm_pglen == vm_pgoff)
-			return 1;
+			return 1; 
+        // vma->vm_pgoff : 해당 vma 의 page 단위 offset
+        // vm_pglen : vma 의 page 개수 
+        // 즉 prior vma 의 page offset 위치부터 그전 prior vma 의 page 개수
+        // 를 더한 값이 새로 추가될 vma 의 page offset 이 되어야 한다.
+        // (virtual address 가 연속적이어야 한다.)
 	}
 	return 0;
 }
 
 /*
- * Given a mapping request (addr,end,vm_flags,file,pgoff), figure out
+ * Given a mapping request (addr,end,vm_flags,file,pgoff),  
  * whether that can be merged with its predecessor or its successor.
  * Or both (it neatly fills a hole).
  *
@@ -1120,7 +1172,13 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
 			can_vma_merge_after(prev, vm_flags,
 					    anon_vma, file, pgoff,
 					    vm_userfaultfd_ctx)) {
-		/*
+        //  1. 전 vm_area_struct 의 vm 끝 주소와 현재 request 시작 
+        //     주소가 같은지 검사
+        //  2. mempolicy 가 같은지 검사
+        //  3. can_vma_merge_after 
+        //     file backed page 라면 같은 file 인지, 같은 속성의 vma 인지 
+        //     pg_off 기준으로 연속되는지 등등 검사
+        /*
 		 * OK, it can.  Can we now merge in the successor as well?
 		 */
 		if (next && end == next->vm_start &&
@@ -1130,7 +1188,13 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
 						     pgoff+pglen,
 						     vm_userfaultfd_ctx) &&
 				is_mergeable_anon_vma(prev->anon_vma,
-						      next->anon_vma, NULL)) {
+						      next->anon_vma, NULL)) { 
+            // 1. 현재 요청 vma 범위의 end가 다음 vma 의 start와 같은지 검사 
+            // 2. mempolicy 가 같은지 검사 
+            // 3. can_vma_merge_before 
+            //    위와 같은 검사 
+            // 4. prev 와 next 도 서로 merge 되어도 되는지 검사 
+            
 							/* cases 1, 6 */
 			err = __vma_adjust(prev, prev->vm_start,
 					 next->vm_end, prev->vm_pgoff, NULL,
@@ -1309,6 +1373,10 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			unsigned long pgoff, unsigned long *populate,
 			struct list_head *uf)
 {
+    // process 의 virtual address space 에 address range 를 추가함
+    // 연속된 주소 범위를 새로 만들 때 사용 
+    // file 이 NULL, offset 이 0 일 경우, anonymous mapping 
+    // file, offset 의 값이 있을 경우, file-backed mapping 
 	struct mm_struct *mm = current->mm;
 	int pkey = 0;
 
@@ -1345,8 +1413,9 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 
 	/* Obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
-	 */
+	 */     
 	addr = get_unmapped_area(file, addr, len, pgoff, flags);
+    // addr 부터 len 까지에 해당하는 free virtual address area 를 가져옴
 	if (offset_in_page(addr))
 		return addr;
 
@@ -1972,18 +2041,28 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 
 	if (len > TASK_SIZE - mmap_min_addr)
 		return -ENOMEM;
-
+    // 요청된 크기가 거의뭐 3G 만큼 큰값인지 검사
 	if (flags & MAP_FIXED)
 		return addr;
-
+    // addr 에 꼭 vma 생성해야 하는지 검사 그렇다면 그냥 반환
+    // MAP_FIXED 는 mmap 함수에서 flag 로 주어 메모리 시작 번지 
+    // 지정 하려 할 때 사용
 	if (addr) {
+        // 주소가 명시되어 있다면 그 주소에 기존 vma 와겹치는지 확인해야함
 		addr = PAGE_ALIGN(addr);
 		vma = find_vma(mm, addr);
+        // addr < vma->vm_end 를 만족하는 vma 가 있는지 찾음
 		if (TASK_SIZE - len >= addr && addr >= mmap_min_addr &&
 		    (!vma || addr + len <= vma->vm_start))
 			return addr;
+        // addr+len 값이 즉 할당할 vma 의 끝주소가 TASK_SIZE 보다 작아야함
+        // addr 위치가 minimum 보다 커야함
+        // find_vma 를 통해 찾은 다음위치 vma 에 대해 vma 가 null 이어서 뒤에 
+        // 아무것도 없으므로 할당 가능한 상태이거나, 뒤에 vma 가 있다면 
+        // vma->start 가 addr+len 보다 커야 함 즉 겹치면 안됨
 	}
-
+    // 주소가 명시되어 있지 않거나 주소에 이미 vma 가 있다면 다른 virtual 
+    // address 를 찾아야 함
 	info.flags = 0;
 	info.length = len;
 	info.low_limit = mm->mmap_base;
@@ -2096,32 +2175,66 @@ EXPORT_SYMBOL(get_unmapped_area);
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
 {
+    // vm_end 항목이 addr 보다 큰 첫번째 memory area 를 찾는 함수로 addr 이
+    // vma 에 포함되어 있는 것을 보장하지는 않음
 	struct rb_node *rb_node;
 	struct vm_area_struct *vma;
 
 	/* Check the cache first. */
-	vma = vmacache_find(mm, addr);
+	vma = vmacache_find(mm, addr); 
+    // task_struct 별로 가지고 있는  
 	if (likely(vma))
 		return vma;
-
+    // cache 에 없으므로 이제 rb tree 에서 찾아야 함 
+    // 일단 mm 에서 rbtree 의 root node 를 가져옴
 	rb_node = mm->mm_rb.rb_node;
 
 	while (rb_node) {
 		struct vm_area_struct *tmp;
 
-		tmp = rb_entry(rb_node, struct vm_area_struct, vm_rb);
-
+		tmp = rb_entry(rb_node, struct vm_area_struct, vm_rb); 
+        // 
+        // rb_node 에서 부터 순회하며 container_of 로 해당하는 
+        // vm_area_struct 가져옴 
+        //  ...       --vm_end ~ vm_start------vm_end ~ vm_start--
+        //                         |             |            
+        // 0 <- ... +++++++++*+++++*+++++*+++++++*+++++++++++++++++ -> 3G
+        //                   |           |               |
+        //                c1)addr     c2)addr         c3)addr
+        //
 		if (tmp->vm_end > addr) {
 			vma = tmp;
 			if (tmp->vm_start <= addr)
 				break;
+            // case 2 => addr 에 해당하는 vma 찾음
 			rb_node = rb_node->rb_left;
+            // case 1 => left child 로 이동
 		} else
 			rb_node = rb_node->rb_right;
+            // case 3 => right child 로 이동
 	}
-
-	if (vma)
+    // r1) exist 
+    //    vm_end ~ vm_start---addr---vm_end ~ vm_start
+    //    a |        |      vma        |        |  b
+    //-------        ---------vm--------        ------
+    // r2) not exist
+    // vm_start---vm_end ~ addr ~ vm_start---vm_end
+    //   |    a     |               |   vma    |
+    //   ----vm------               -----vm----- 
+    // r3) not exist
+    // addr ~ vm_start---vm_end
+    //          |    vma   |
+    //          -----vm-----
+    // r4) not exist 
+    // vm_start---vm_end ~ addr 
+    //   |     a    |             
+    //   -----vm-----              
+    //   vma : null
+    // 검색 결과 r1 잀수도r2 일수도 r2 의 뒤 vm 없을수도
+    if (vma)
 		vmacache_update(addr, vma);
+    // 찾은 vma 를 task_struct 의 vmacache 에 추가 
+    
 	return vma;
 }
 
@@ -2134,6 +2247,8 @@ struct vm_area_struct *
 find_vma_prev(struct mm_struct *mm, unsigned long addr,
 			struct vm_area_struct **pprev)
 {
+    // find_vma 와 같은 방식으로 동작하지만 find_vma 와는 다르게 addr 앞쪽의 
+    // vma 를 pprev 에 저장하여 반환
 	struct vm_area_struct *vma;
 
 	vma = find_vma(mm, addr);
@@ -2511,42 +2626,67 @@ int __split_vma(struct mm_struct *mm, struct vm_area_struct *vma,
 	if (is_vm_hugetlb_page(vma) && (addr &
 					~(huge_page_mask(hstate_vma(vma)))))
 		return -EINVAL;
+    // hugetlb 관련 vma 라면 unmap 하면 안되므로 종료
 
 	new = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 	if (!new)
-		return -ENOMEM;
+		return -ENOMEM; 
 
 	/* most fields are the same, copy all, and then fixup */
 	*new = *vma;
+    // 새로운 vma 를 생성하고, 쪼개려는 vma struct 의 내용을 
+    // 복사해줌
 
 	INIT_LIST_HEAD(&new->anon_vma_chain);
 
+    //                           addr
+    //                            |
+    //                            *
+    // vm_end    ~    vm_start--------------vm_end  ~ vm_start
+    //         |        |         vma         |         |    
+    //----------        ---------vm------------         ------
+
 	if (new_below)
-		new->vm_end = addr;
+		new->vm_end = addr; 
+        //                       addr
+        // vm_end ~ vm_start----vm_end              ~ vm_start
+        //   |        |    new    |                     |    
+        //----        -------------                     ------
+
 	else {
 		new->vm_start = addr;
-		new->vm_pgoff += ((addr - vma->vm_start) >> PAGE_SHIFT);
+		new->vm_pgoff += ((addr - vma->vm_start) >> PAGE_SHIFT); 
+        //                       addr
+        // vm_end ~             vm_start----vm_end ~ vm_start
+        //   |                    |    new    |        |    
+        //----                    -------------        ------
+        //
+        // page 단위 offset 을 기존 vma 의 page offset 에 
+        // vm_start 로부터 addr 까지의 page 개수를 더하여 계산
 	}
 
 	err = vma_dup_policy(vma, new);
 	if (err)
 		goto out_free_vma;
-
+    // vma 의 struct mempolicy 를 new  에 복사
 	err = anon_vma_clone(new, vma);
 	if (err)
-		goto out_free_mpol;
+		goto out_free_mpol; 
+    // vma 의 anon_vma chain 을 new 로 
 
 	if (new->vm_file)
 		get_file(new->vm_file);
-
+    // file backed page 일 경우 struct file 의 ref count 증가
 	if (new->vm_ops && new->vm_ops->open)
 		new->vm_ops->open(new);
-
+    // subsystem 에 맞는 open 함수 호출
+    // 정확히 뭐하는 거지?...
 	if (new_below)
 		err = vma_adjust(vma, addr, vma->vm_end, vma->vm_pgoff +
 			((addr - new->vm_start) >> PAGE_SHIFT), new);
 	else
 		err = vma_adjust(vma, vma->vm_start, addr, vma->vm_pgoff, new);
+    // ??
 
 	/* Success. */
 	if (!err)
@@ -2590,16 +2730,29 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 	struct vm_area_struct *vma, *prev, *last;
 
 	if ((offset_in_page(start)) || start > TASK_SIZE || len > TASK_SIZE-start)
-		return -EINVAL;
+		return -EINVAL; 
+    // offset_in_page : start 주소 % 4K 즉 page 내의 offset 
+    // start 주소가 4K 단위가 아니거나, start address 가 TASK_SIZE 즉 user vaddr 
+    // 최대보다 크거나 현재 unmap 하려는 영역이 TASK_SIZE 를 침범하면 안됨 즉 
+    // kernel space 를 침범하면 안됨 
 
 	len = PAGE_ALIGN(len);
 	if (len == 0)
 		return -EINVAL;
+    // size 를 page 크기 단위로 맞춤 
+    // e.g. 3000B -> 4096B , 7096B -> 8192B 
 
 	/* Find the first overlapping VMA */
 	vma = find_vma(mm, start);
 	if (!vma)
-		return 0;
+		return 0; 
+    // vma 가 null 인 경우는 start 에 해당되는 vma 가 없는 경우 중 
+    // start 뒤에 vma가 없는 경우임
+    //                       S++++++++E
+    // vm_start---vm_end ~ start --- end
+    //   |     a    |             
+    //   -----vm-----              
+    //   vma : null
 	prev = vma->vm_prev;
 	/* we have  start < vma->vm_end  */
 
@@ -2607,6 +2760,32 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 	end = start + len;
 	if (vma->vm_start >= end)
 		return 0;
+
+    // vma_find 결과 아래와 같은 경우에서
+    // vm_end    ~    vm_start---start---vm_end  ~  vm_start
+    //  prev   |        |      vma        |           |    b
+    //----------        ---------vm--------           --------
+    //
+    // vm_start---vm_end ~ start ~ vm_start---vm_end
+    //   |   prev   |               |   vma    |
+    //   ----vm------               -----vm----- 
+    //
+    // start ~ vm_start---vm_end
+    //           |    vma   |
+    //           -----vm-----
+
+    // end 보다 vm_start 가 큰 경우는 아래와 같음   
+    // 안겹침                S++++++E  <   s
+    // vm_start---vm_end ~ start---end ~ vm_start---vm_end
+    //   |   prev   |                      |   vma    |
+    //   ----vm------                      -----vm----- 
+    // 
+    // 안겹침   
+    //   S++++++E  <   s
+    // start---end ~ vm_start---vm_end
+    //                 |    vma   |
+    //                 -----vm----- 
+    // unmapped 할 부분이 없으므로 out
 
 	if (uf) {
 		int error = userfaultfd_unmap_prep(vma, start, end, uf);
@@ -2621,7 +2800,28 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 	 * Note: mremap's move_vma VM_ACCOUNT handling assumes a partially
 	 * unmapped vm_area_struct will remain in use: so lower split_vma
 	 * places tmp vma above, and higher split_vma places tmp vma below.
-	 */
+	 */ 
+
+    // 위에 조건에 해당안되는 겹치는 경우
+    // case 1)
+    // 겹침             s         S+++++E
+    //       vm_end ~ vm_start--start--end--vm_end  ~  vm_start
+    //  prev   |        |         vma         |          |    b
+    //----------        ---------vm------------          ------
+    // 
+    // case 2)
+    // 부분겹침         s          S+++++++++++++++E
+    //       vm_end ~ vm_start---start---vm_end---end ~  vm_start
+    //  prev   |        |      vma        |                |    b
+    //----------        ---------vm--------                --------
+    //
+    //case 3)
+    // 부분겹침         s         S++++++++++++++++++++++++++++++E
+    //       vm_end ~ vm_start--start-------vm_end  ~  vm_start end
+    //  prev   |        |         vma         |          |    b
+    //----------        ---------vm------------          ------
+    //
+
 	if (start > vma->vm_start) {
 		int error;
 
@@ -2631,12 +2831,59 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 		 * its limit temporarily, to help free resources as expected.
 		 */
 		if (end < vma->vm_end && mm->map_count >= sysctl_max_map_count)
-			return -ENOMEM;
+			return -ENOMEM; 
+        // 
+        // vm_start < start --- end < vm_end 인 경우는 위의 
+        // 그림에서 case 1 이다. case 1 을 unmap 하게 되면 
+        // vma 가 두개로 쪼개지므로 /proc/sys/vm/max_map_count 
+        // 을 통해 설정할 수 있는 process 가 가질 수 있는 최대 
+        // memory map area 보다 현재 mm 이 가진 vma 의 개수가 같거나 크다면
+        // 중지한다.
 
 		error = __split_vma(mm, vma, start, 0);
 		if (error)
-			return error;
-		prev = vma;
+			return error; 
+
+		prev = vma; 
+        // case 1)
+        // 겹침             s         S+++++E
+        //       vm_end ~ vm_start--start--end--vm_end  ~  vm_start
+        //  prev   |        |         vma         |          |    b
+        //----------        ---------vm------------          ------
+        // 
+        // 겹침                       S+++++E
+        //                          start  end
+        //       vm_end ~          vm_start-----vm_end  ~  vm_start
+        //         |                 |     prev   |          |    b
+        //----------                 --------------          ------
+        //
+        //
+        // case 2)
+        // 부분겹침                    S+++++++++++++++E
+        //       vm_end ~ vm_start---start---vm_end---end ~  vm_start
+        //  prev   |        |      vma         |                |    b
+        //----------        ---------vm---------                --------
+        // 
+        // 부분겹침                    S+++++++++++++++E
+        //                           start            end
+        //       vm_end ~           vm_start-vm_end       ~  vm_start
+        //         |                  |  prev  |               |    b
+        //----------                  ----------               --------
+        //
+        //
+        //case 3)
+        // 부분겹침         s         S++++++++++++++++++++++++++++++E
+        //       vm_end ~ vm_start--start-------vm_end  ~  vm_start end
+        //  prev   |        |         vma         |          |    b
+        //----------        ---------vm------------          ------
+        // 
+        // 부분겹침                   S++++++++++++++++++++++++++++++E
+        //                          start                           end
+        //       vm_end ~          vm_start-----vm_end  ~  vm_start 
+        //         |                 |    prev    |          |    b
+        //----------                 -------------           ------
+        //
+
 	}
 
 	/* Does it split the last one? */
@@ -2666,13 +2913,16 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 	 * Remove the vma's, and unmap the actual pages
 	 */
 	detach_vmas_to_be_unmapped(mm, vma, prev, end);
+    // unmap 될 모든 region 을 만듬 
+    // unmap area 내의 vm_area_struct instance 를 순회
 	unmap_region(mm, vma, prev, start, end);
+    //page table 에서 관련 entry 를 page table 에서 삭제 및 TLB 에서도 삭제
 
 	arch_unmap(mm, vma, start, end);
 
 	/* Fix up all other VM information */
 	remove_vma_list(mm, vma);
-
+    // vma 삭제
 	return 0;
 }
 
@@ -2987,8 +3237,9 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 	struct rb_node **rb_link, *rb_parent;
 
 	if (find_vma_links(mm, vma->vm_start, vma->vm_end,
-			   &prev, &rb_link, &rb_parent))
+			   &prev, &rb_link, &rb_parent))        
 		return -ENOMEM;
+    // prev - vma - container_of(rb_parent) : vma 아직 연결안됨
 	if ((vma->vm_flags & VM_ACCOUNT) &&
 	     security_vm_enough_memory_mm(mm, vma_pages(vma)))
 		return -ENOMEM;

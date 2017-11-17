@@ -866,14 +866,18 @@ static int load_elf_binary(struct linux_binprm *bprm)
 
 	if (!(current->personality & ADDR_NO_RANDOMIZE) && randomize_va_space)
 		current->flags |= PF_RANDOMIZE;
-
+    // personality system call 을통해 randomize 하지 말도록 설정한 상태가 
+    // 아니고,randomize_va_space 가 sysfs 를 통해 설정되어 있다면 VA layout 
+    // 생성시 randomize 하도록 task_struct 에 flag 설정(PF_RANDOMIZE)
 	setup_new_exec(bprm);
 	install_exec_creds(bprm);
 
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	retval = setup_arg_pages(bprm, randomize_stack_top(STACK_TOP),
-				 executable_stack);
+				 executable_stack); 
+    // 지정된 위치에 stack 을 생성하며 arch specific 한 STACK_TOP 을 넘겨주며,
+    // PF_RANDOMIZE 설정시, top 위치에 대해 randomize 수행
 	if (retval < 0)
 		goto out_free_dentry;
 	

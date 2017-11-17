@@ -622,7 +622,9 @@ struct task_struct {
     //
 
 	/* Per-thread vma caching: */
-	struct vmacache			vmacache;
+	struct vmacache			vmacache; 
+    // 최근에 접근된 vm_area_struct 를 가지고 있는 vmacache 
+    // cache size 는 4 개임
 
 #ifdef SPLIT_RSS_COUNTING
 	struct task_rss_stat		rss_stat;
@@ -637,6 +639,10 @@ struct task_struct {
 
 	/* Used for emulating ABI behavior of previous Linux versions: */
 	unsigned int			personality;
+    // linux 에서는 process 마다 vm layout, vaddr limit address, 등을 다르게 
+    // 설정 할 수 있음. 이 값은 personality system call 을 통해 설정 가능 
+    //  e.g. ADDR_COMPAT_LAYOUT : legacy virtual address 로 되도록 설정(mmap 위로)
+    //       ADDR_NO_RANDOMIZE  : address-space-layout Randomize 하지 않음
 
 	/* Scheduler bits, serialized by scheduler locks: */
 	unsigned			sched_reset_on_fork:1;

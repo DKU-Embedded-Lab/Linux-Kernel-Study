@@ -76,7 +76,9 @@ static bool vmacache_valid(struct mm_struct *mm)
 		/*
 		 * First attempt will always be invalid, initialize
 		 * the new cache for this task here.
-		 */
+		 */ 
+        // current task_struct 의 vmacache 가 넘겨진 mm 에 속한 것이 아닐 경우,
+        // current task_struct 의 vmacache 새로 설정 및 cache flush  
 		curr->vmacache.seqnum = mm->vmacache_seqnum;
 		vmacache_flush(curr);
 		return false;
@@ -92,15 +94,17 @@ struct vm_area_struct *vmacache_find(struct mm_struct *mm, unsigned long addr)
 
 	if (!vmacache_valid(mm))
 		return NULL;
-
+    // current task_struct 의 vmacache 의 sequence number 가 넘겨진 mm 가 가진 
+    // vm_area_struct 들인지 검사 아닐 경우및 current task_struct 의 vmacache 재설정
 	for (i = 0; i < VMACACHE_SIZE; i++) {
 		struct vm_area_struct *vma = current->vmacache.vmas[i];
 
 		if (!vma)
 			continue;
 		if (WARN_ON_ONCE(vma->vm_mm != mm))
-			break;
+			break;         
 		if (vma->vm_start <= addr && vma->vm_end > addr) {
+            // addr 이 vma 의 start ~ end 에 위치한다면 해당하는vma 찾은것
 			count_vm_vmacache_event(VMACACHE_FIND_HITS);
 			return vma;
 		}

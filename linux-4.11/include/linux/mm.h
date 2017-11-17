@@ -130,6 +130,22 @@ extern int overcommit_kbytes_handler(struct ctl_table *, int, void __user *,
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr) ALIGN(addr, PAGE_SIZE)
+//
+// page size (4K) 기준으로 boundry 를 계산하고 싶을 때 사용 한다.
+//
+// +---------+
+// | 0x0001  | 여기 있는 값을 PAGE_ALIGN(x) 하게 되면 모든 결과는 0x1000 이다.
+// | ~~      | ex> PAGE_ALIGN(0x34) 를 넣었으면 0x1000 이 결과 값이다.
+// | 0x1000  |
+// +---------+
+// | 0x1001  | 여기 있는 값을 PAGE_ALIGN(x) 하게 되면 모든 결과는 0x2000 이다.
+// | ~~      | ex> PAGE_ALIGN(0x1045) 를 넣었으면 0x2000 이 결과 값이다.
+// | 0x2000  |
+// +---------+
+// |.........| 여기 있는 값을 PAGE_ALIGN(x) 하게 되면 모든 결과는 
+// |.........| PAGE_SIZE(4K = 0x1000) 단위로 표현 된다.
+// +---------+
+//
 
 /* test whether an address (unsigned long or pointer) is aligned to PAGE_SIZE */
 #define PAGE_ALIGNED(addr)	IS_ALIGNED((unsigned long)(addr), PAGE_SIZE)
@@ -193,7 +209,9 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_DONTDUMP	0x04000000	/* Do not include in the core dump */
 
 #ifdef CONFIG_MEM_SOFT_DIRTY
-# define VM_SOFTDIRTY	0x08000000	/* Not soft dirty clean area */
+# define VM_SOFTDIRTY	0x08000000	/* Not soft dirty clean area */ 
+// SOFTDIRTY 는 원래 PTE 의 한 bit 부분으로 task 가 어떤 page 를 write 하려
+// 하는지 tracking 하는 용도로 사용된다.
 #else
 # define VM_SOFTDIRTY	0
 #endif
@@ -360,9 +378,13 @@ enum page_entry_size {
  */
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);
+    // vm_area_struct 가 새로 생성될 때(e.g. fork 시), vma 관련 설정?
 	void (*close)(struct vm_area_struct * area);
+    // vm_area_struct 가 삭제될 때
 	int (*mremap)(struct vm_area_struct * area);
-	int (*fault)(struct vm_fault *vmf);
+	int (*fault)(struct vm_fault *vmf); 
+    // physical memory 가 없는 page 에 access 시, page fault handler 가 
+    // 호출하는 함수
 	int (*huge_fault)(struct vm_fault *vmf, enum page_entry_size pe_size);
 	void (*map_pages)(struct vm_fault *vmf,
 			pgoff_t start_pgoff, pgoff_t end_pgoff);
@@ -370,7 +392,8 @@ struct vm_operations_struct {
 	/* notification that a previously read-only page is about to become
 	 * writable, if an error is returned it will cause a SIGBUS */
 	int (*page_mkwrite)(struct vm_fault *vmf);
-
+    // read only page 를 writable 하게 변경 시, page fault handler 가 
+    // 호출하는 함수
 	/* same as page_mkwrite when using VM_PFNMAP|VM_MIXEDMAP */
 	int (*pfn_mkwrite)(struct vm_fault *vmf);
 
@@ -379,7 +402,7 @@ struct vm_operations_struct {
 	 */
 	int (*access)(struct vm_area_struct *vma, unsigned long addr,
 		      void *buf, int len, int write);
-
+    // get_user_pages 호출 시, access_process_vm 에서 호출하는 함수
 	/* Called by the /proc/PID/maps code to ask the vma whether it
 	 * has a special name.  Returning non-NULL will also cause this
 	 * vma to be dumped unconditionally. */
@@ -2147,9 +2170,12 @@ extern unsigned long __must_check vm_mmap(struct file *, unsigned long,
 struct vm_unmapped_area_info {
 #define VM_UNMAPPED_AREA_TOPDOWN 1
 	unsigned long flags;
-	unsigned long length;
-	unsigned long low_limit;
+	unsigned long length; 
+    // mapping 할 크기
+	unsigned long low_limit; 
+    // 시작 주소가 여기보다 커야
 	unsigned long high_limit;
+    // 끝주소가 여기보다 작아야
 	unsigned long align_mask;
 	unsigned long align_offset;
 };
@@ -2230,12 +2256,22 @@ extern struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned lon
 
 /* Look up the first VMA which intersects the interval start_addr..end_addr-1,
    NULL if none.  Assume start_addr < end_addr. */
-static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * mm, unsigned long start_addr, unsigned long end_addr)
+static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * mm, 
+        unsigned long start_addr, unsigned long end_addr)
 {
+    // find_vma 를 기반으로 동작하지만, 주어진 start_addr ~ end_addr 의 
+    // 범위와 중첩되는 첫번째 vma 를 반환
 	struct vm_area_struct * vma = find_vma(mm,start_addr);
-
+    // start_addr 보다 큰 vm_end 를 가진 첫번째 vm_area_struct 를 반환
+    // 아래와 같은 상황 가능
+    //  ... vm_end  1)vm_start     2)vm_start    3)vm_start    vm_end
+    //                  |              |             |           |
+    //  ... ++++++++++++*+++++*++++++++*++++++*++++++*+++++++++++*
+    //                        |               |
+    //                   start_addr        end_addr
 	if (vma && end_addr <= vma->vm_start)
 		vma = NULL;
+    // 2 번 3번에 해당하면 null 반환
 	return vma;
 }
 

@@ -236,8 +236,12 @@ struct vm_area_struct;
  *   version does not attempt reclaim/compaction at all and is by default used
  *   in page fault path, while the non-light is used by khugepaged.
  */
-#define GFP_ATOMIC	(__GFP_HIGH|__GFP_ATOMIC|__GFP_KSWAPD_RECLAIM)
-#define GFP_KERNEL	(__GFP_RECLAIM | __GFP_IO | __GFP_FS)
+#define GFP_ATOMIC	(__GFP_HIGH|__GFP_ATOMIC|__GFP_KSWAPD_RECLAIM) 
+// 메모리가 있으면 할당, 없으면 NULL, 휴면불가능
+#define GFP_KERNEL	(__GFP_RECLAIM | __GFP_IO | __GFP_FS) 
+// 메모리 할당이 항상 성공하도록 요구, 메모리가 충분하지 않을 
+// 경우는 호출한 프로세스를 멈추고 동적 메모리 할당할 수 있는 
+// 상태가 될때까지 대기. 휴면가능.
 #define GFP_KERNEL_ACCOUNT (GFP_KERNEL | __GFP_ACCOUNT)
 #define GFP_NOWAIT	(__GFP_KSWAPD_RECLAIM)
 #define GFP_NOIO	(__GFP_RECLAIM)
@@ -245,7 +249,9 @@ struct vm_area_struct;
 #define GFP_TEMPORARY	(__GFP_RECLAIM | __GFP_IO | __GFP_FS | \
 			 __GFP_RECLAIMABLE)
 #define GFP_USER	(__GFP_RECLAIM | __GFP_IO | __GFP_FS | __GFP_HARDWALL)
-#define GFP_DMA		__GFP_DMA
+// 유저 메모리를 할당함. 휴면가능
+#define GFP_DMA		__GFP_DMA 
+// 연속된 물리 메모리를 할당 받을 때 사용 
 #define GFP_DMA32	__GFP_DMA32
 #define GFP_HIGHUSER	(GFP_USER | __GFP_HIGHMEM)
 #define GFP_HIGHUSER_MOVABLE	(GFP_HIGHUSER | __GFP_MOVABLE)

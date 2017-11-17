@@ -317,18 +317,19 @@ typedef int (*read_actor_t)(read_descriptor_t *, struct page *,
 		unsigned long, unsigned long);
 
 struct address_space_operations {
-	int (*writepage)(struct page *page, struct writeback_control *wbc);
+	int (*writepage)(struct page *page, struct writeback_control *wbc); 
+    // memory 에 page 의 내용을 block device 에 씀
 	int (*readpage)(struct file *, struct page *);
-
+    // block medium 으로부터 single page 를 memory 로 읽어들임
 	/* Write back some dirty pages from this mapping. */
 	int (*writepages)(struct address_space *, struct writeback_control *);
-
+    // write page 의 여러개 page 버전
 	/* Set a page dirty.  Return true if this dirtied it */
 	int (*set_page_dirty)(struct page *page);
-
+    // 해당 page 의 내용이 backing store 와 다름을 표시 
 	int (*readpages)(struct file *filp, struct address_space *mapping,
 			struct list_head *pages, unsigned nr_pages);
-
+    // readpage 의 여러개 page 버전
 	int (*write_begin)(struct file *, struct address_space *mapping,
 				loff_t pos, unsigned len, unsigned flags,
 				struct page **pagep, void **fsdata);
@@ -847,6 +848,7 @@ struct file {
 	 */
 	spinlock_t		f_lock;
 	atomic_long_t		f_count;
+    // reference count
 	unsigned int 		f_flags;
 	fmode_t			f_mode;
 	struct mutex		f_pos_lock;
