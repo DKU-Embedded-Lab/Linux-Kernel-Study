@@ -427,7 +427,9 @@ static inline pgoff_t linear_page_index(struct vm_area_struct *vma,
 	if (unlikely(is_vm_hugetlb_page(vma)))
 		return linear_hugepage_index(vma, address);
 	pgoff = (address - vma->vm_start) >> PAGE_SHIFT;
+    // 넘겨온 vma 에서의 address 까지 page 수 몇개인지
 	pgoff += vma->vm_pgoff;
+    // vma 시작 부분까지의 page 수 몇개인지
 	return pgoff;
 }
 

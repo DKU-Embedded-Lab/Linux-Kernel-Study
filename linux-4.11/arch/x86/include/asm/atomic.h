@@ -127,6 +127,7 @@ static __always_inline bool atomic_dec_and_test(atomic_t *v)
  */
 static __always_inline bool atomic_inc_and_test(atomic_t *v)
 {
+    // 1 증가 시키고 0 인지 test
 	GEN_UNARY_RMWcc(LOCK_PREFIX "incl", v->counter, "%0", e);
 }
 

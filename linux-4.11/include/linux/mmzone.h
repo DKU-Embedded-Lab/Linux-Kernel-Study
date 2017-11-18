@@ -598,6 +598,8 @@ typedef struct pglist_data {
 	int nr_zones;
 #ifdef CONFIG_FLAT_NODE_MEM_MAP	/* means !SPARSEMEM */
 	struct page *node_mem_map;
+    // 각각의 해당 node의 physical page frame 에 대한 
+    // struct page 배열의 첫번째 page
 #ifdef CONFIG_PAGE_EXTENSION
 	struct page_ext *node_page_ext;
 #endif
@@ -693,7 +695,8 @@ typedef struct pglist_data {
 
 	/* Per-node vmstats */
 	struct per_cpu_nodestat __percpu *per_cpu_nodestats;
-	atomic_long_t		vm_stat[NR_VM_NODE_STAT_ITEMS];
+	atomic_long_t		vm_stat[NR_VM_NODE_STAT_ITEMS]; 
+    // 각 종류별 vm 몇개인지
 } pg_data_t;
 
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)

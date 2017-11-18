@@ -36,6 +36,7 @@ static bool map_pte(struct page_vma_mapped_walk *pvmw)
 		}
 	}
 	pvmw->ptl = pte_lockptr(pvmw->vma->vm_mm, pvmw->pmd);
+    // pmd 에서의pte  offet 가져옴
 	spin_lock(pvmw->ptl);
 	return true;
 }
@@ -110,10 +111,10 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 	/* The only possible pmd mapping has been handled on last iteration */
 	if (pvmw->pmd && !pvmw->pte)
 		return not_found(pvmw);
-
+    // pvmw.pmd 가 있는데 pvmw.pte 가 없다면 못찾은것
 	if (pvmw->pte)
 		goto next_pte;
-
+    // pvmw.pte 가 있다면 pte 가져온적 있으므로 다음 pte 가져오는 부분으로 
 	if (unlikely(PageHuge(pvmw->page))) {
 		/* when pud is not present, pte will be NULL */
 		pvmw->pte = huge_pte_offset(mm, pvmw->address);
@@ -136,7 +137,8 @@ restart:
 	pud = pud_offset(p4d, pvmw->address);
 	if (!pud_present(*pud))
 		return false;
-	pvmw->pmd = pmd_offset(pud, pvmw->address);
+	pvmw->pmd = pmd_offset(pud, pvmw->address); 
+    // 넘겨진 address 로 
 	if (pmd_trans_huge(*pvmw->pmd)) {
 		pvmw->ptl = pmd_lock(mm, pvmw->pmd);
 		if (!pmd_present(*pvmw->pmd))

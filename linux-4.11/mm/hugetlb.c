@@ -1328,8 +1328,10 @@ int PageHuge(struct page *page)
 {
 	if (!PageCompound(page))
 		return 0;
+    // compound page 가 아닐 경우임
 
 	page = compound_head(page);
+    // hugetlb 인지 검사
 	return page[1].compound_dtor == HUGETLB_PAGE_DTOR;
 }
 EXPORT_SYMBOL_GPL(PageHuge);

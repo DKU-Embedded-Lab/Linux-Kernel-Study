@@ -48,15 +48,31 @@ struct page {
 						 * memory, low bit is set, and
 						 * it points to anon_vma object:
 						 * see PAGE_MAPPING_ANON below.
-						 */
+						 */ 
+        // mapping 은 anonymous page 라면 anon_vma 로의 값을 
+        // 가지고 있고, file backed page 라면 backing store 
+        // 정보와 연결될 address_space 를 가짐 
+        // 두개를 구분하기 위해 anonymous page 일 경우 mapping 
+        // 변수의 LSM 가 1로 set 된다
+        // (이걸로 구분할 수 있는 이유가 어차피 pointer 주소는 
+        // word boundary 이기 때문에 어차피 주소값의  뒷부분 
+        // 0으로 채워져있음)
+        //
+
 		void *s_mem;			/* slab first object */
-		atomic_t compound_mapcount;	/* first tail page */
+		atomic_t compound_mapcount;	/* first tail page */ 
+        // compound page 의 경우에는 tail page (두번째 이후부터의 page)들 중
+        // 첫번재 page 의 compound_mapcount 변수에 pte 에 map된 횟수가
+        // 저장된다.
+        // 즉 두번째 page 에 기록됨
+
 		/* page_deferred_list().next	 -- second tail page */
 	};
 
 	/* Second double word */
 	union {
 		pgoff_t index;		/* Our offset within mapping. */
+        // mmap 에서의 즉 struct page 배열에서의 page frame offset
 		void *freelist;		/* sl[aou]b first free object */
 		/* page_deferred_list().prev	-- second tail page */
 	};
@@ -87,6 +103,13 @@ struct page {
 				 * See page-flags.h for more details.
 				 */
 				atomic_t _mapcount;
+                // 해당 page 을 가리키고 있는 pte 의 수를 의미
+                // page 를 가리키는 pte 가 없을 시, -1 값을 가짐 
+                // 즉 초기에는 -1 값이며 reverse mapping 에 추가 
+                // 될 때마다 1씩 증가
+                // e.g. 두개의 process 에서 해당 page를 사용 중일 시,
+                //      이 값은 1임
+                // page를 사용중인 process 의 수를 알 수 있음
 
 				unsigned int active;		/* SLAB */
 				struct {			/* SLUB */

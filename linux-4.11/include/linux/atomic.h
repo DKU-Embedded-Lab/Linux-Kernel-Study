@@ -514,7 +514,7 @@ static inline int atomic_add_unless(atomic_t *v, int a, int u)
  * Returns non-zero if @v was non-zero, and zero otherwise.
  */
 #ifndef atomic_inc_not_zero
-#define atomic_inc_not_zero(v)		atomic_add_unless((v), 1, 0)
+#define atomic_inc_not_zero(v)		atomic_add_unless((v), 1, 0) 
 #endif
 
 #ifndef atomic_andnot

@@ -36,6 +36,7 @@ struct anon_vma {
 	 * anon_vma if they are the last user on release
 	 */
 	atomic_t refcount;
+    // 
 
 	/*
 	 * Count of child anon_vmas and VMAs which points to this anon_vma.
@@ -43,7 +44,8 @@ struct anon_vma {
 	 * This counter is used for making decision about reusing anon_vma
 	 * instead of forking new one. See comments in function anon_vma_clone.
 	 */
-	unsigned degree;
+	unsigned degree; 
+    // 현재 aon_vma 를 가리키는 child anon_vma 의 개수
 
 	struct anon_vma *parent;	/* Parent of this anon_vma */
 
@@ -55,7 +57,8 @@ struct anon_vma {
 	 * is serialized by a system wide lock only visible to
 	 * mm_take_all_locks() (mm_all_locks_mutex).
 	 */
-	struct rb_root rb_root;	/* Interval tree of private "related" vmas */
+	struct rb_root rb_root;	/* Interval tree of private "related" vmas */ 
+    // reverse mapping 을 위한 rb tree
 };
 
 /*
@@ -261,11 +264,17 @@ int page_mapped_in_vma(struct page *page, struct vm_area_struct *vma);
  */
 struct rmap_walk_control {
 	void *arg;
+    // rmap_one 함수에 전달될 argument
 	int (*rmap_one)(struct page *page, struct vm_area_struct *vma,
 					unsigned long addr, void *arg);
+    // page 를 가리키는 pte 를 찾아 PAGE_ACCESSED bit 를 clear 하는
+    // 함수 
 	int (*done)(struct page *page);
 	struct anon_vma *(*anon_lock)(struct page *page);
+    // page 와 연결된 anon_vma 를 lock 잡으며 가져오는 함수
 	bool (*invalid_vma)(struct vm_area_struct *vma, void *arg);
+    // VM_LOCKED 이거나 VM_MAYSHARE 등 page out 되면 안되는 page 
+    // 들을 skip 하는 함수
 };
 
 int rmap_walk(struct page *page, struct rmap_walk_control *rwc);

@@ -466,12 +466,16 @@ struct anon_vma *page_get_anon_vma(struct page *page)
 
 	rcu_read_lock();
 	anon_mapping = (unsigned long)READ_ONCE(page->mapping);
+    // page->mapping 의 주소를 가져옴 file-backed page 라면address_space 
+    // 의 주소일것이고, anonymous page 라면 anon_vma 의 주소일것임
 	if ((anon_mapping & PAGE_MAPPING_FLAGS) != PAGE_MAPPING_ANON)
 		goto out;
+    // LSB 가 PAGE_MAPPING_ANON 이 아니면 file_backed_page 임
 	if (!page_mapped(page))
 		goto out;
 
 	anon_vma = (struct anon_vma *) (anon_mapping - PAGE_MAPPING_ANON);
+    // anonymous page 인것 확인했으니 검사 mask 제하여 사용
 	if (!atomic_inc_not_zero(&anon_vma->refcount)) {
 		anon_vma = NULL;
 		goto out;
@@ -488,6 +492,8 @@ struct anon_vma *page_get_anon_vma(struct page *page)
 		rcu_read_unlock();
 		put_anon_vma(anon_vma);
 		return NULL;
+        // 현재 page 를 사용하는 pte 가 없다면 즉 page->_mapcount 가 -1 이라면
+        // anon_vma free 해주고 NULL 반환
 	}
 out:
 	rcu_read_unlock();
@@ -512,10 +518,12 @@ struct anon_vma *page_lock_anon_vma_read(struct page *page)
 	anon_mapping = (unsigned long)READ_ONCE(page->mapping);
 	if ((anon_mapping & PAGE_MAPPING_FLAGS) != PAGE_MAPPING_ANON)
 		goto out;
+    // anonymous page 가 아니라면 종료
 	if (!page_mapped(page))
 		goto out;
-
+    // 현재 page 가 사용중인 pte 가 없다면 종료
 	anon_vma = (struct anon_vma *) (anon_mapping - PAGE_MAPPING_ANON);
+    // LSB 확인하였으니 LSB clear 하고 anon_vma 를 사용
 	root_anon_vma = READ_ONCE(anon_vma->root);
 	if (down_read_trylock(&root_anon_vma->rwsem)) {
 		/*
@@ -719,6 +727,8 @@ out:
 
 struct page_referenced_arg {
 	int mapcount;
+    // 현재 physical page addresss 를
+    // 가지고 있는 pte 의 개수
 	int referenced;
 	unsigned long vm_flags;
 	struct mem_cgroup *memcg;
@@ -738,6 +748,7 @@ static int page_referenced_one(struct page *page, struct vm_area_struct *vma,
 	int referenced = 0;
 
 	while (page_vma_mapped_walk(&pvmw)) {
+        // pvmw.address 를 통해 pmd, pte 를 가져오는 등의 일 수행
 		address = pvmw.address;
 
 		if (vma->vm_flags & VM_LOCKED) {
@@ -745,10 +756,11 @@ static int page_referenced_one(struct page *page, struct vm_area_struct *vma,
 			pra->vm_flags |= VM_LOCKED;
 			return SWAP_FAIL; /* To break the loop */
 		}
-
+        // VM_LOCKED 이면 page out 되면 안되므로 fail
 		if (pvmw.pte) {
 			if (ptep_clear_flush_young_notify(vma, address,
-						pvmw.pte)) {
+						pvmw.pte)) { 
+                // 가져온 pte 에 담겨있는 값 flush 해줌
 				/*
 				 * Don't treat a reference through
 				 * a sequentially read mapping as such.
@@ -829,23 +841,26 @@ int page_referenced(struct page *page,
 	*vm_flags = 0;
 	if (!page_mapped(page))
 		return 0;
-
+    // page 를 사용중인 pte 가 없다면 종료
 	if (!page_rmapping(page))
 		return 0;
-
+    // page->mapping 이 없는지 검사 및 
+    // mapping 의 PAGE_MAPPING_ANON clear
 	if (!is_locked && (!PageAnon(page) || PageKsm(page))) {
 		we_locked = trylock_page(page);
 		if (!we_locked)
 			return 1;
 	}
-
+    // Kernel shared memory 이거나 file-backed page  이며 
+    // lock 잡지 않은 상태로 함수가 호출된거면 lock 잡음
 	/*
 	 * If we are reclaiming on behalf of a cgroup, skip
 	 * counting on behalf of references from different
 	 * cgroups
 	 */
 	if (memcg) {
-		rwc.invalid_vma = invalid_page_referenced_vma;
+		rwc.invalid_vma = invalid_page_referenced_vma; 
+        // cgroup 사용하는 경우
 	}
 
 	ret = rmap_walk(page, &rwc);
@@ -990,6 +1005,8 @@ static void __page_set_anon_rmap(struct page *page,
 
 	if (PageAnon(page))
 		return;
+    // anonymous page 라면 즉 이미 mapping 에 anon_vma 가 초기화 
+    // 된적이 있다면(PAGE_MAPPING_ANON 이 설정되어 있다면)  바로 종료
 
 	/*
 	 * If the page isn't exclusively mapped into this vma,
@@ -1000,8 +1017,13 @@ static void __page_set_anon_rmap(struct page *page,
 		anon_vma = anon_vma->root;
 
 	anon_vma = (void *) anon_vma + PAGE_MAPPING_ANON;
+    // anonymous page 임을 쉽게 알기 위해 LSB 에 PAGE_MAPPING_ANON 
+    // 을 설정. 즉 LSB 를 1로 만들어줌
 	page->mapping = (struct address_space *) anon_vma;
+    // page 의 maping 에 LSB 설정된 anon_vma 넣어줌
 	page->index = linear_page_index(vma, address);
+    // address 까지의 virtual address 에서의 page offset 을 게산
+    // 이게 anonymous page 와 관련 있나?
 }
 
 /**
@@ -1057,6 +1079,8 @@ void page_add_anon_rmap(struct page *page,
 void do_page_add_anon_rmap(struct page *page,
 	struct vm_area_struct *vma, unsigned long address, int flags)
 {
+    // page_add_new_anon_rmap 과 같은 방식으로 동작하지만 단지,
+    // page 가 처음 pte 에 올라가게 되는거냐아니냐의 차이
 	bool compound = flags & RMAP_COMPOUND;
 	bool first;
 
@@ -1065,11 +1089,15 @@ void do_page_add_anon_rmap(struct page *page,
 		VM_BUG_ON_PAGE(!PageLocked(page), page);
 		VM_BUG_ON_PAGE(!PageTransHuge(page), page);
 		mapcount = compound_mapcount_ptr(page);
-		first = atomic_inc_and_test(mapcount);
+        // first tail page 의 compound_mapcount 를 가져와
+		first = atomic_inc_and_test(mapcount); 
+        // 증가시키며 0 인지 검사 즉 처음 rmap 설정하는 것인지 검사 
 	} else {
 		first = atomic_inc_and_test(&page->_mapcount);
+        // 증가시키며 0 인지 검사 즉 처음 rmap 설정하는 것인지 검사 
 	}
-
+    // 처음 설정하는 경우 _mapcount 가-1 로 되어 있기 때문에 
+    // first 가 1이 됨
 	if (first) {
 		int nr = compound ? hpage_nr_pages(page) : 1;
 		/*
@@ -1081,6 +1109,7 @@ void do_page_add_anon_rmap(struct page *page,
 		if (compound)
 			__inc_node_page_state(page, NR_ANON_THPS);
 		__mod_node_page_state(page_pgdat(page), NR_ANON_MAPPED, nr);
+        // pglist_data 에 map 된 anon 수 추가 512 개
 	}
 	if (unlikely(PageKsm(page)))
 		return;
@@ -1088,6 +1117,8 @@ void do_page_add_anon_rmap(struct page *page,
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 
 	/* address might be in next vma when migration races vma_adjust */
+    // 처음 rmap 에 추가하는 것일 경우 __page_set_anon_rmap 을 통해 
+    // mmaping 설정, PAGE_MAPPING_FLAGS 설정 등 수행
 	if (first)
 		__page_set_anon_rmap(page, vma, address,
 				flags & RMAP_EXCLUSIVE);
@@ -1110,22 +1141,32 @@ void page_add_new_anon_rmap(struct page *page,
 	struct vm_area_struct *vma, unsigned long address, bool compound)
 {
 	int nr = compound ? hpage_nr_pages(page) : 1;
-
+    // compound page 인지 확인 compound 일 경우, 512 개의 page 가 하나로
+    // 관리되므로 nr 은  512 로 초기화됨
 	VM_BUG_ON_VMA(address < vma->vm_start || address >= vma->vm_end, vma);
 	__SetPageSwapBacked(page);
 	if (compound) {
 		VM_BUG_ON_PAGE(!PageTransHuge(page), page);
 		/* increment count (starts at -1) */
-		atomic_set(compound_mapcount_ptr(page), 0);
-		__inc_node_page_state(page, NR_ANON_THPS);
+		atomic_set(compound_mapcount_ptr(page), 0); 
+        // compound page 의 경우엔 첫번째 tail page 의 compound_mapcount 를 
+        // 0으로 설정함
+		__inc_node_page_state(page, NR_ANON_THPS); 
+        // 해당 page가 속한 node 정보를 관리하는 pglist_data 에 vm 관리 
+        // 부분의 anon thp 변수 증가
+        
 	} else {
 		/* Anon THP always mapped first with PMD */
 		VM_BUG_ON_PAGE(PageTransCompound(page), page);
 		/* increment count (starts at -1) */
-		atomic_set(&page->_mapcount, 0);
+		atomic_set(&page->_mapcount, 0); 
+        // 해당 page 가 처음으로 pte 에 map 된 경우 이므로 _mapcount 를
+        // 0으로 설정함. 
 	}
 	__mod_node_page_state(page_pgdat(page), NR_ANON_MAPPED, nr);
+    // pglist_data 의 vm 수 관리 변수에 mapped된 anon 수 증가
 	__page_set_anon_rmap(page, vma, address, 1);
+    // 
 }
 
 /**
@@ -1653,15 +1694,16 @@ static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
 			pgoff_start, pgoff_end) {
+        // anon_vma 의 rbtree 에 존재하는 vma 를 순회
 		struct vm_area_struct *vma = avc->vma;
 		unsigned long address = vma_address(page, vma);
-
+        // vma 시작 주소 가져옴. 
 		cond_resched();
 
 		if (rwc->invalid_vma && rwc->invalid_vma(vma, rwc->arg))
 			continue;
 
-		ret = rwc->rmap_one(page, vma, address, rwc->arg);
+		ret = rwc->rmap_one(page, vma, address, rwc->arg); 
 		if (ret != SWAP_AGAIN)
 			break;
 		if (rwc->done && rwc->done(page))

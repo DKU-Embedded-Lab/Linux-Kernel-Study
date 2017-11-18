@@ -160,6 +160,9 @@ static __always_inline int PageTail(struct page *page)
 
 static __always_inline int PageCompound(struct page *page)
 {
+    // compound page 일 경우, head page 에는 page->flag 에 
+    // PG_head 설정되어 있고 tail page 의 page->compound_head 에는 
+    // head page 의 주소가 초기화되어 있음 
 	return test_bit(PG_head, &page->flags) || PageTail(page);
 }
 
@@ -390,9 +393,11 @@ PAGEFLAG(Idle, idle, PF_ANY)
  * address_space which maps the page from disk; whereas "page_mapped"
  * refers to user virtual address space into which the page is mapped.
  */
-#define PAGE_MAPPING_ANON	0x1
+#define PAGE_MAPPING_ANON	0x1 
+// 첫번째 bit 검사를 위한 mask
 #define PAGE_MAPPING_MOVABLE	0x2
-#define PAGE_MAPPING_KSM	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE)
+#define PAGE_MAPPING_KSM	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE) 
+    
 #define PAGE_MAPPING_FLAGS	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE)
 
 static __always_inline int PageMappingFlags(struct page *page)
@@ -402,11 +407,17 @@ static __always_inline int PageMappingFlags(struct page *page)
 
 static __always_inline int PageAnon(struct page *page)
 {
-    // compound page 라면 현재 page 가 tail page 일 수 있으므로 head page 를 반환
+    // compound page 라면 현재 page 가 tail page 일 수 있으므로 
+    // head page 를 반환
 	page = compound_head(page); 
-    // anonymous page 의 경우, page struct 의 mapping 이 struct address_space 가 아닌 struct anon_vma 를 가리킴
-    // 이경우 low bit 가 PAGE_MAPPING_ANON 으로 설정되어 있음
+    // anonymous page 의 경우, page struct 의 mapping 이 
+    // struct address_space 가 아닌 struct anon_vma 를 가리킴
+    // 이경우 low bit 가 PAGE_MAPPING_ANON 으로 설정되어 있음  
+    // 즉 LSB 가 1로 설정되어 있음(어차피 주소는 word 단위 
+    // align 이므로 뒤는 0으로 채워져 있음)
 	return ((unsigned long)page->mapping & PAGE_MAPPING_ANON) != 0;
+    // mapping 의 LSB 검사
+    // 즉 anonymous page 라면1 반환 file-backed page 라면 0 반환
 }
 
 static __always_inline int __PageMovable(struct page *page)
