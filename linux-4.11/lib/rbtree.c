@@ -75,6 +75,11 @@ static inline void rb_set_black(struct rb_node *rb)
 
 static inline struct rb_node *rb_red_parent(struct rb_node *red)
 {
+    // node 는 rbtree 에 새로 삽입한 node 이며 새로운 node 이기 
+    // 때문에 color 는 red 인 상태임 이 node 의 parent node 주소를 
+    // 가져오는 함수
+    // 따라서 이름이 red_parent 임 
+
 	return (struct rb_node *)red->__rb_parent_color;
 }
 
@@ -97,9 +102,46 @@ static __always_inline void
 __rb_insert(struct rb_node *node, struct rb_root *root,
 	    void (*augment_rotate)(struct rb_node *old, struct rb_node *new))
 {
+    // Rule 1. 모든 node 는 red 또는 black 
+    //      2. root node 는 black, new node 는 red
+    //      3. 모든 leaf node 는 black 
+    //      4. red node 의 자식이 red 가 될 수는 없음. 다른경우는 다 가능
+    //      5. root 에서 leaf 까지의 black node 의 개수는 동일 
+    // 
+    // Rule 4 에 따라 red->red 일 경우 발생할 수 있는 case
+    //  Case 1. uncle 없고, new 가 parent 의 left child 
+    //          ->  - gparent 위치 기준으로 right rotate 
+    //              - parent 위치에서 child 위치로 내려가는 놈은 red 로 설정
+    //              - child 위치에서 parent 위치로 올라가는 놈은 black 으로 설정
+    //              - Rule 1 검사
+    //       2. uncle 없고, new 가 parent 의 right child 
+    //          ->  - gparent 위치 기준으로 left rotate 
+    //              - parent 위치에서 child 위치로 내려가는 놈은 red 로 설정
+    //              - child 위치에서 parent 위치로 올라가는 놈은 black 으로 설정 
+    //              - Rule 1 검사
+    //       3. uncle 있고, uncle 이 red  
+    //          ->  - gparent, uncle, parent 현재 색의 반대로 바꿈
+    //              - Rule 1 검사
+    //       4. uncle 있고, uncle 이 black 이며 new 가 parent 의 left child 
+    //          ->  - gparent 위치 기준으로 right rotate 
+    //              - parent 위치에서 child 위치로 내려가는 놈은 red 로 설정
+    //              - child 위치에서 parent 위치로 올라가는 놈은 black 으로 설정 
+    //              - parent 위치에 있던 node 가 gparent 위치로 올라가며 right 
+    //                child 를 버리고 버려진 right child 는 uncle 위치로 내려가
+    //                게된 gparent 위치 였던 node 의 left sub tree 로 입양
+    //              - Rule 1 검사
+    //       5. uncle 있고, uncle 이 black 이며 new 가 parent 의 right child
+    //          ->  - gparent 위치 기준으로 left rotate 
+    //              - parent 위치에서 child 위치로 내려가는 놈은 red 로 설정
+    //              - child 위치에서 parent 위치로 올라가는 놈은 black 으로 설정 
+    //              - parent 위치에 있던 node 가 gparent 위치로 올라가며 left 
+    //                child 를 버리고 버려진 left child 는 uncle 위치로 내려가
+    //                게된 gparent 위치 였던 node 의 right sub tree 로 입양
+    //              - Rule 1 검사
+    //
 	struct rb_node *parent = rb_red_parent(node), *gparent, *tmp;
-
-	while (true) {
+    // 새로 삽입할 node 의 parent 를 가져옴
+    while (true) {
 		/*
 		 * Loop invariant: node is red
 		 *
@@ -108,6 +150,8 @@ __rb_insert(struct rb_node *node, struct rb_root *root,
 		 * want a red root or two consecutive red nodes.
 		 */
 		if (!parent) {
+            // parent 가 없으면 처음 삽입하는 것이므로 색상을 Rule 1 에 따라 
+            // black 으로 설정 후 종료
 			rb_set_parent_color(node, NULL, RB_BLACK);
 			break;
 		} else if (rb_is_black(parent))

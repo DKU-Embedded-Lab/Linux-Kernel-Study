@@ -591,8 +591,9 @@ struct task_struct {
 
 	struct mm_struct		*mm;
     // user space 에서 실행되던 process 의 memory context
+    // 프로세스가 소유하는 memory descriptor
 	struct mm_struct		*active_mm; 
-    // 
+    // 프로세스가 사용중인 memory descriptor
     // task_struct 는 mm 과 active_mm 의 두개의 가지고 있다. 
     // 이는 LAZY TLB HANDLING 관련된 optimize 임.
     //  - 원래 scheduling 결과 다른 proces 가 선택되면 virtual address space 는 교체되고 memory 관련 context 가 교체되며

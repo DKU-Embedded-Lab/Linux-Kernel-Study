@@ -94,8 +94,9 @@ struct vm_area_struct *vmacache_find(struct mm_struct *mm, unsigned long addr)
 
 	if (!vmacache_valid(mm))
 		return NULL;
-    // current task_struct 의 vmacache 의 sequence number 가 넘겨진 mm 가 가진 
-    // vm_area_struct 들인지 검사 아닐 경우및 current task_struct 의 vmacache 재설정
+    // current task_struct 의 vmacache 의 sequence number 가 넘겨진 
+    // mm 가 가진 vm_area_struct 들인지 검사 아닐 경우및 current 
+    // task_struct 의 vmacache 재설정
 	for (i = 0; i < VMACACHE_SIZE; i++) {
 		struct vm_area_struct *vma = current->vmacache.vmas[i];
 

@@ -328,8 +328,9 @@ struct vm_area_struct {
 	 */
 	unsigned long rb_subtree_gap; 
     // 지금 vma 와 바로 전 vma 사이의 gap 또는 그전 vma 들 사이에서의 gap 들 
-    // 중 가장 큰 gap 으로 get_unmapped_area 에서 현재 vma 들사이에 낄 수 있긴
-    // 한지 확인 할 때 사용
+    // 중 가장 큰 gap 으로 get_unmapped_area 에서 size 에 맞는 빈 영역을 
+    // 찾을 때 확용
+    // augmented rb tree 에서 관리된느 정보 
 
 	/* Second cache line starts here. */
 
@@ -351,8 +352,11 @@ struct vm_area_struct {
 	 */
 	struct {
 		struct rb_node rb;
+        // left subtree 들중에서의 vm_end max 값을 가지는 node
 		unsigned long rb_subtree_last;
+        // left subtree 들중에서의 vm_end max 값
 	} shared;
+    // file-backed page 를 위한 rmap
     // 옛날엔 prio_tree 로 관리 되었지만, rb_tree 로 관리되도록 patch 됨
 	/*
 	 * A file's MAP_PRIVATE vma can be in both i_mmap tree and anon_vma
@@ -406,8 +410,10 @@ struct mm_struct {
     // mm 이 가진 vm area 의 정보를 나타내는 single linked list 
 	struct rb_root mm_rb;
     // vm_area_struct 와 관련된 rb- tree 로 rb tree 의 root 를 가리킴
-	u32 vmacache_seqnum;                   /* per-thread vmacache */ 
-    // task_struct 별로 가지고 있는 VMCACHE_SIZE 크기(vm_area_struct 4개)의  I
+	u32 vmacache_seqnum;                   
+    /* per-thread vmacache */ 
+    // task_struct 별로 가지고 있는 
+    // VMCACHE_SIZE 크기(vm_area_struct 4개)의  I
     // vmacache 에 해당하는 sequence number 
 #ifdef CONFIG_MMU
 	unsigned long (*get_unmapped_area) (struct file *filp,
@@ -444,7 +450,7 @@ struct mm_struct {
 	 * drops to 0).
 	 */
 	atomic_t mm_users;
-
+    // mm_struct 를 사용하는 process 의 수(e.g. fork 시 증가)
 	/**
 	 * @mm_count: The number of references to &struct mm_struct
 	 * (@mm_users count as 1).
@@ -453,7 +459,10 @@ struct mm_struct {
 	 * &struct mm_struct is freed.
 	 */
 	atomic_t mm_count;
-
+    // mm_struct 로의 reference 가 있는지에 대한 reference counters
+    // 즉 mm_users 가 하나 이상이면 mm_count 가 1이다.
+    // mm_users 가 0이 되면 mm_count 또한 1 감소하며 mm_count 가 0 이 되면 
+    // mm_struct 를 free 해 준다. kernel thread lazy exit 에서도 사용
 	atomic_long_t nr_ptes;			/* PTE page table pages */
 #if CONFIG_PGTABLE_LEVELS > 2
 	atomic_long_t nr_pmds;			/* PMD page table pages */
@@ -480,14 +489,14 @@ struct mm_struct {
 	unsigned long exec_vm;		/* VM_EXEC & ~VM_WRITE & ~VM_STACK */
 	unsigned long stack_vm;		/* VM_STACK */
 	unsigned long def_flags; 
-    // 여기 아래 변수들은 ELF binary 가 address_space 에 map 되면  변하지 않음
-	unsigned long start_code, end_code, start_data, end_data; 
+	
+    unsigned long start_code, end_code, start_data, end_data; 
     // start_code, end_code : code 영역 start ~ end address 
     // start_data, end_data : data 영역 start ~ end address
 	unsigned long start_brk, brk, start_stack;
     // start_brk : heap start address
     // brk : heap data 의 현재 end address
-    // start_stack : 
+    // start_stack : stack start address
 	unsigned long arg_start, arg_end, env_start, env_end; 
     // arg_start, arg_end : argument list 영역 start ~ end address
     // env_start, env_end : envvironment 영역 start ~ end address 

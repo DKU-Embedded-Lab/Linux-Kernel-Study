@@ -36,8 +36,6 @@ struct anon_vma {
 	 * anon_vma if they are the last user on release
 	 */
 	atomic_t refcount;
-    // 
-
 	/*
 	 * Count of child anon_vmas and VMAs which points to this anon_vma.
 	 *
@@ -46,9 +44,7 @@ struct anon_vma {
 	 */
 	unsigned degree; 
     // 현재 aon_vma 를 가리키는 child anon_vma 의 개수
-
 	struct anon_vma *parent;	/* Parent of this anon_vma */
-
 	/*
 	 * NOTE: the LSB of the rb_root.rb_node is set by
 	 * mm_take_all_locks() _after_ taking the above lock. So the

@@ -257,13 +257,18 @@ static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 	max = vma->vm_start;
 	if (vma->vm_prev)
 		max -= vma->vm_prev->vm_end;
+    // 그전 vma 의 vm_end 와 현재 vma 의 vm_start 사이에 
+    // 얼만큼의 free 가 있는지 구함
 	if (vma->vm_rb.rb_left) {
+        // left child 가 있다면 left child 의 rb_subtree_gap 을
 		subtree_gap = rb_entry(vma->vm_rb.rb_left,
 				struct vm_area_struct, vm_rb)->rb_subtree_gap;
 		if (subtree_gap > max)
 			max = subtree_gap;
+        // 현제 vma 값과 비교하여 최대값 구함
 	}
 	if (vma->vm_rb.rb_right) {
+        // 오른쪽 자식도 마찬가지 작없 수행
 		subtree_gap = rb_entry(vma->vm_rb.rb_right,
 				struct vm_area_struct, vm_rb)->rb_subtree_gap;
 		if (subtree_gap > max)
@@ -482,6 +487,7 @@ static int find_vma_links(struct mm_struct *mm, unsigned long addr,
 	rb_prev = __rb_parent = NULL;
     // root node 부터 시작하여 rb tree 검색
 	while (*__rb_link) {         
+        // root rbnode 부터 하여 검색 시작
 		struct vm_area_struct *vma_tmp;
 
 		__rb_parent = *__rb_link;
@@ -504,17 +510,15 @@ static int find_vma_links(struct mm_struct *mm, unsigned long addr,
 //                       |              |             
 //  0<- ... +++++++++++++*++++++++++++++*++++*+++++++++++++++*+ -> 3G
 //                                           |               |
-//                                          addr            end
+//                                          addr            end 
+// __rb_link 는 __rb_parent 에서 vma 가 추가될 위치 즉 left or right 를 의미
 		if (vma_tmp->vm_end > addr) { 
 			/* Fail if an existing vma overlaps the area */ 
 			if (vma_tmp->vm_start < end)
-				return -ENOMEM;
-                // case 1, 2, 4, 5  => 겹치는 상황
-			__rb_link = &__rb_parent->rb_left;
-            // case 3 => left child 로 이동 
+				return -ENOMEM; // case 1, 2, 4, 5  => 겹치는 상황
+			__rb_link = &__rb_parent->rb_left; // case 3 => left child 로 이동 
 		} else { 
-            // case 6 => right child 로 이동
-			rb_prev = __rb_parent;
+			rb_prev = __rb_parent; // case 6 => right child 로 이동
             // rb_prev 를 이동전 left parent 로 설정
 			__rb_link = &__rb_parent->rb_right;
 		}
@@ -559,11 +563,10 @@ static unsigned long count_vma_pages_range(struct mm_struct *mm,
 void __vma_link_rb(struct mm_struct *mm, struct vm_area_struct *vma,
 		struct rb_node **rb_link, struct rb_node *rb_parent)
 {
-    // vma - container_of(rb_parent) : vma 아직 연결안됨
 	/* Update tracking information for the gap following the new vma. */
 	if (vma->vm_next)
 		vma_gap_update(vma->vm_next);
-    // gap?.. 뭐하는 함수임? 
+    // parent node 로 올라가며 gap 정보 update
 	else
 		mm->highest_vm_end = vma->vm_end;
     // next 가 없다면 즉 vma 가 마지막이라면 mm 의 마지막 vm 주소 update
@@ -578,9 +581,12 @@ void __vma_link_rb(struct mm_struct *mm, struct vm_area_struct *vma,
 	 * rebalance the rbtree after all augmented values have been set.
 	 */
 	rb_link_node(&vma->vm_rb, rb_parent, rb_link);
+    // 현재 vma 의 vma->vm_rb 를 rb_parent 의 rb_link 위치(left/right) 에
+    // 연결하고 vma->vm_rb 의 parent pointer 에 rb_parent 설정
 	vma->rb_subtree_gap = 0;
 	vma_gap_update(vma);
 	vma_rb_insert(vma, &mm->mm_rb);
+    // balancing
 }
 
 static void __vma_link_file(struct vm_area_struct *vma)
@@ -598,9 +604,9 @@ static void __vma_link_file(struct vm_area_struct *vma)
 			atomic_inc(&mapping->i_mmap_writable);
         // 현재 vm 이 shared memory 접근이면 address_space 의 
         // shared mapping count 증가
-
 		flush_dcache_mmap_lock(mapping);
 		vma_interval_tree_insert(vma, &mapping->i_mmap);
+        // reverse mapping 을 위해 address_space 의 
 		flush_dcache_mmap_unlock(mapping);
 	}
 }
@@ -615,6 +621,7 @@ __vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
     // vma 를 prev ~ container_of(rb_parent) 와 서로 연결
 	__vma_link_rb(mm, vma, rb_link, rb_parent); 
     // vma 를 rb tree 에 추가
+    // rb_link : rb_parent 에서vma->vm_rb 가 추가될 위치
 }
 
 static void vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
@@ -632,7 +639,7 @@ static void vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
 	__vma_link(mm, vma, prev, rb_link, rb_parent);
     // vma 와 prev,container_of(rb_parent) 서로 list 연결 및 rbtree 추가
 	__vma_link_file(vma);
-    
+    // file-backed page 일 경우 vma 를 address_space 에 추가
 	if (mapping)
 		i_mmap_unlock_write(mapping);
 
@@ -710,6 +717,11 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	long adjust_next = 0;
 	int remove_next = 0;
 
+    // vma 를 start ~ end 까지로 ㄷ시 조정
+    // start 위치는 pgoff 의 page offset 을 가짐 
+    //
+    // prev --- next 
+    //      
 	if (next && !insert) {
 		struct vm_area_struct *exporter = NULL, *importer = NULL;
 
@@ -1077,9 +1089,11 @@ can_vma_merge_after(struct vm_area_struct *vma, unsigned long vm_flags,
 		    pgoff_t vm_pgoff,
 		    struct vm_userfaultfd_ctx vm_userfaultfd_ctx)
 {
+    // vma : prev
 	if (is_mergeable_vma(vma, file, vm_flags, vm_userfaultfd_ctx) &&
 	    is_mergeable_anon_vma(anon_vma, vma->anon_vma, vma)) { 
-        // file backed 라면 같은 파일인지, anon 이라면 같은 anon_vma 
+        // file backed 라면 같은 파일인지, anon 이라면 같은 anon_vma 인지 
+        // 즉 같은 address space 인지
 		pgoff_t vm_pglen;
 		vm_pglen = vma_pages(vma);
 		if (vma->vm_pgoff + vm_pglen == vm_pgoff)
@@ -1195,11 +1209,13 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
             //    위와 같은 검사 
             // 4. prev 와 next 도 서로 merge 되어도 되는지 검사 
             
-							/* cases 1, 6 */
+							/* cases 1, 6 */ 
+            // 앞 뒤 vm 이 모두 merge 가 가능한 상황 
 			err = __vma_adjust(prev, prev->vm_start,
 					 next->vm_end, prev->vm_pgoff, NULL,
 					 prev);
 		} else					/* cases 2, 5, 7 */
+            // 앞의 vm 만 merge 가 가능한 상황
 			err = __vma_adjust(prev, prev->vm_start,
 					 end, prev->vm_pgoff, NULL, prev);
 		if (err)
@@ -2214,23 +2230,35 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
             // case 3 => right child 로 이동
 	}
     // r1) exist 
+    // address 정확히 포함하는 vma 있음
+    //                         *
     //    vm_end ~ vm_start---addr---vm_end ~ vm_start
-    //    a |        |      vma        |        |  b
+    //      |        |   변수 vma      |        |   
     //-------        ---------vm--------        ------
+    //
     // r2) not exist
-    // vm_start---vm_end ~ addr ~ vm_start---vm_end
-    //   |    a     |               |   vma    |
-    //   ----vm------               -----vm----- 
-    // r3) not exist
-    // addr ~ vm_start---vm_end
-    //          |    vma   |
-    //          -----vm-----
-    // r4) not exist 
+    // address 를 포함하는 vma 없고 address 가 다른 vma 사이에 
+    // 있음
+    //                      *
+    // vm_start---vm_end ~ addr ~ vm_start---vm_end ~ vm_start 
+    //   |          |               | 변수 vma |        |
+    //   ----vm------               -----vm-----        ----
+    //
+    // r3) not exist (vma : null) 
+    // address 가 vma 들의 맨 끝에 있음 즉 현재 할당된 vma 들의 
+    // vma_end 들과 비교하여 제일 큰위치
+    //                      *
     // vm_start---vm_end ~ addr 
-    //   |     a    |             
+    //   |          |             
     //   -----vm-----              
-    //   vma : null
-    // 검색 결과 r1 잀수도r2 일수도 r2 의 뒤 vm 없을수도
+    // 
+    // r4) not exist (vma: null)
+    // 처음 vma 없는 상태임
+    //        *
+    //      addr
+    //
+    // 검색 결과 vaddress 가 vma 들 사이에 있어 
+    //
     if (vma)
 		vmacache_update(addr, vma);
     // 찾은 vma 를 task_struct 의 vmacache 에 추가 
@@ -3239,7 +3267,10 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 	if (find_vma_links(mm, vma->vm_start, vma->vm_end,
 			   &prev, &rb_link, &rb_parent))        
 		return -ENOMEM;
-    // prev - vma - container_of(rb_parent) : vma 아직 연결안됨
+    // find_vma_links 를 통해 vma 를 삽입할 mm 에서의 위치를 구함
+    // rb_parent : rb_node 에서의 부모
+    // rb_link : rb_parent 에서 연결될 위치
+
 	if ((vma->vm_flags & VM_ACCOUNT) &&
 	     security_vm_enough_memory_mm(mm, vma_pages(vma)))
 		return -ENOMEM;

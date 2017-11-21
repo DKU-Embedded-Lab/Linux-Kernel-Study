@@ -214,8 +214,6 @@ void __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
 		struct vm_area_struct *prev, struct rb_node *rb_parent)
 {
 	struct vm_area_struct *next;
-    // prev - vma - container_of(rb_parent) : vma 아직 연결안됨
-    //              next
 	vma->vm_prev = prev;
     // vma 에서 prev 연결
 	if (prev) {

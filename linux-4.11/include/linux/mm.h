@@ -378,7 +378,7 @@ enum page_entry_size {
  */
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);
-    // vm_area_struct 가 새로 생성될 때(e.g. fork 시), vma 관련 설정?
+    // vm_area_struct 가 새로 생성될 때(e.g. fork 시), vma 관련 설정
 	void (*close)(struct vm_area_struct * area);
     // vm_area_struct 가 삭제될 때
 	int (*mremap)(struct vm_area_struct * area);
@@ -2259,19 +2259,28 @@ extern struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned lon
 static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * mm, 
         unsigned long start_addr, unsigned long end_addr)
 {
+    // rbtree search 하기 위한 함수
     // find_vma 를 기반으로 동작하지만, 주어진 start_addr ~ end_addr 의 
-    // 범위와 중첩되는 첫번째 vma 를 반환
-	struct vm_area_struct * vma = find_vma(mm,start_addr);
-    // start_addr 보다 큰 vm_end 를 가진 첫번째 vm_area_struct 를 반환
-    // 아래와 같은 상황 가능
+    // 범위와 중첩되는 첫번째 vma 를 반환 
+    struct vm_area_struct * vma = find_vma(mm,start_addr);
+    // start_addr 보다 큰 vm_end 를 가진 첫번째 vm_area_struct 를 반환 
+    // vm != NULL 일 경우 아래와 같은 상황 가능
+    //
     //  ... vm_end  1)vm_start     2)vm_start    3)vm_start    vm_end
     //                  |              |             |           |
     //  ... ++++++++++++*+++++*++++++++*++++++*++++++*+++++++++++*
     //                        |               |
-    //                   start_addr        end_addr
+    //                   start_addr        end_addr 
+    //
+    //  ... vm_end  4)vm_start  5)vm_start   vm_end 
+    //                  |           |          |            
+    //  ... ++++++++++++*+++++*+++++*++++++++++*++++*++++
+    //                        |                     |
+    //                   start_addr              end_addr
+    //
 	if (vma && end_addr <= vma->vm_start)
 		vma = NULL;
-    // 2 번 3번에 해당하면 null 반환
+    // 3번에 해당하면 안겹치므로 null 반환 
 	return vma;
 }
 

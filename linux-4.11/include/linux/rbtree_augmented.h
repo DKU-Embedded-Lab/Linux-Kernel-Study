@@ -37,8 +37,13 @@
 
 struct rb_augment_callbacks {
 	void (*propagate)(struct rb_node *node, struct rb_node *stop);
-	void (*copy)(struct rb_node *old, struct rb_node *new);
+    // node 가 stop 이라는 상위 node 에 도달 할때 까지 augmented value 를
+    // update 수행
+	void (*copy)(struct rb_node *old, struct rb_node *new); 
+    // old 의 augment value 를 new 의 augment 값으로 복사
 	void (*rotate)(struct rb_node *old, struct rb_node *new);
+    // copy 와 같은 일 하고 난 후, old 의 augment value 를 
+    // 등록한 callback 함수로 재 계산
 };
 
 extern void __rb_insert_augmented(struct rb_node *node, struct rb_root *root,
@@ -95,7 +100,7 @@ rbstatic const struct rb_augment_callbacks rbname = {			\
 	.rotate = rbname ## _rotate					\
 };
 
-
+// LSB 의 color 검사 MASK  
 #define	RB_RED		0
 #define	RB_BLACK	1
 
@@ -105,18 +110,23 @@ rbstatic const struct rb_augment_callbacks rbname = {			\
 #define __rb_is_black(pc)  __rb_color(pc)
 #define __rb_is_red(pc)    (!__rb_color(pc))
 #define rb_color(rb)       __rb_color((rb)->__rb_parent_color)
+// rb_node 의 __rb_parent_color 의 LSB 검사를 통해 color 가져옴
 #define rb_is_red(rb)      __rb_is_red((rb)->__rb_parent_color)
+// rb 의 __rb_parent_color 의 LSB 가 0 인지 검사
 #define rb_is_black(rb)    __rb_is_black((rb)->__rb_parent_color)
+// rb 의 __rb_parent_color 의 LSB 가 1 인지 검사
 
 static inline void rb_set_parent(struct rb_node *rb, struct rb_node *p)
 {
 	rb->__rb_parent_color = rb_color(rb) | (unsigned long)p;
+    // rb_node 의 color 와 parent 주소 설정
 }
 
 static inline void rb_set_parent_color(struct rb_node *rb,
 				       struct rb_node *p, int color)
 {
-	rb->__rb_parent_color = (unsigned long)p | color;
+	rb->__rb_parent_color = (unsigned long)p | color; 
+    // 지정된 color 와 parent 주소 설정
 }
 
 static inline void
