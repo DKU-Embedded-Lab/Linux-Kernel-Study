@@ -503,7 +503,7 @@ static inline pud_t pfn_pud(unsigned long page_nr, pgprot_t pgprot)
 	return __pud(((phys_addr_t)page_nr << PAGE_SHIFT) |
 		     massage_pgprot(pgprot));
 }
-
+// pte 에서 attributes 관련 부분에 newprot 을 설정하는 함수
 static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 {
 	pteval_t val = pte_val(pte);
@@ -698,7 +698,10 @@ static inline unsigned long pmd_index(unsigned long address)
  * (Currently stuck as a macro because of indirect forward reference
  * to linux/mm.h:page_to_nid())
  */
-#define mk_pte(page, pgprot)   pfn_pte(page_to_pfn(page), (pgprot))
+#define mk_pte(page, pgprot)   pfn_pte(page_to_pfn(page), (pgprot)) 
+// struct page 를 통해 page frame address 를 가져오고 pgprot 와 함께 이제
+// pte 구성하기 위한 정보 다 있으니 pte_t 만듬
+// pgprot : page attribute  
 
 /*
  * the pte page can be thought of an array like this: pte_t[PTRS_PER_PTE]

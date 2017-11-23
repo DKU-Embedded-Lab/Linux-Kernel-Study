@@ -377,11 +377,16 @@ static inline void __nodes_fold(nodemask_t *dstp, const nodemask_t *origp,
 
 /*
  * Bitmasks that are kept for all the nodes.
- */
+ */ 
+// 
+// 각 node 의 상태를 나타내는 bitmask 에 쓰일 flag 들
+//
 enum node_states {
 	N_POSSIBLE,		/* The node could become online at some point */
 	N_ONLINE,		/* The node is online */
-	N_NORMAL_MEMORY,	/* The node has regular memory */
+	N_NORMAL_MEMORY,	/* The node has regular memory */ 
+    // NODE 에 HIGHMEM 이 없는 상태임 
+    // ZONE_HIGHMEM 이 없다는 상태인가? 64 bit 같은?
 #ifdef CONFIG_HIGHMEM
 	N_HIGH_MEMORY,		/* The node has regular or high memory */
 #else
@@ -408,12 +413,12 @@ static inline int node_state(int node, enum node_states state)
 {
 	return node_isset(node, node_states[state]);
 }
-
+// node state  설정
 static inline void node_set_state(int node, enum node_states state)
 {
 	__node_set(node, &node_states[state]);
 }
-
+// node state clear
 static inline void node_clear_state(int node, enum node_states state)
 {
 	__node_clear(node, &node_states[state]);

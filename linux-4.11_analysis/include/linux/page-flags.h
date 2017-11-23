@@ -73,12 +73,19 @@
  */
 enum pageflags {
 	PG_locked,		/* Page is locked. Don't touch. */
+    // 해당 page 에 무언가 다른 연산지금 하면 안됨
+    // e.g. storage 에서 page frame 으로 읽어옴
 	PG_error,
-	PG_referenced,
+    // I/O 하는 도중 error 발생
+	PG_referenced, 
+    // swapping 시 사용
 	PG_uptodate,
 	PG_dirty,
+    // write back 을 위해 사용
 	PG_lru,
-	PG_active,
+    // 
+	PG_active, 
+    // swapping 시 사용, active lru 에 있음을 나타냄
 	PG_waiters,		/* Page has waiters, check its waitqueue. Must be bit #7 and in the same byte as "PG_locked" */
 	PG_slab,
 	PG_owner_priv_1,	/* Owner use. If pagecache, fs may use*/
@@ -90,6 +97,7 @@ enum pageflags {
 	PG_head,		/* A head page */
 	PG_mappedtodisk,	/* Has blocks allocated on-disk */
 	PG_reclaim,		/* To be reclaimed asap */
+    // 곧 reclaim 될 page
 	PG_swapbacked,		/* Page is backed by RAM/swap */
 	PG_unevictable,		/* Page is "unevictable"  */
 #ifdef CONFIG_MMU
@@ -112,7 +120,9 @@ enum pageflags {
 
 	/* SwapBacked */
 	PG_swapcache = PG_owner_priv_1,	/* Swap page: swp_entry_t in private */
-
+    // 이 page 가 swap cache 에 있음. 
+    // page->private 가 swp_entry_t 를 가짐
+    //
 	/* Two page bits are conscripted by FS-Cache to maintain local caching
 	 * state.  These bits are set on pages belonging to the netfs's inodes
 	 * when those inodes are being locally cached.

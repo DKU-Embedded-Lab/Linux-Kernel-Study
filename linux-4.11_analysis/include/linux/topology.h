@@ -70,6 +70,7 @@ DECLARE_PER_CPU(int, numa_node);
 /* Returns the number of the current Node. */
 static inline int numa_node_id(void)
 {
+    // per-CPU variable 인 NUMA  node 를 읽어들임
 	return raw_cpu_read(numa_node);
 }
 #endif

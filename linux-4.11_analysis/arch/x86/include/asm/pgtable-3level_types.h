@@ -12,7 +12,9 @@ typedef u64	pgprotval_t;
 
 typedef union {
 	struct {
-		unsigned long pte_low, pte_high;
+		unsigned long pte_low, pte_high; 
+        // 32bit 에서 4byte 로 addressable 보다 큰 memory 를 사용하기 위해
+        // PAE 설정되어 있음 
 	};
 	pteval_t pte;
 } pte_t;
@@ -36,11 +38,11 @@ typedef union {
  */
 #define PMD_SHIFT	21
 #define PTRS_PER_PMD	512
-
+// pmd directory entry 당 512 개 entry 있음
 /*
  * entries per page directory level
  */
 #define PTRS_PER_PTE	512
-
+// pte directory entry 당 512 개의 entry 있음
 
 #endif /* _ASM_X86_PGTABLE_3LEVEL_DEFS_H */

@@ -6,13 +6,25 @@
 
 #define FIRST_USER_ADDRESS	0UL
 
-#define _PAGE_BIT_PRESENT	0	/* is present */
+#define _PAGE_BIT_PRESENT	0	/* is present */ 
+// virtual address 에 해당하는 것이 memory 에 올라와 있는지 
+// -> first or swap 
+//    swap : _PAGE_ACCESSED | _PAGE_DIRTY 가 설정됨
+//              => pte_none 이 false
+//           _PAGE_PRESENT 가 설정 안됨
+//              => pte_present 가 false 
+
 #define _PAGE_BIT_RW		1	/* writeable */
 #define _PAGE_BIT_USER		2	/* userspace addressable */
 #define _PAGE_BIT_PWT		3	/* page write through */
 #define _PAGE_BIT_PCD		4	/* page cache disabled */
-#define _PAGE_BIT_ACCESSED	5	/* was accessed (raised by CPU) */
+#define _PAGE_BIT_ACCESSED	5	/* was accessed (raised by CPU) */ 
+// rea/write 모두 접근시 set 됨
+// raised by MMU
+// page out 될 때, reverse mapping 되며 clear
 #define _PAGE_BIT_DIRTY		6	/* was written to (raised by CPU) */
+// write 접근시 set 됨
+// raised by MMU
 #define _PAGE_BIT_PSE		7	/* 4 MB (or 2MB) page */
 #define _PAGE_BIT_PAT		7	/* on 4KB pages */
 #define _PAGE_BIT_GLOBAL	8	/* Global TLB entry PPro+ */
@@ -253,7 +265,8 @@ enum page_cache_mode {
  */
 #define PTE_FLAGS_MASK		(~PTE_PFN_MASK)
 
-typedef struct pgprot { pgprotval_t pgprot; } pgprot_t;
+typedef struct pgprot { pgprotval_t pgprot; } pgprot_t; 
+// page attribute 관련
 
 typedef struct { pgdval_t pgd; } pgd_t;
 

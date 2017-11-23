@@ -4251,6 +4251,8 @@ EXPORT_SYMBOL(free_pages_exact);
  */
 static unsigned long nr_free_zone_pages(int offset)
 {
+    // offset : zone 이 어떤 type 인지... 
+    // ZONE_DMA, ZONE_NORMAL...
 	struct zoneref *z;
 	struct zone *zone;
 
@@ -4258,8 +4260,11 @@ static unsigned long nr_free_zone_pages(int offset)
 	unsigned long sum = 0;
 
 	struct zonelist *zonelist = node_zonelist(numa_node_id(), GFP_KERNEL);
-
-	for_each_zone_zonelist(zone, z, zonelist, offset) {
+    // per-CPU 변수를 읽어들인 node_id 를 통해 pg_data_t 가져오고 
+    // 거기서 fallback 이냐 아니냐에 따라 zonelist 가져옴 
+    
+	for_each_zone_zonelist(zone, z, zonelist, offset) { 
+        
 		unsigned long size = zone->managed_pages;
 		unsigned long high = high_wmark_pages(zone);
 		if (size > high)
@@ -4274,7 +4279,9 @@ static unsigned long nr_free_zone_pages(int offset)
  *
  * nr_free_buffer_pages() counts the number of pages which are beyond the high
  * watermark within ZONE_DMA and ZONE_NORMAL.
- */
+ */ 
+// ZONE_NORMAL, ZONE_DMA 에서 high watermark 보다 넘어가는 
+// free pages 수를 가져옴
 unsigned long nr_free_buffer_pages(void)
 {
 	return nr_free_zone_pages(gfp_zone(GFP_USER));
@@ -6828,19 +6835,23 @@ static void __setup_per_zone_wmarks(void)
 	unsigned long lowmem_pages = 0;
 	struct zone *zone;
 	unsigned long flags;
-
+    // pages_min : min_free_kbytes 를 page 수 단위로 바꿈
 	/* Calculate total number of !ZONE_HIGHMEM pages */
 	for_each_zone(zone) {
 		if (!is_highmem(zone))
 			lowmem_pages += zone->managed_pages;
+        // highmem 빼고 ZONE_DMA, ZONE_NORMAL 의
+        // buddy 가 관리하게 될 free page 의 수를 다 더해줌 
 	}
 
 	for_each_zone(zone) {
+        // zone 과 연결된 pglist_data 를 통해 node 의 zone 들을 가져옴
+        // ZONE_DMA, ZONE_DMA32, ZONE_NORMAL 순서..
 		u64 tmp;
 
 		spin_lock_irqsave(&zone->lock, flags);
 		tmp = (u64)pages_min * zone->managed_pages;
-		do_div(tmp, lowmem_pages);
+		do_div(tmp, lowmem_pages);         
 		if (is_highmem(zone)) {
 			/*
 			 * __GFP_HIGH and PF_MEMALLOC allocations usually don't
@@ -6855,12 +6866,21 @@ static void __setup_per_zone_wmarks(void)
 
 			min_pages = zone->managed_pages / 1024;
 			min_pages = clamp(min_pages, SWAP_CLUSTER_MAX, 128UL);
+            // min_pages 값이 SWAP_CLUSTER_MAX ~ 128UL 사이의 값
+            // 을가지도록 설정 즉 128UL 보다 넘을 경우 128UL 로 설정하고
+            // SWAP_CLUSTER_MAX 보다 작을 경우 SWAP_CLUSTER_MAX 로 설정 
+            // SWAP_CLUSTER_MAX : 32UL
 			zone->watermark[WMARK_MIN] = min_pages;
 		} else {
 			/*
 			 * If it's a lowmem zone, reserve a number of pages
 			 * proportionate to the zone's size.
 			 */
+            // 현재 zone(ZONE_DMA or ZONE_NORMAL) 의 managed_pages 의 비율에 따라 즉
+            //          현재 zone 의 managed_pages
+            // -------------------------------------------  *  min_free_kbytes 
+            //  전체(ZONE_DMA + ZONE_NORMAL) managed_pages
+            //  위 공식대로 zone 의 비율만큼 min watermark 계산
 			zone->watermark[WMARK_MIN] = tmp;
 		}
 
@@ -6872,9 +6892,27 @@ static void __setup_per_zone_wmarks(void)
 		tmp = max_t(u64, tmp >> 2,
 			    mult_frac(zone->managed_pages,
 				      watermark_scale_factor, 10000));
+        // u64 로 typecast 결과 
+        // tmp *4 
+        // mult_frac(zone->managed_pages,watermark_scale_factor, 10000)
+        // 두개 최대값 설정 
 
 		zone->watermark[WMARK_LOW]  = min_wmark_pages(zone) + tmp;
+        // low watermark  초기화 
+        // lowmem 의 경우
+        //  - tmp * 2
+        //
+        // highmem 의 경우 
+        //  - (32UL < managed_pages / 1024 < 128UL) + tmp
+        //
 		zone->watermark[WMARK_HIGH] = min_wmark_pages(zone) + tmp * 2;
+        // high watermark 초기화
+        // lowmem 의 경우
+        //  - tmp * 3
+        //
+        // highmem 의 경우
+        //  - (32UL < managed_pages / 1024 < 128UL) + tmp * 2
+        //
 
 		spin_unlock_irqrestore(&zone->lock, flags);
 	}
@@ -6920,21 +6958,33 @@ void setup_per_zone_wmarks(void)
  * 4096MB:	8192k
  * 8192MB:	11584k
  * 16384MB:	16384k
- */
+ */ 
+// 워터마크 초기값 설정하는 함수 high, low, min 아직 다 0인 상태 
+// __meminit : 커널 메모리 절약을 위해 booting 된 후 해당 부분을 memory 에서 제거
 int __meminit init_per_zone_wmark_min(void)
 {
 	unsigned long lowmem_kbytes;
 	int new_min_free_kbytes;
 
-	lowmem_kbytes = nr_free_buffer_pages() * (PAGE_SIZE >> 10);
+	lowmem_kbytes = nr_free_buffer_pages() * (PAGE_SIZE >> 10); 
+    // nr_free_buffer_pages : ZONE_DMA, ZONE_NORMAL 에서 high watermark 
+    // 임계값 만큼 빼고 남는 free page들
+    // PAGE_SIZE : 1 << 12  
+    // PAGE_SIZE >> 10 : KB 단위로 바꿈(즉 page 수 * 4)
+    //
+    // kernel 이 처음초기화 될 때 watermark 다 0 이니까 그냥 free page 다 
+    // 가져와서 KB 단위로 바꾼다는 뜻임
 	new_min_free_kbytes = int_sqrt(lowmem_kbytes * 16);
-
+    // 16 곱하고 root 연산 : 
+    // 
 	if (new_min_free_kbytes > user_min_free_kbytes) {
+        // user_min_free_kbytes 는 부팅시 초기값이 -1 임
 		min_free_kbytes = new_min_free_kbytes;
 		if (min_free_kbytes < 128)
 			min_free_kbytes = 128;
 		if (min_free_kbytes > 65536)
-			min_free_kbytes = 65536;
+			min_free_kbytes = 65536; 
+        // min_free_kbytes 를 128 KB 에서 64MB 사이로 맞춤
 	} else {
 		pr_warn("min_free_kbytes is not updated to %d because user defined value %d is preferred\n",
 				new_min_free_kbytes, user_min_free_kbytes);

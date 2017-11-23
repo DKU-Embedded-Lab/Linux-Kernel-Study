@@ -16,7 +16,9 @@ typedef unsigned long	pudval_t;
 typedef unsigned long	pgdval_t;
 typedef unsigned long	pgprotval_t;
 
-typedef struct { pteval_t pte; } pte_t;
+typedef struct { pteval_t pte; } pte_t; 
+// unsigned long 하나 뿐인데 struct 안에 들엉 있는 이유는
+// Helper function 을 통해서만 접근 및 조작이 가능하도록 하기 위해
 
 #endif	/* !__ASSEMBLY__ */
 
@@ -46,6 +48,33 @@ typedef struct { pteval_t pte; } pte_t;
  */
 #define PTRS_PER_PTE	512
 
+//                                          
+// --------------------------------------------------------------
+// |    PGD     |   PUD     |   PMD     |   PTE     |   offset  |
+// --------------------------------------------------------------
+//                                                       12
+//                                            9     <----------->
+//                                                  PAGE_SHIFT(12) => 4096 개entry
+//                                9     <----------------------->
+//                                             PMD_SHIFT(21)       => 512 개 entry
+//                    9     <----------------------------------->
+//                                       PUD_SHIFT(30)             => 512 개 entry
+//       9      <----------------------------------------------->
+//                              PGDIR_SHIFT(39)                    => 512 개 entry     
+// 
+// virtual address 의 나머지 16bit 를 Canonial address space 를 표현하기 위해 사용
+// 48~64 까지는 User 영역인지, Kernel 영역인지를 구분하기 위해 사용함.
+// USER 영역주소가 0 bit 부터 쭈욱 addressing 되어 46 번 bit 까지 사용 
+// KERNEL 영역 주소는 63 bit ~ 47 bit 까지 1로 설정된 상태에서 다시 
+// 0bit 부터 addressing
+//
+//
+//      0x0000 0000 0000 0000 
+//    ~ 0x0000 7FFF FFFF FFFF  : USER 영역
+//
+//      0xFFFF 8000 0000 0000 
+//    ~ 0XFFFF FFFF FFFF FFFF  : KERNEL 영역
+//
 #define PMD_SIZE	(_AC(1, UL) << PMD_SHIFT)
 #define PMD_MASK	(~(PMD_SIZE - 1))
 #define PUD_SIZE	(_AC(1, UL) << PUD_SHIFT)

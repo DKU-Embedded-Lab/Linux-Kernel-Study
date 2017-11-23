@@ -36,7 +36,11 @@ struct mem_cgroup;
  * of struct page. That is currently only used by slub but the arrangement
  * allows the use of atomic double word operations on the flags/mapping
  * and lru list pointers also.
- */
+ */ 
+// memory 에 존재한는 page frame 들이 어떤 목적으로 어디에 어떻게 쓰이고 있다는
+// 것을 나타내기 위한 것
+// memory 에 존재한는 모든 page frame 들은 각각에 대해 struct page 들을 가지며, 
+// 이는 배열로 pglist_data->node_mem_map 에 관리
 struct page {
 	/* First double word block */
 	unsigned long flags;		/* Atomic flags, some possibly
@@ -65,6 +69,9 @@ struct page {
         // 첫번재 page 의 compound_mapcount 변수에 pte 에 map된 횟수가
         // 저장된다.
         // 즉 두번째 page 에 기록됨
+        //
+        // compound page 와 일반적인 high order 할당의 차이점은 
+        // TLB 성능을 높이기 위해 pte 단위가 아닌 pmd 단위로 할당한다는 것
 
 		/* page_deferred_list().next	 -- second tail page */
 	};
@@ -226,6 +233,7 @@ struct page {
 #if defined(WANT_PAGE_VIRTUAL)
 	void *virtual;			/* Kernel virtual address (NULL if
 					   not kmapped, ie. highmem) */
+
 #endif /* WANT_PAGE_VIRTUAL */
 
 #ifdef CONFIG_KMEMCHECK

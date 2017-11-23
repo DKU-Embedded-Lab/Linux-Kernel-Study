@@ -15,11 +15,17 @@ struct vm_area_struct;
  */
 
 /* Plain integer GFP bitmasks. Do not use this directly. */
-#define ___GFP_DMA		0x01u
-#define ___GFP_HIGHMEM		0x02u
-#define ___GFP_DMA32		0x04u
-#define ___GFP_MOVABLE		0x08u
-#define ___GFP_RECLAIMABLE	0x10u
+#define ___GFP_DMA		0x01u 
+// ZONE_DMA 영역에 할당 요청함
+#define ___GFP_HIGHMEM		0x02u 
+// ZONE_HIGHMEM 영역에 할당 요청함
+#define ___GFP_DMA32		0x04u 
+// ZONE_DMA32 영역에 할당 요청함
+#define ___GFP_MOVABLE		0x08u 
+// ZONE_MOVABLE 이 이용가능하다면 이 영역에 할당 요청한다
+// page migration 가능하도록 할당 요청
+#define ___GFP_RECLAIMABLE	0x10u 
+// 회수 가능한 page 로 할당 요청 
 #define ___GFP_HIGH		0x20u
 #define ___GFP_IO		0x40u
 #define ___GFP_FS		0x80u
@@ -33,7 +39,8 @@ struct vm_area_struct;
 #define ___GFP_ZERO		0x8000u
 #define ___GFP_NOMEMALLOC	0x10000u
 #define ___GFP_HARDWALL		0x20000u
-#define ___GFP_THISNODE		0x40000u
+#define ___GFP_THISNODE		0x40000u 
+// 지정된 node 에서만 할당 허용
 #define ___GFP_ATOMIC		0x80000u
 #define ___GFP_ACCOUNT		0x100000u
 #define ___GFP_NOTRACK		0x200000u
@@ -49,7 +56,7 @@ struct vm_area_struct;
  * without the underscores and use them consistently. The definitions here may
  * be used in bit comparisons.
  */
-#define __GFP_DMA	((__force gfp_t)___GFP_DMA)
+#define __GFP_DMA	((__force gfp_t)___GFP_DMA) 
 #define __GFP_HIGHMEM	((__force gfp_t)___GFP_HIGHMEM)
 #define __GFP_DMA32	((__force gfp_t)___GFP_DMA32)
 #define __GFP_MOVABLE	((__force gfp_t)___GFP_MOVABLE)  /* ZONE_MOVABLE allowed */
@@ -249,7 +256,7 @@ struct vm_area_struct;
 #define GFP_TEMPORARY	(__GFP_RECLAIM | __GFP_IO | __GFP_FS | \
 			 __GFP_RECLAIMABLE)
 #define GFP_USER	(__GFP_RECLAIM | __GFP_IO | __GFP_FS | __GFP_HARDWALL)
-// 유저 메모리를 할당함. 휴면가능
+// 유저 메모리를 할당함. 휴면가능 
 #define GFP_DMA		__GFP_DMA 
 // 연속된 물리 메모리를 할당 받을 때 사용 
 #define GFP_DMA32	__GFP_DMA32
@@ -373,13 +380,24 @@ static inline bool gfpflags_allow_blocking(const gfp_t gfp_flags)
 	| 1 << (___GFP_MOVABLE | ___GFP_DMA32 | ___GFP_DMA | ___GFP_HIGHMEM)  \
 )
 
+// ZONE bit 정보가 포함된 flags 를 사용하여 zone_type 을 반환
 static inline enum zone_type gfp_zone(gfp_t flags)
 {
 	enum zone_type z;
-	int bit = (__force int) (flags & GFP_ZONEMASK);
+	int bit = (__force int) (flags & GFP_ZONEMASK); 
+    // flag 에서 I
+    //                                  GFP_ZONES_SHIFT
+    // __GFP_DMA     -> ...0000 0001 : 1   ...0000 0010
+    // __GFP_HIGHMEM -> ...0000 0010 : 2   ...0000 0100
+    // __GFP_DMA32   -> ...0000 0100 : 4   ...0000 1000
+    // __GFP_MOVABLE -> ...0000 1000 : 8   ...0001 0000
+    // 에 해당하는 bit 가져옴
 
 	z = (GFP_ZONE_TABLE >> (bit * GFP_ZONES_SHIFT)) &
-					 ((1 << GFP_ZONES_SHIFT) - 1);
+					 ((1 << GFP_ZONES_SHIFT) - 1); 
+    // 
+    // GFP_ZONES_SHIFT 는 2 임 즉 ... 0000 0011 값과 & 연산을 통해 비교 
+    // 아무튼 그냥 무슨 zone 인지 가져옴
 	VM_BUG_ON((GFP_ZONE_BAD >> bit) & 1);
 	return z;
 }
@@ -411,6 +429,17 @@ static inline int gfp_zonelist(gfp_t flags)
  */
 static inline struct zonelist *node_zonelist(int nid, gfp_t flags)
 {
+    // x86 의 경우 
+    // NUMA 라면 
+    //   node_data 에 접근하여 nid 에 해당하는 pglist_data 를 
+    //   가져온 후, pglist_data 의 node_zonelists 에 접근하여 
+    //   flag 검사를 통해 지정된 node 에만 접근인지, fallback 
+    //   가능한지 검사 및 
+    //   및
+    // UMA 라면 
+    //   config_page_data 를 통해 pglist_data 가져옴
+    // (global 변수로 system 에 존재하는 node 들의 pglist_data 형 배열, 
+    // nid 로 각 pglist_data 에 접근 가능) 
 	return NODE_DATA(nid)->node_zonelists + gfp_zonelist(flags);
 }
 

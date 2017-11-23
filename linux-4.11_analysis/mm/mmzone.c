@@ -60,7 +60,11 @@ struct zoneref *__next_zones_zonelist(struct zoneref *z,
 	 * Find the next suitable zone to use for the allocation.
 	 * Only filter based on nodemask if it's set
 	 */
+    // 자신보다 작은 ZONE_TYPE 을 순회하는 것이 목적이기 때문에 
+    // zond_id 가 더 크다면 바로 그냥 while .. z++ 해서 넘겨버림 
+    // 맞나?
 	if (unlikely(nodes == NULL))
+        // node_mask 가 따로
 		while (zonelist_zone_idx(z) > highest_zoneidx)
 			z++;
 	else

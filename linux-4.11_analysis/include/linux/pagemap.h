@@ -495,7 +495,8 @@ extern int wait_on_page_bit_killable(struct page *page, int bit_nr);
  * This must be called with the caller "holding" the page,
  * ie with increased "page->count" so that the page won't
  * go away during the wait..
- */
+ */ 
+// locked 된 page 가 풀릴 때 까지 wait
 static inline void wait_on_page_locked(struct page *page)
 {
 	if (PageLocked(page))
@@ -511,7 +512,8 @@ static inline int wait_on_page_locked_killable(struct page *page)
 
 /* 
  * Wait for a page to complete writeback
- */
+ */ 
+// page 가 해당되는 block device 와 동기화 되길 대기
 static inline void wait_on_page_writeback(struct page *page)
 {
 	if (PageWriteback(page))

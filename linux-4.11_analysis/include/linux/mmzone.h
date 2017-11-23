@@ -111,7 +111,7 @@ struct zone_padding {
 
 enum zone_stat_item {
 	/* First 128 byte cacheline (assuming 64 bit words) */
-	NR_FREE_PAGES,
+	NR_FREE_PAGES, // free page 의 수
 	NR_ZONE_LRU_BASE, /* Used only for compaction and reclaim retry */
 	NR_ZONE_INACTIVE_ANON = NR_ZONE_LRU_BASE,
 	NR_ZONE_ACTIVE_ANON,
@@ -142,10 +142,10 @@ enum zone_stat_item {
 
 enum node_stat_item {
 	NR_LRU_BASE,
-	NR_INACTIVE_ANON = NR_LRU_BASE, /* must match order of LRU_[IN]ACTIVE */
-	NR_ACTIVE_ANON,		/*  "     "     "   "       "         */
-	NR_INACTIVE_FILE,	/*  "     "     "   "       "         */
-	NR_ACTIVE_FILE,		/*  "     "     "   "       "         */
+	NR_INACTIVE_ANON = NR_LRU_BASE, /* must match order of LRU_[IN]ACTIVE */ //inactive anonymous page 의 수   
+	NR_ACTIVE_ANON,		/*  "     "     "   "       "         */ // active anonymous page 의 수
+	NR_INACTIVE_FILE,	/*  "     "     "   "       "         */ // inactive anonymous page 의 수
+	NR_ACTIVE_FILE,		/*  "     "     "   "       "         */ // active file-backed page 의 수
 	NR_UNEVICTABLE,		/*  "     "     "   "       "         */
 	NR_ISOLATED_ANON,	/* Temporary isolated pages from anon lru */
 	NR_ISOLATED_FILE,	/* Temporary isolated pages from file lru */
@@ -189,10 +189,23 @@ enum lru_list {
 	LRU_INACTIVE_ANON = LRU_BASE,
 	LRU_ACTIVE_ANON = LRU_BASE + LRU_ACTIVE,
 	LRU_INACTIVE_FILE = LRU_BASE + LRU_FILE,
-	LRU_ACTIVE_FILE = LRU_BASE + LRU_FILE + LRU_ACTIVE,
-	LRU_UNEVICTABLE,
+	LRU_ACTIVE_FILE = LRU_BASE + LRU_FILE + LRU_ACTIVE, 
+    	LRU_UNEVICTABLE,
 	NR_LRU_LISTS
-};
+}; 
+
+
+// active 
+//  : 처음 참조된 것은 active 가 됨 
+//    주기적으로 active, inactive 의 ratio 를 비교하여 참조되지 않는 page 는
+//    inactive 로 옮기고, 참조된 것은 active list 의 선두로옮김
+// inactive 
+//  : memory 부족하여 회수시, 
+//    anonymous page  - mem 부족시, swap 으로 옮김
+//    file-backed page - mem 부족시, clean 은 회수, 
+//                       dirty 는 backing store 에 기록하기 위해  writeback 
+//                       을 수행하고 inactive list 의 선두로 옮김(rotate)
+//                       rotate 된 후에 다시 후미로 밀려날 경우,page 회수
 
 #define for_each_lru(lru) for (lru = 0; lru < NR_LRU_LISTS; lru++)
 
@@ -218,7 +231,9 @@ struct zone_reclaim_stat {
 	 * The anon LRU stats live in [0], file LRU stats in [1]
 	 */
 	unsigned long		recent_rotated[2];
+    // 
 	unsigned long		recent_scanned[2];
+    // 
 };
 
 struct lruvec {
@@ -248,24 +263,85 @@ typedef unsigned __bitwise isolate_mode_t;
 
 enum zone_watermarks {
 	WMARK_MIN,
+    // 이 값보다 낮아지게 되면 mem 할당 요청 있을 때마다 
+    // sync 하게 swap 하거나 page reclaim 수행하여 WMARK_HIGH 
+    // 에 도달할때 까지 수행 
 	WMARK_LOW,
+    // 이 값보다 낮아지게 되면 kswapd 깨우고 async 하게 
+    // swap 동작함
 	WMARK_HIGH,
+    // 이거 보다 높으면 충분한 free memory 있음
 	NR_WMARK
 };
 
 #define min_wmark_pages(z) (z->watermark[WMARK_MIN])
 #define low_wmark_pages(z) (z->watermark[WMARK_LOW])
 #define high_wmark_pages(z) (z->watermark[WMARK_HIGH])
+//
+// +---------------------------------------------+
+// | +--------+ +--------+ +--------+ +--------+ |
+// | |  CPU 0 | |  CPU 1 | |  CPU 2 | |  CPU 3 | |
+// | +--------+ +--------+ +--------+ +--------+ |
+// | +-----------------------------------------+ |
+// | |                   8 MB                  | |
+// | +-----------------------------------------+ |
+// +-------------------NODE 0--------------------+
+//                       
+//
+//
+// node - ZONE_DMA     - per_cpu_pages  
+//                           |      
+//                           |      --- CPU0 - MIGRATE_UNMOVABLE   - p0-p0-p0-...
+//                           |      |          MIGRATE_MOVABLE     - p0-p0-p0-...
+//                           |      |          MIGRATE_RECLAIMABLE - p0-p0-p0-...
+//                           |      |
+//                           |      --- CPU1 - MIGRATE_UNMOVABLE   - p0-p0-p0-...
+//                           |      |          MIGRATE_MOVABLE     - p0-p0-p0-...
+//                           |      |          MIGRATE_RECLAIMABLE - p0-p0-p0-...
+//                           |      |
+//                           |      --- CPU2 - MIGRATE_UNMOVABLE   - p0-p0-p0-...
+//                           |      |          MIGRATE_MOVABLE     - p0-p0-p0-...
+//                           |      |          MIGRATE_RECLAIMABLE - p0-p0-p0-...
+//                           |      |
+//                           |      --- CPU3 - MIGRATE_UNMOVABLE   - p0-p0-p0-...
+//                           |      |          MIGRATE_MOVABLE     - p0-p0-p0-...
+//                           |      |          MIGRATE_RECLAIMABLE - p0-p0-p0-...
+//                           |      |
+//                           +      |
+//                         buddy  order 0
+//                                order 1
+//                                order 2
+//                                ...
+//
+//        ZONE_NORMAL  - per_cpu_pages  same as ZONE_NORMAL
+//                           |
+//                           +
+//                         buddy
+//
+//        ZONE_HIGHMEM - per_cpu_pages  same as ZONE_HIGHMEM
+//                           | 
+//                           +
+//                         buddy 
 
 struct per_cpu_pages {
-	int count;		/* number of pages in the list */
+	int count;		/* number of pages in the list */ 
+    // list 의 page 수
 	int high;		/* high watermark, emptying needed */
+    // count 가 넘으면 안되는 값 즉 count < high 이어야 함
 	int batch;		/* chunk size for buddy add/remove */
+    // list 가 비게 될 때, buddy 로부터 한번에 받아올 page pool 내의 
+    // page 개수
 
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
 	struct list_head lists[MIGRATE_PCPTYPES];
+    // MIGRATE_UNMOVABLE 
+    // MIGRATE_MOVABLE 
+    // MIGRATE_RECLAIMABLE 
+    // 3 가지 type 의 order 0 개수의 page list 존재     
 };
 
+// order 0 짜리 요청시 여기서 할당해줌 
+// 미리 buddy 로부터 1 개짜리 page 들을 받아 놓음
 struct per_cpu_pageset {
 	struct per_cpu_pages pcp;
 #ifdef CONFIG_NUMA
@@ -359,9 +435,11 @@ struct zone {
 
 	/* zone watermarks, access with *_wmark_pages(zone) macros */
 	unsigned long watermark[NR_WMARK];
-
+    // free page 의 수를 위한 아래의 세가지 watermark
+    // WMARK_MIN, WMARK_LOW, WMARK_HIGH  
+    // 
 	unsigned long nr_reserved_highatomic;
-
+    // ?
 	/*
 	 * We don't know if the memory that we're going to allocate will be
 	 * freeable or/and it will be released eventually, so to avoid totally
@@ -371,14 +449,20 @@ struct zone {
 	 * recalculated at runtime if the sysctl_lowmem_reserve_ratio sysctl
 	 * changes.
 	 */
-	long lowmem_reserve[MAX_NR_ZONES];
+	long lowmem_reserve[MAX_NR_ZONES]; 
+    // OOM 을 막기 위해 reserve 되는 page 들 
+    // 되게 중요한 memory allocation 요청인데 memory 가 
+    // 없어서 못주는 경우를 대비해 각 zone 별로 예비 page 를 둠
 
 #ifdef CONFIG_NUMA
 	int node;
+    // zone 이 속한 node
 #endif
-	struct pglist_data	*zone_pgdat;
+	struct pglist_data	*zone_pgdat; 
+    // zone 이 속한 pglist_data 즉 node struct 가리키는 back pointer
 	struct per_cpu_pageset __percpu *pageset;
-
+    // per-CPU  hot&cold cache 
+    // buddy 에서 할당해 주기 전, order 0 짜리 page 라면 여기서 할당해줌
 #ifndef CONFIG_SPARSEMEM
 	/*
 	 * Flags for a pageblock_nr_pages block. See pageblock-flags.h.
@@ -389,7 +473,7 @@ struct zone {
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;
-
+    // zone 시작 page 주소
 	/*
 	 * spanned_pages is the total pages spanned by the zone, including
 	 * holes, which is calculated as:
@@ -432,10 +516,21 @@ struct zone {
 	 * touching zone->managed_pages and totalram_pages.
 	 */
 	unsigned long		managed_pages;
+    // buddy 에 의해 관리되는 page 들을 의미하는 것으로 
+    // bootmem_data 에 의해 예약된 page 등 제외한 값임
+    // present_pages - reserved_pages
+    //
 	unsigned long		spanned_pages;
+    // hole page 즉 padding 을 포함한 total page 들을 포함한 toatl pages 
+    // zone_end_pfn - zone_start_pfn
+    //
 	unsigned long		present_pages;
+    // holge pages 들을 제외한 pages 
+    // spanned_pages - absent_pages(pages in holes)
+    //
 
 	const char		*name;
+    // zone 의 conventional name 을 담고있음. e.g. NORMAL, DMA, HIGHMEM
 
 #ifdef CONFIG_MEMORY_ISOLATION
 	/*
@@ -443,12 +538,14 @@ struct zone {
 	 * freepage counting problem due to racy retrieving migratetype
 	 * of pageblock. Protected by zone->lock.
 	 */
-	unsigned long		nr_isolate_pageblock;
+	unsigned long		nr_isolate_pageblock; 
+    // isolated page 가뭐지 hugepage 만들기 전에 isolate 시키던데..?
 #endif
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 	/* see spanned/present_pages for more description */
-	seqlock_t		span_seqlock;
+	seqlock_t		span_seqlock; 
+    // zone_start_pfn, spanned_pages 에 대한 lock
 #endif
 
 	int initialized;
@@ -458,12 +555,14 @@ struct zone {
 
 	/* free areas of different sizes */
 	struct free_area	free_area[MAX_ORDER];
-
+    // buddy 를 위한 order 별 free page 들의 list
+    //
 	/* zone flags, see below */
 	unsigned long		flags;
 
 	/* Primarily protects free_area */
-	spinlock_t		lock;
+	spinlock_t		lock; 
+    // free_area 에 대한 locking
 
 	/* Write-intensive fields used by compaction and vmstats. */
 	ZONE_PADDING(_pad2_)
@@ -474,6 +573,7 @@ struct zone {
 	 * drift allowing watermarks to be breached
 	 */
 	unsigned long percpu_drift_mark;
+    // ??
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 	/* pfn where compaction free scanner should start */
@@ -502,7 +602,8 @@ struct zone {
 
 	ZONE_PADDING(_pad3_)
 	/* Zone statistics */
-	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
+	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS]; 
+    //  
 } ____cacheline_internodealigned_in_smp;
 
 enum pgdat_flags {
@@ -636,11 +737,21 @@ struct bootmem_data;
 //
 typedef struct pglist_data {
 	struct zone node_zones[MAX_NR_ZONES];
-    // 현재 node 에서 각 zone 에 해당하는 zone struct 배열
+    // 현재 node 에서 각 zone 에 해당하는 zone struct 배열 
+    // DMA,DMA32,NORMAL,HIGHMEM,(MOVABLE)
 	struct zonelist node_zonelists[MAX_ZONELISTS];
-    // 현재 zone 에 memory 가 할당 불가능 할 때, 다른 node 에 memory 를 할당하기 위한
-    // 우선순위 node list 이며 그 각 node 에 해당하는 zone 정보도 가지고 있음(fallback order) 
-    // 현재 가지고 있는 ZONE 이 MAX_ZONELISTS 보다 작다면 현재 이후 index 는 null eleemnt
+    // 두가지 zonelist 를 가지고 있음
+    // 1. fallback 상황을 위해 다른 node 에 할당하기 위한 zonelist 
+    //    현재 zone 에 memory 가 할당 불가능 할 때, 다른 node 에 memory 를 할당하기 위한
+    //    우선순위 node list 이며 그 각 node 에 해당하는 zone 정보도 가지고 있음(fallback order) 
+    // 2. fallback 이 없는 zonelist 
+    //
+    // fallback 이냐 아니냐에 따라 위 두 배열의 zoneref 배열이 다른가?
+    // FIXME 
+    // 질문
+    // 어느 zonelist 에는 gfp_zonelist 를 통해 지금 fallback 인지 아닌지 판단 
+    // 해서 둘중 하나에 접근함
+    //
 	int nr_zones;
     // 현재 node 가 가진 zone 의 수
 #ifdef CONFIG_FLAT_NODE_MEM_MAP	/* means !SPARSEMEM */
@@ -733,10 +844,12 @@ typedef struct pglist_data {
     // logical number 를 갖음 이 node 에서의 logical start number 를 의미
     // UMA 의 경우
 	unsigned long node_present_pages; /* total number of physical pages */
-    // page frame 의 수
+    // page frame 의 총 개수 
+    // hole 포함
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
     // page frame 기반으로 계산한 전체 크기
+    // hole 미포함
 	int node_id;
     // node id
 	wait_queue_head_t kswapd_wait; 
@@ -752,7 +865,8 @@ typedef struct pglist_data {
 	int kcompactd_max_order;
 	enum zone_type kcompactd_classzone_idx;
 	wait_queue_head_t kcompactd_wait;
-	struct task_struct *kcompactd;
+	struct task_struct *kcompactd; 
+    // 현재 zone 의compaction 을 담당하고 있는 kcompactd 의 task_struct 를 가리킴
 #endif
 #ifdef CONFIG_NUMA_BALANCING
 	/* Lock serializing the migrate rate limiting window */
@@ -798,6 +912,12 @@ typedef struct pglist_data {
 
 	/* Fields commonly accessed by the page reclaim scanner */
 	struct lruvec		lruvec;
+    // 기존에 struct zone 에서 관리하던  active_list, inactive_list 변수를
+    // zone 에서 pglist_data 로 옮김 
+    // 기존에 active_list, inactive_list 로 관리하던 것을 lruvec 내의 
+    // 5 개로 확대하여 관리 
+    //  LRU_ACTIVE_ANON, LRU_INACTIVE_ANON, LRU_ACTIVE_FILE, LRU_INACTIVE_FILE 
+    // memory 부족 등으로 page 회수 목적으로 관리 
 
 	/*
 	 * The target ratio of ACTIVE_ANON to INACTIVE_ANON pages on
@@ -1130,6 +1250,14 @@ static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
 		zone;							\
 		z = next_zones_zonelist(++z, highidx, nodemask),	\
 			zone = zonelist_zone(z))
+// #define for_next_zone_zonelist_nodemask(zone, z, zlist, highidx, nodemask) 
+//	for (struct zone = (struct zoneref*)z->zone ;  
+//	zone;
+//	z = next_zones_zonelist(++z, highidx, nodemask),zone = zonelist_zone(z)) 
+//	++z 인 이유는 
+//	zone 에서 zonelist 내부가 
+//	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1];
+//	이렇게 되어있어서?
 
 
 /**

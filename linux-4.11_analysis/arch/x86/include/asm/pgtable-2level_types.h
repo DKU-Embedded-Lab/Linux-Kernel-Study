@@ -12,7 +12,9 @@ typedef unsigned long	pgprotval_t;
 
 typedef union {
 	pteval_t pte;
-	pteval_t pte_low;
+	pteval_t pte_low; 
+    // 32bit 에서 4byte 로 addressable 보다 큰 memory 를 사용하기 위해
+    // PAE 설정되어 있음 
 } pte_t;
 #endif	/* !__ASSEMBLY__ */
 
