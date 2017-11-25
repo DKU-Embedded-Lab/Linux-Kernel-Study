@@ -329,6 +329,7 @@ static inline unsigned long
 __vma_address(struct page *page, struct vm_area_struct *vma)
 {
 	pgoff_t pgoff = page_to_pgoff(page);
+    // vm 에서의 vm_pgoff 와 같은 index 값을 가져옴
 	return vma->vm_start + ((pgoff - vma->vm_pgoff) << PAGE_SHIFT);
 }
 

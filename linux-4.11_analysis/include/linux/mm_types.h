@@ -373,8 +373,7 @@ struct vm_area_struct {
 	 * or brk vma (with NULL file) can only be in an anon_vma list.
 	 */
 	struct list_head anon_vma_chain; /* Serialized by mmap_sem & * page_table_lock */ 
-    // heap, stack, vma chain 
-    // swap 되기 전의 dirty anon, dirty data 관리
+    // e.g. fork 되어 
     
 	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
     // anonymous page COW handling, shared page 관리 

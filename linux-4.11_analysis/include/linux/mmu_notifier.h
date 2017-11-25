@@ -313,6 +313,7 @@ static inline void mmu_notifier_mm_destroy(struct mm_struct *mm)
 	struct vm_area_struct *___vma = __vma;				\
 	unsigned long ___address = __address;				\
 	__young = ptep_clear_flush_young(___vma, ___address, __ptep);	\
+    /* __ptep 에 해당하는pte 에 accessed bit 가 설정되어 있다면 clear */ \
 	__young |= mmu_notifier_clear_flush_young(___vma->vm_mm,	\
 						  ___address,		\
 						  ___address +		\

@@ -362,19 +362,30 @@ void *page_rmapping(struct page *page)
 /*
  * Return true if this page is mapped into pagetables.
  * For compound page it returns true if any subpage of compound page is mapped.
- */
+ */ 
+// page 가 pte 에 map 되었는제 page->_mapcount 로 확인
 bool page_mapped(struct page *page)
 {
 	int i;
 
 	if (likely(!PageCompound(page)))
 		return atomic_read(&page->_mapcount) >= 0;
+    // PageCompound 즉 현재 page 가 flag 에 PG_head 설정된 head page 이거나
+    // compound_head 에 head page 주소가 담긴 tail page 인지 검사 및 compound page 
+    // 가 아니라면 _mapcount 를 통해 현재 page 를 사용하는 pte 있는지 검사
 	page = compound_head(page);
 	if (atomic_read(compound_mapcount_ptr(page)) >= 0)
 		return true;
+    // 첫번째 tail page 의 compound_mapcount 검사하여 현재 compound page 가 
+    // map 된 pmd 가 있는지 검사
 	if (PageHuge(page))
 		return false;
+    // THP 가 아닌 hugetlbfs 기반의 compound page 인지 검사. hugetlbfs 기반이라면 
+    // 항상 어차피 memory 에 상주하도록 reserve 한놈이므로 mapcount 가 설정 안되어
+    // 있어도 괜춘
 	for (i = 0; i < hpage_nr_pages(page); i++) {
+        // THP 의 경우, THP 가 pmd 에 map 된것이 없어도 각 page 가 pte 단위로 map 
+        // 된 경우가 있을 수 있으므로 hugepage 크기만큼 각 page 의 mapcount 검사
 		if (atomic_read(&page[i]._mapcount) >= 0)
 			return true;
 	}

@@ -27,6 +27,8 @@
  */
 struct anon_vma {
 	struct anon_vma *root;		/* Root of this anon_vma tree */
+    // 현재 process 와 관련된 process 들의 anon_vma tree 에서 
+    // 최초 anon_vma  즉 최초 process 의 anon_vma
 	struct rw_semaphore rwsem;	/* W: modification, R: walking the list */
 	/*
 	 * The refcount is taken on an anon_vma when there is no
@@ -36,15 +38,35 @@ struct anon_vma {
 	 * anon_vma if they are the last user on release
 	 */
 	atomic_t refcount;
+    // 현재 aon_vma 를 가리키는 child anon_vma 의 개수.
 	/*
 	 * Count of child anon_vmas and VMAs which points to this anon_vma.
-	 *
 	 * This counter is used for making decision about reusing anon_vma
 	 * instead of forking new one. See comments in function anon_vma_clone.
 	 */
 	unsigned degree; 
-    // 현재 aon_vma 를 가리키는 child anon_vma 의 개수
-	struct anon_vma *parent;	/* Parent of this anon_vma */
+    // anon_vma 와 연결된 child anon_vma
+    //
+    // P->C0->C1->C2, C1->C3, C1->C4 으로 프로세스가 생겼다 하면
+    //
+    //  parent process              P_anon_vma 
+    //                                  |
+    //                          --------------------------------
+    //                          |               |               |
+    //  child processes     C0_anon_vma     C1_anon_vma     C2_anon_vma 
+    //                                          |
+    //                                          |----------------
+    //                                          |               |
+    //                                      C3_anon_vma     C4_anon_vma
+    // 
+    //  이런 상황이면 C0~C4 의       root     는 P_anon_vma
+    //                C3    의       parent   는 C1_anon_vma 
+    //                P_anon_vma 의  refcount 는 5  
+    //                C1_anon_vma 의 degree   는 2
+    //
+	struct anon_vma *parent;	/* Parent of this anon_vma */ 
+    // anon_vma tree 에서 현재 anon_vma 의 parent anon_vma 즉  
+    // 현재 process 를 생성한 parent process 의 anon_vma 
 	/*
 	 * NOTE: the LSB of the rb_root.rb_node is set by
 	 * mm_take_all_locks() _after_ taking the above lock. So the
@@ -54,7 +76,8 @@ struct anon_vma {
 	 * mm_take_all_locks() (mm_all_locks_mutex).
 	 */
 	struct rb_root rb_root;	/* Interval tree of private "related" vmas */ 
-    // reverse mapping 을 위한 rb tree
+    // reverse mapping 을 위한 interval tree 로 여기에 
+    // anon_vma_chain 들이 Interval tree 구조로 연결되어 있음
 };
 
 /*
@@ -71,11 +94,18 @@ struct anon_vma {
  * which link all the VMAs associated with this anon_vma.
  */
 struct anon_vma_chain {
-	struct vm_area_struct *vma;
+	struct vm_area_struct *vma; 
+    // 이놈이 담당하고 있는 vma 로 interval tree 내의 
+    // 각 node 연산에 사용될 start, end 를 가짐
 	struct anon_vma *anon_vma;
-	struct list_head same_vma;   /* locked by mmap_sem & page_table_lock */
-	struct rb_node rb;			/* locked by anon_vma->rwsem */
-	unsigned long rb_subtree_last;
+    // 현재 avc interval tree 를 관리하는 
+    // process 당 존재하는 anon_vma 
+	struct list_head same_vma;   /* locked by mmap_sem & page_table_lock */ 
+    // 이 avc 가 관리하는 vma  와 관련된 anon_vma 들...
+	struct rb_node rb;			/* locked by anon_vma->rwsem */ 
+    // interval tree 내에서 속해있는 위치
+	unsigned long rb_subtree_last; 
+    // interval tree 에서 사용하는 값
 #ifdef CONFIG_DEBUG_VM_RB
 	unsigned long cached_vma_start, cached_vma_last;
 #endif
@@ -203,11 +233,20 @@ int try_to_unmap(struct page *, enum ttu_flags flags);
 
 struct page_vma_mapped_walk {
 	struct page *page;
+    // rmap 에서 확인할 page 
+    // frame 에 해당하는 page 
 	struct vm_area_struct *vma;
-	unsigned long address;
+    // Interval tree 에서 찾은 
+    // avc 가 가진 vma 로 이 vma 
+    // 의 pte 찾아 접근
+	unsigned long address; 
+    // pte 찾을 virtual address
 	pmd_t *pmd;
+    // pmd 주소
 	pte_t *pte;
+    // pte 주소
 	spinlock_t *ptl;
+    // pte 접근시 사용할 lock
 	unsigned int flags;
 };
 

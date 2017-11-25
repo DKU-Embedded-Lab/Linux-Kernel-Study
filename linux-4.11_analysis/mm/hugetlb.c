@@ -4613,7 +4613,7 @@ pte_t *huge_pte_alloc(struct mm_struct *mm,
 
 	return pte;
 }
-
+// pmd 단위로 map 되므로 pmd 를 구하여 pte 로 cast 후 반환
 pte_t *huge_pte_offset(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;

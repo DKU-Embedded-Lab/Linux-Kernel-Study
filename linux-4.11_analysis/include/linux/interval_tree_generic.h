@@ -45,6 +45,8 @@
 static inline ITTYPE ITPREFIX ## _compute_subtree_last(ITSTRUCT *node)	      \
 {									      \
 	ITTYPE max = ITLAST(node), subtree_last;			      \
+    /* rmap - left, right child 의 subtree_last 값이 현재 node 의 range 보다
+     * 크다면 update 수행. augmented rbtree  callback 함수 과정  */ \
 	if (node->ITRB.rb_left) {					      \
 		subtree_last = rb_entry(node->ITRB.rb_left,		      \
 					ITSTRUCT, ITRB)->ITSUBTREE;	      \
@@ -76,10 +78,14 @@ ITSTATIC void ITPREFIX ## _insert(ITSTRUCT *node, struct rb_root *root)	      \
 		parent = rb_entry(rb_parent, ITSTRUCT, ITRB);		      \
 		if (parent->ITSUBTREE < last)				      \
 			parent->ITSUBTREE = last;			      \
+        /* rmap - 현재 범위의 last 값이 rb_subtree_last 값보다 크다면 
+           즉 현재 rbtree 의 max 값보다 지금 insert 하려는 값이 크다면 
+           augment 값 update 하면서 child 로 내려감*/ \
 		if (start < ITSTART(parent))				      \
 			link = &parent->ITRB.rb_left;			      \
 		else							      \
 			link = &parent->ITRB.rb_right;			      \
+        /* rmap - start 를 기준으로 BST 형식으로 insert 수행  */ \
 	}								      \
 									      \
 	node->ITSUBTREE = last;						      \
@@ -121,10 +127,22 @@ ITPREFIX ## _subtree_search(ITSTRUCT *node, ITTYPE start, ITTYPE last)	      \
 				 * is no matching interval as nodes to the    \
 				 * right of N can't satisfy Cond1 either.     \
 				 */					      \
+                \
 				node = left;				      \
 				continue;				      \
+            /* rmap - left child 로 이동할 수 있는 경우, left 로 이동 
+             * left child 의 subtree_last 값 즉 left child subtree 에서의
+             * 가장 큰 last 값이 현재 start 보다 커서 left child subtree 
+             * 내에 겹치는 range 가 있어야 함  */ \
+                \
 			}						      \
 		}							      \
+            /* rmap - left child 로 이동할 수 없다면 즉
+             * left subtree 의 범위 최대값이 현재 범위 시작값 
+             * 보다 작으므로 left subtree 내에 원하는 range 가 업는 
+             * 상태임.
+             * 이제  현재 node 의 범위가 start ~ end 내에 
+             * 겹치는지 검사 */ \
 		if (ITSTART(node) <= last) {		/* Cond1 */	      \
 			if (start <= ITLAST(node))	/* Cond2 */	      \
 				return node;	/* node is leftmost match */  \
@@ -134,6 +152,9 @@ ITPREFIX ## _subtree_search(ITSTRUCT *node, ITTYPE start, ITTYPE last)	      \
 				if (start <= node->ITSUBTREE)		      \
 					continue;			      \
 			}						      \
+            /* rmap - right subtree 의 범위 최대 값이 start 보다 작다면
+             * 즉 right subtree 에 range 에 포함되는 값이 있다면 이동  */ \
+            \
 		}							      \
 		return NULL;	/* No match */				      \
 	}								      \
@@ -149,6 +170,10 @@ ITPREFIX ## _iter_first(struct rb_root *root, ITTYPE start, ITTYPE last)      \
 	node = rb_entry(root->rb_node, ITSTRUCT, ITRB);			      \
 	if (node->ITSUBTREE < start)					      \
 		return NULL;						      \
+    /* ramp - 무조건 search 하기 전에 먼저 현재 해당 범위에  */ \
+    /* 해당되는 값이                                         */ \
+    /* 있는지 rb_subtree_last 비교해서 확인하고 search 들어감*/ \
+    \
 	return ITPREFIX ## _subtree_search(node, start, last);		      \
 }									      \
 									      \
@@ -172,7 +197,10 @@ ITPREFIX ## _iter_next(ITSTRUCT *node, ITTYPE start, ITTYPE last)	      \
 								start, last); \
 		}							      \
 									      \
-		/* Move up the tree until we come from a node's left child */ \
+        /* rmap - right 가 있으며 right 의 범위내에 해당되면 */ \
+        /* right child 에서 찾음  */ \
+                                     \
+        /* Move up the tree until we come from a node's left child */ \
 		do {							      \
 			rb = rb_parent(&node->ITRB);			      \
 			if (!rb)					      \
@@ -180,6 +208,53 @@ ITPREFIX ## _iter_next(ITSTRUCT *node, ITTYPE start, ITTYPE last)	      \
 			prev = &node->ITRB;				      \
 			node = rb_entry(rb, ITSTRUCT, ITRB);		      \
 			rb = node->ITRB.rb_right;			      \
+            /*  rmap - 현재 node 가 parent 의 right child 에 연결되어 있다면        */ \
+            /*         left child 에 연결된 node 가 발견 될 때 까지 위로 이동       */ \
+            /*                           n0                                         */ \
+            /*                        +     +                                       */ \
+            /*                      +         +                                     */ \
+            /*                     n1           n2                                  */ \
+            /*                 +       +                                            */ \
+            /*               L            R                                         */ \
+            /*             +   +        +   +                                       */ \
+            /*           n3      n4   n5      n6                                    */ \
+            /*                     +                                                */ \
+            /*                       n7                                             */ \
+            /*                         +                                            */ \
+            /*                           n8                                         */ \
+            /*                              +                                       */ \
+            /*                               n9                                     */ \
+            /*                                  +                                   */ \
+            /*                                   n10                                */ \
+            /*                                   ....                               */ \
+            /*                                                                      */ \
+            /*         즉 위 그림에서 n9 에 해당하는 vm_area_struct 의 rbnode 기준  */ \
+            /*         으로 search 한다고 할때,                                     */ \
+            /*          1. n10 이하에 있는지 다 찾음.                               */ \
+            /*          2. n1 의 left child 에 연결된 L 까지 이동 후, L1 가         */ \
+            /*             겹치는지 검사.                                           */ \
+            /*          3. 안겹친다면 R  기준 n6 이하에 해당하는것 있는지 검사      */ \
+            /*          4. 없다면 n0 의 범위 검사                                   */ \
+            /*          5. ...                                                      */ \
+            /*                                                                      */ \
+            /*  case 1) prev != rb                                                  */ \
+            /*        현재 node 가 parent node 의 left child 에 연결된 경우         */ \
+            /*  s1                     s2                                           */ \
+            /*         rb/-                 -/node                                  */ \
+            /*           +                   +                                      */ \
+            /*         +   +       =>      +   +                                    */ \
+            /*       +       +           +       *                                  */ \
+            /*   prev/node  -/-      prev/     rb/-                                 */ \
+            /*                                                                      */ \
+            /*  case 2) prev == rb                                                  */ \
+            /*        현재 node 가 parent node 의 right child 에 연결된 경우        */ \
+            /*  s1                     s2                                           */ \
+            /*         rb/-                 -/node                                  */ \
+            /*           +                   +                                      */ \
+            /*         +   +       =>      +   +                                    */ \
+            /*       +       +           +       *                                  */ \
+            /*      -/-  prev/node      -/-   prev/-                                */ \
+            /*                                  rb                                  */ \
 		} while (prev == rb);					      \
 									      \
 		/* Check if the node intersects [start;last] */		      \
@@ -188,4 +263,5 @@ ITPREFIX ## _iter_next(ITSTRUCT *node, ITTYPE start, ITTYPE last)	      \
 		else if (start <= ITLAST(node))		/* Cond2 */	      \
 			return node;					      \
 	}								      \
-}
+}                    /* 위 그림의 L node 의 범위에 나의 range 가 겹치는지 검사  */ 
+                /*  찾았으면 ok 고 못찾았으면 R 에서 다시 검사 후 */                                                                                  

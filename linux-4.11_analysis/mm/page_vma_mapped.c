@@ -36,7 +36,7 @@ static bool map_pte(struct page_vma_mapped_walk *pvmw)
 		}
 	}
 	pvmw->ptl = pte_lockptr(pvmw->vma->vm_mm, pvmw->pmd);
-    // pmd 에서의pte  offet 가져옴
+    // pmd 에서의pte  offet 구해 pte 가져옴
 	spin_lock(pvmw->ptl);
 	return true;
 }
@@ -99,7 +99,9 @@ static bool check_pte(struct page_vma_mapped_walk *pvmw)
  *
  * If you need to stop the walk before page_vma_mapped_walk() returned false,
  * use page_vma_mapped_walk_done(). It will do the housekeeping.
- */
+ */ 
+// memory 에 존재 할 시,
+// pvmw 에 pmd, pte 등을 설정해줌
 bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 {
 	struct mm_struct *mm = pvmw->vma->vm_mm;
@@ -111,11 +113,17 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 	/* The only possible pmd mapping has been handled on last iteration */
 	if (pvmw->pmd && !pvmw->pte)
 		return not_found(pvmw);
-    // pvmw.pmd 가 있는데 pvmw.pte 가 없다면 못찾은것
+    // pmd 설정 안되고 pte 설정 안된 경우는 처음 search 
+    // FIXME
+    // pmd 설정 되고   pte 설정 안된 경우는 THP 
 	if (pvmw->pte)
-		goto next_pte;
+		goto next_pte; 
+    // FIXME
+    // pte 설정 안된 경우는 처음 search 
     // pvmw.pte 가 있다면 pte 가져온적 있으므로 다음 pte 가져오는 부분으로 
-	if (unlikely(PageHuge(pvmw->page))) {
+	if (unlikely(PageHuge(pvmw->page))) { 
+        // hugetlbfs 일 경우 pmd 를 통해 map 되므로 pmd 를 
+        // pte 로 cast 하여 반환
 		/* when pud is not present, pte will be NULL */
 		pvmw->pte = huge_pte_offset(mm, pvmw->address);
 		if (!pvmw->pte)
@@ -138,16 +146,23 @@ restart:
 	if (!pud_present(*pud))
 		return false;
 	pvmw->pmd = pmd_offset(pud, pvmw->address); 
-    // 넘겨진 address 로 
-	if (pmd_trans_huge(*pvmw->pmd)) {
-		pvmw->ptl = pmd_lock(mm, pvmw->pmd);
+    // 넘겨진 address 에 해당하는 pmd 찾아냄
+	if (pmd_trans_huge(*pvmw->pmd)) { 
+        // THP 인 경우
+		pvmw->ptl = pmd_lock(mm, pvmw->pmd); 
+        // page table lock 잡음
 		if (!pmd_present(*pvmw->pmd))
-			return not_found(pvmw);
+			return not_found(pvmw); 
+        // pmd 의 entry 내에 _PAGE_PRESENT bit 검사. 
+        // 없다면 현재 memory 에 올라와 있지 않은 것이므로 
+        // lock 풀고,unmap 하고 끝
 		if (likely(pmd_trans_huge(*pvmw->pmd))) {
 			if (pvmw->flags & PVMW_MIGRATION)
 				return not_found(pvmw);
+            // FIXME
 			if (pmd_page(*pvmw->pmd) != page)
-				return not_found(pvmw);
+				return not_found(pvmw); 
+            // pmd table 에 해당하는 page 를 가져옴
 			return true;
 		} else {
 			/* THP pmd was split under us: handle on pte level */
@@ -155,11 +170,13 @@ restart:
 			pvmw->ptl = NULL;
 		}
 	} else {
+        // THP 가 아닌 경우
 		if (!check_pmd(pvmw))
 			return false;
 	}
 	if (!map_pte(pvmw))
 		goto next_pte;
+    // pte 가져와 pvmw->pte 에 설정
 	while (1) {
 		if (check_pte(pvmw))
 			return true;

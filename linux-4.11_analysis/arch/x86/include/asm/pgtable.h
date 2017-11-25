@@ -191,6 +191,8 @@ static inline int pmd_large(pmd_t pte)
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 static inline int pmd_trans_huge(pmd_t pmd)
 {
+    // _PAGE_PSE : THP 관련
+    // _PAGE_DEVMAP : PMEM 에서 사용하는 DAX 관련
 	return (pmd_val(pmd) & (_PAGE_PSE|_PAGE_DEVMAP)) == _PAGE_PSE;
 }
 

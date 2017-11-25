@@ -262,6 +262,8 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	struct anon_vma *root = NULL;
 
 	list_for_each_entry_reverse(pavc, &src->anon_vma_chain, same_vma) {
+        // parent avc 의 src 의 anon_vma_chain 가 가리키는same_vma 라는 
+        // 이름으로 다음 avc 를 가리키는 avc list 를 거꾸로 순회
 		struct anon_vma *anon_vma;
 
 		avc = anon_vma_chain_alloc(GFP_NOWAIT | __GFP_NOWARN);
@@ -273,9 +275,56 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 				goto enomem_failure;
 		}
 		anon_vma = pavc->anon_vma;
+        // src 에 연결되어 있는 avc 에 대한 av
 		root = lock_anon_vma_root(root, anon_vma);
 		anon_vma_chain_link(dst, avc, anon_vma);
 
+        // 
+        // P1 이, P2 생성 하고 P2 가 P3 라는 P 를 생성할 때..
+        //  - P2->anon_vma 의 degree : 0
+        //                    P1->anon_vma != P2->anon_vma
+        //
+        // P1-------->anon_vma --------    avc1
+        // |                             ->vma1
+        // |                          +        +
+        // |                         avc2       avc3
+        // |                        ->vma2     -> vma3
+        // |                       +     +    +      +
+        // |                     avc4   avc5  avc6    avc7
+        // |                   ->vma4 ->vma5 ->vma6 ->vma7
+        // |                      ...  
+        // |   
+        // |                      
+        // |->P2----->anon_vma --------    avc_1
+        //    |         ^                  ->vma_1
+        //    |         |                +        +
+        //    |         |              avc_2       avc_3
+        //    |         |             ->vma_2     -> vma_3
+        //    |         |             +     +    +      +
+        //    |         |          avc_4   avc_5  avc_6    avc_7
+        //    |         |        ->vma_4 ->vma_5 ->vma_6 ->vma_7        
+        //    |         |           ...
+        //    |         |
+        //    |         |
+        //    |->P3---------
+        //
+        //     vma_1 --------               vma_2 --------
+        // anon_vma_chain   |           anon_vma_chain   |             ...
+        //                  --> avc_1                       --> avc_2  
+        //                     same_vma                       same_vma 
+        //
+        //
+        //                           ^
+        //                           |
+        // Child           avc(des) --
+        //                 ->vma 
+        //                 ->same_vma---
+        //                             |
+        //                            vma
+        //
+        //                 * child process 용 av 새로 안만들고 현재
+        //                   생성한 avc 를 parent 의 av->rb 에 추가 
+        //                 * des 의 same_vma 에vma 추가
 		/*
 		 * Reuse existing anon_vma if its degree lower than two,
 		 * that means it has no vma and only one anon_vma child.
@@ -309,7 +358,9 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
  * Attach vma to its own anon_vma, as well as to the anon_vmas that
  * the corresponding VMA in the parent process is attached to.
  * Returns 0 on success, non-zero on failure.
- */
+ */ 
+// vma 가 새로 생긴 process 의 vma, pvma 가 parent process 의 vma 
+// for 에서 새로 생성한 vma 를 기존 pvma, anon_vma 와 연관시킬 때...
 int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 {
 	struct anon_vma_chain *avc;
@@ -322,6 +373,8 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 
 	/* Drop inherited anon_vma, we'll reuse existing or allocate new. */
 	vma->anon_vma = NULL;
+    // anon_vma 는 process 당 1개씩 존재. 따라서 
+    // 기존 parent 의 anon_vma 를 가리키고 있던 것을 clear
 
 	/*
 	 * First, attach the new VMA to the parent VMA's anon_vmas,
@@ -359,6 +412,7 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	vma->anon_vma = anon_vma;
 	anon_vma_lock_write(anon_vma);
 	anon_vma_chain_link(vma, avc, anon_vma);
+    // vma, avc, av 를 연결
 	anon_vma->parent->degree++;
 	anon_vma_unlock_write(anon_vma);
 
@@ -735,7 +789,8 @@ struct page_referenced_arg {
 };
 /*
  * arg: page_referenced_arg will be passed
- */
+ */ 
+// interval tree 에서 찾아온 vma 에 대하여 pmd, pte.. 등을 구해 accessed bit clear
 static int page_referenced_one(struct page *page, struct vm_area_struct *vma,
 			unsigned long address, void *arg)
 {
@@ -760,7 +815,11 @@ static int page_referenced_one(struct page *page, struct vm_area_struct *vma,
 		if (pvmw.pte) {
 			if (ptep_clear_flush_young_notify(vma, address,
 						pvmw.pte)) { 
-                // 가져온 pte 에 담겨있는 값 flush 해줌
+                // 설정한 pvmw.pte 에_PAGE_BIT_ACCESSED 가 설정되어 있다면
+                // 즉 결과적으로 
+                //  _PAGE_BIT_PRESENT 가 있어서 현재 memory 에 있는 상태고
+                //  _PAGE_BIT_ACCESSED 가 설정되어 있어서 최종적으로 해당 pte 에 
+                //  physical address 가 mapping 된 것을 확인했다면 clear 수행
 				/*
 				 * Don't treat a reference through
 				 * a sequentially read mapping as such.
@@ -820,7 +879,10 @@ static bool invalid_page_referenced_vma(struct vm_area_struct *vma, void *arg)
  *
  * Quick test_and_clear_referenced for all mappings to a page,
  * returns the number of ptes which referenced the page.
- */
+ */ 
+// reverse mapping 을 수행하는 함수로 page 의anon_vma 를 통해 anon_vma_chain 을 관리하는 
+// interval tree 에서 page->index ~ page->index+1 까지의 range 에 해당하는 vma 를 찾아 
+// _PAGE_BIT_ACCESSED 가 설정되있을 시, CLEAR 해줌
 int page_referenced(struct page *page,
 		    int is_locked,
 		    struct mem_cgroup *memcg,
@@ -841,11 +903,12 @@ int page_referenced(struct page *page,
 	*vm_flags = 0;
 	if (!page_mapped(page))
 		return 0;
-    // page 를 사용중인 pte 가 없다면 종료
+    // page 를 사용중인 pte 가 없다면 종료 
 	if (!page_rmapping(page))
 		return 0;
-    // page->mapping 이 없는지 검사 및 
-    // mapping 의 PAGE_MAPPING_ANON clear
+    // 현재 page 가 anonymous 일수도... file-backed page 일수도...
+    // anonymous 라면 rmap 시 일단 rmap flag 인 PAGE_MAPPING_ANON 있는 상태로
+    // 사용하면 안되니 LSB clear
 	if (!is_locked && (!PageAnon(page) || PageKsm(page))) {
 		we_locked = trylock_page(page);
 		if (!we_locked)
@@ -860,10 +923,12 @@ int page_referenced(struct page *page,
 	 */
 	if (memcg) {
 		rwc.invalid_vma = invalid_page_referenced_vma; 
-        // cgroup 사용하는 경우
+        // cgroup 사용하는 경우 뭔가 함수설정함
 	}
 
 	ret = rmap_walk(page, &rwc);
+    // reverse mapping 수행 함수. 
+    // vma 찾기, accessed bit clear
 	*vm_flags = pra.vm_flags;
 
 	if (we_locked)
@@ -1671,7 +1736,9 @@ static struct anon_vma *rmap_walk_anon_lock(struct page *page,
  * where the page was found will be held for write.  So, we won't recheck
  * vm_flags for that VMA.  That should be OK, because that vma shouldn't be
  * LOCKED.
- */
+ */ 
+// anonymous page 일 경우, process 당 존재하는 anon_vma 를 찾아 해당 interval
+// tree search 를 통해 avc 를 찾아냄
 static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 		bool locked)
 {
@@ -1682,7 +1749,8 @@ static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 
 	if (locked) {
 		anon_vma = page_anon_vma(page);
-		/* anon_vma disappear under us? */
+		/* anon_vma disappear under us? */ 
+        // anonymous page 일 경우 이제 anon_vma 를 사용해야 하므로 LSB flag 제거        
 		VM_BUG_ON_PAGE(!anon_vma, page);
 	} else {
 		anon_vma = rmap_walk_anon_lock(page, rwc);
@@ -1691,23 +1759,47 @@ static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 		return ret;
 
 	pgoff_start = page_to_pgoff(page);
+    // mapping 에서의 start offset 가져옴
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
+    // pgoff_start ~ pagoff_end 까지의 page frame주소에 대해 mapping 된
+    // vm을 가져옴
+    // FIXME 
+    //  page frame 주소로 interval tree 에서 원하는 avc 를 찾는다?
+    //  여기는 page->index 를 다시 이해하고 보면 좋을듯
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
-			pgoff_start, pgoff_end) {
-        // anon_vma 의 rbtree 에 존재하는 vma 를 순회
-		struct vm_area_struct *vma = avc->vma;
+			pgoff_start, pgoff_end) { 
+        // anon_vma 의 rbtree 에 존재하는 anon_vma_chain 를 순회
+        // #define anon_vma_interval_tree_foreach(avc, root, start, last)		 
+        //	for (avc = anon_vma_interval_tree_iter_first(root, start, last); 
+        //	     avc; 
+        //	     avc = anon_vma_interval_tree_iter_next(avc, start, last))
+        //
+        //      __anon_vma_interval_tree_iter_first(struct rb_root *root, 
+        //                          unsigned long start, unsigned long last)      
+        //          : 일단 start<rb_subtree_last 를 통해 범위내에 존재하는지 
+        //            판단 후,  search 수행
+        //      __anon_vma_interval_tree_subtree_search(struct anon_vma_chain *node, 
+        //                          unsigned long start, unsigned long last)	      
+        //          : interval tree search 함수  
+        //      __anon_vma_interval_tree_iter_next(struct anon_vma_chain *node, 
+        //                          unsigned long start, unsigned long last)	      
+        //          : 찾은avc 기준으로 parent 타면서 left child 연결된것 찾아 
+        //            right 에서 다시 검사 
+		struct vm_area_struct *vma = avc->vma; 
+        // internal tree 에서 search 결과 찾은 vmc 가 관리하는 vma 가져옴
 		unsigned long address = vma_address(page, vma);
-        // vma 시작 주소 가져옴. 
+        // vm_start 를 가져온다고 생각해도 될듯.
 		cond_resched();
 
 		if (rwc->invalid_vma && rwc->invalid_vma(vma, rwc->arg))
-			continue;
+			continue; 
+        // cgroup 이 설정되있을 경우에만 호출및 검사
 
 		ret = rwc->rmap_one(page, vma, address, rwc->arg); 
 		if (ret != SWAP_AGAIN)
 			break;
 		if (rwc->done && rwc->done(page))
-			break;
+			break;        
 	}
 
 	if (!locked)
@@ -1779,8 +1871,10 @@ int rmap_walk(struct page *page, struct rmap_walk_control *rwc)
 		return rmap_walk_ksm(page, rwc);
 	else if (PageAnon(page))
 		return rmap_walk_anon(page, rwc, false);
+        // anonymous page 일 경우
 	else
 		return rmap_walk_file(page, rwc, false);
+        // file backed page 일 경우
 }
 
 /* Like rmap_walk, but caller holds relevant rmap lock */

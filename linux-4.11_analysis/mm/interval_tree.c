@@ -61,11 +61,21 @@ void vma_interval_tree_insert_after(struct vm_area_struct *node,
 
 static inline unsigned long avc_start_pgoff(struct anon_vma_chain *avc)
 {
+    // rmap 의 interval tree 를 관리하는 기준인 start ~ end 에서 start 를 
+    // 가져오는 함수. 
+    // start 는 vm_start 가 아니라 vm_pgoff 이다. 
+    //       page 단위로 몇번째 page 위치에 존재하는지를 의미. 
+    //       insert 할 때 start 를 기준으로 BST 처럼 동작 
 	return vma_start_pgoff(avc->vma);
 }
 
 static inline unsigned long avc_last_pgoff(struct anon_vma_chain *avc)
 {
+    // rmap 의 interval tree 를 관리하는 기준인 start ~ last 에서 last 를 
+    // 가져오는 함수. 
+    // last 는 vm_start ~ vm_end 까지의 page 단위 크기에 현재 
+    //         vma 의 page 단위 offset 시작 주소를 더한 값이다.
+    //         subtree_last 를 통해 interval tree search 시에 사용.
 	return vma_last_pgoff(avc->vma);
 }
 

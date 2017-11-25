@@ -155,8 +155,10 @@ static inline struct page *compound_head(struct page *page)
 {
 	unsigned long head = READ_ONCE(page->compound_head);
 
-    // compound page 일 경우 head 에 head page 의 주소가 들어 있음 
-    //  Bit 0 encodes PageTail() and the rest bits are pointer to head page if bit zero is set.
+    // compound page 일 경우 compound_head 에 head page 의 
+    // 주소가 들어 있음 
+    //  Bit 0 encodes PageTail() and the rest bits are 
+    //  pointer to head page if bit zero is set.
     //
 	if (unlikely(head & 1))
 		return (struct page *) (head - 1);

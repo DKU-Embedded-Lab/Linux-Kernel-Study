@@ -382,13 +382,19 @@ static inline pgoff_t page_to_index(struct page *page)
 
 	if (likely(!PageTransTail(page)))
 		return page->index;
-
+    // tail page 가 아니면 즉 head page 이거나 single page 라면
+    // 그냥 inde 만 반환하면 됨 
+    // THP 에 속한 hugepage 라면 4K 단위 page 가 하나가 아니므로 
+    // 몇개인지 계산 필요
 	/*
 	 *  We don't initialize ->index for tail pages: calculate based on
 	 *  head page
 	 */
 	pgoff = compound_head(page)->index;
+    // mapping 내에서의 start offset 
+    // anonymous page 에서는 virtual address 내에서 page 단위 위치가 기록됨
 	pgoff += page - compound_head(page);
+    // THP  의 경우 page 하나가 아니므로 head page 의 주소를 빼줘서 계산
 	return pgoff;
 }
 
