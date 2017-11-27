@@ -255,7 +255,8 @@ static inline void unlock_anon_vma_root(struct anon_vma *root)
  * child isn't reused even if there was no alive vma, thus rmap walker has a
  * good chance of avoiding scanning the whole hierarchy when it searches where
  * page is mapped.
- */
+ */ 
+// dst->anon_vma 가 NULL 이면
 int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 {
 	struct anon_vma_chain *avc, *pavc;
