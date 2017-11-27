@@ -24,11 +24,33 @@
  * After unlinking the last vma on the list, we must garbage collect
  * the anon_vma object itself: we're guaranteed no page can be
  * pointing to this anon_vma once its vma list is empty.
- */
+ */ 
+
+//  P1
+//                              P1 꺼
+//  vma_P1 pvma          ----> anon_vma  <-------------------------
+//  -------------------<-|--   --------------   |                 |
+//  |                 |  | |   | root       |----                 |------    page
+//  |  anon_vma       |--- |   | refcount-1 |                     |     |  --------------
+//  |                 |    |   | parent     |                     |     |  |            |
+//  |                 |    |   | degree-1   |                     |     |--| mapping    |
+//  |  ...            |    |   | rb_root    |---------> +         |     |  -------------
+//  |                 |    |   --------------   |     +   +       |     |    page 
+//  |                 |    |                    |   +       +     |     |  --------------  
+//  |                 |    |    vma_P1 꺼avc_P1 |  avc     avc_P1 |     |  |            |
+//  |                 |    |    anon_vma_chain  |  ...            |     ---| mapping    |
+//  |                 |    |   --------------   |  interval tree  |        -------------
+//  |                 |    ----| vma        |   |                 |        ...
+//  |                 |        | rb         |----                 |
+//  |                 |        | anon_vma   |----------------------
+//  |  anon_vma_chain |<------>| same_vma   |
+//  -------------------        --------------
+
 struct anon_vma {
 	struct anon_vma *root;		/* Root of this anon_vma tree */
     // 현재 process 와 관련된 process 들의 anon_vma tree 에서 
-    // 최초 anon_vma  즉 최초 process 의 anon_vma
+    // 최초 anon_vma  즉 최초 process 의 anon_vma 
+    // red black ?
 	struct rw_semaphore rwsem;	/* W: modification, R: walking the list */
 	/*
 	 * The refcount is taken on an anon_vma when there is no
@@ -102,6 +124,7 @@ struct anon_vma_chain {
     // process 당 존재하는 anon_vma 
 	struct list_head same_vma;   /* locked by mmap_sem & page_table_lock */ 
     // 이 avc 가 관리하는 vma  와 관련된 anon_vma 들...
+    // 즉 fork 시, parent 의 vma 와 child 의 vma 가 연결됨
 	struct rb_node rb;			/* locked by anon_vma->rwsem */ 
     // interval tree 내에서 속해있는 위치
 	unsigned long rb_subtree_last; 

@@ -132,13 +132,28 @@ static void anon_vma_chain_free(struct anon_vma_chain *anon_vma_chain)
 	kmem_cache_free(anon_vma_chain_cachep, anon_vma_chain);
 }
 
+
 static void anon_vma_chain_link(struct vm_area_struct *vma,
 				struct anon_vma_chain *avc,
 				struct anon_vma *anon_vma)
-{
+{ 
+    // fork 시 ..
+    // anon_vma 는 parent process 의 anon_vma . 
+    // 새로 만든 복제한 vma 를 위한 avc 에 parent process 의 
+    // anon_vma 를 여결해줌
+    //
 	avc->vma = vma;
 	avc->anon_vma = anon_vma;
-	list_add(&avc->same_vma, &vma->anon_vma_chain);
+	list_add(&avc->same_vma, &vma->anon_vma_chain); 
+    // parent process 의 abc interval tree 에 COW 한 child 의 
+    // avc 를 추가해줌 
+    // 결과적으로 요 avc 는...
+    //      avc->vma :  child 의 vma 
+    //      avc->rb  :  parent 의 interval tree root avc 
+    //      avc->anon_vma : parent 의 anon_vma 를 가리킴
+    //      avc->same_vma : parent vma 를 복제한 child vma 를 
+    //                      관리하는 child 의 avc 와 연결
+    //
 	anon_vma_interval_tree_insert(avc, &anon_vma->rb_root);
 }
 
@@ -256,9 +271,15 @@ static inline void unlock_anon_vma_root(struct anon_vma *root)
  * good chance of avoiding scanning the whole hierarchy when it searches where
  * page is mapped.
  */ 
-// dst->anon_vma 가 NULL 이면
+// 
+// dst->anon_vma 가 NULL 이면 vma 가 없고, 하나의 child anon_vma 만을 가지고 있는 
+// anon_vma 를 재사용 
+//  => constantly forking task 에서 : anon_vma tree 계속 생기는 것 방지 
+//  둘 이상의 child 를 가지는 anon_vma 는 live vma 가 없어도 재사용 안됨
+//  => rmap walk 시, whole hierarchy scanning 안해도 됨
 int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
-{
+{ 
+    // src : parent process 의 vma , dst : chid process 의 vma 
 	struct anon_vma_chain *avc, *pavc;
 	struct anon_vma *root = NULL;
 
@@ -276,56 +297,12 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 				goto enomem_failure;
 		}
 		anon_vma = pavc->anon_vma;
-        // src 에 연결되어 있는 avc 에 대한 av
+        // parent process 의 anon_vma 를 의미
 		root = lock_anon_vma_root(root, anon_vma);
 		anon_vma_chain_link(dst, avc, anon_vma);
-
-        // 
-        // P1 이, P2 생성 하고 P2 가 P3 라는 P 를 생성할 때..
-        //  - P2->anon_vma 의 degree : 0
-        //                    P1->anon_vma != P2->anon_vma
-        //
-        // P1-------->anon_vma --------    avc1
-        // |                             ->vma1
-        // |                          +        +
-        // |                         avc2       avc3
-        // |                        ->vma2     -> vma3
-        // |                       +     +    +      +
-        // |                     avc4   avc5  avc6    avc7
-        // |                   ->vma4 ->vma5 ->vma6 ->vma7
-        // |                      ...  
-        // |   
-        // |                      
-        // |->P2----->anon_vma --------    avc_1
-        //    |         ^                  ->vma_1
-        //    |         |                +        +
-        //    |         |              avc_2       avc_3
-        //    |         |             ->vma_2     -> vma_3
-        //    |         |             +     +    +      +
-        //    |         |          avc_4   avc_5  avc_6    avc_7
-        //    |         |        ->vma_4 ->vma_5 ->vma_6 ->vma_7        
-        //    |         |           ...
-        //    |         |
-        //    |         |
-        //    |->P3---------
-        //
-        //     vma_1 --------               vma_2 --------
-        // anon_vma_chain   |           anon_vma_chain   |             ...
-        //                  --> avc_1                       --> avc_2  
-        //                     same_vma                       same_vma 
-        //
-        //
-        //                           ^
-        //                           |
-        // Child           avc(des) --
-        //                 ->vma 
-        //                 ->same_vma---
-        //                             |
-        //                            vma
-        //
-        //                 * child process 용 av 새로 안만들고 현재
-        //                   생성한 avc 를 parent 의 av->rb 에 추가 
-        //                 * des 의 same_vma 에vma 추가
+        // 현재 새로 생성한 avc 에 child 의 vma, parent 의 anon_vma, 연결 
+        // child 의 vma 와 새로 생성한 avc 를 same_vma 연결 
+        // parent 의 interval tree 에 avc insert
 		/*
 		 * Reuse existing anon_vma if its degree lower than two,
 		 * that means it has no vma and only one anon_vma child.
@@ -336,7 +313,9 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 		 */
 		if (!dst->anon_vma && anon_vma != src->anon_vma &&
 				anon_vma->degree < 2)
-			dst->anon_vma = anon_vma;
+			dst->anon_vma = anon_vma; 
+        // anon_vma 새로 만드는 경우는
+        // anon_vma == src->anon_vma 이므로 위 if 문 넘어감
 	}
 	if (dst->anon_vma)
 		dst->anon_vma->degree++;
@@ -367,33 +346,107 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	struct anon_vma_chain *avc;
 	struct anon_vma *anon_vma;
 	int error;
-
 	/* Don't bother if the parent process has no anon_vma here. */
 	if (!pvma->anon_vma)
-		return 0;
+		return 0; 
+    // anon_vma 관련 복제 및 tree 연결 함수인데 parent vma 가 
+    // anon_vma 가 없으면 할일 없음
 
 	/* Drop inherited anon_vma, we'll reuse existing or allocate new. */
 	vma->anon_vma = NULL;
     // anon_vma 는 process 당 1개씩 존재. 따라서 
-    // 기존 parent 의 anon_vma 를 가리키고 있던 것을 clear
-
+    // 기존 parent 의 anon_vma 를 가리키고 있던 것을 clear 하고 
+    // reuse 또는 new anon_vma 사용할꺼임
+    //
 	/*
 	 * First, attach the new VMA to the parent VMA's anon_vmas,
 	 * so rmap can find non-COWed pages in child processes.
 	 */
-	error = anon_vma_clone(vma, pvma);
+// parent P1
+//                              P1 꺼
+//  vma_P1 pvma          ----> anon_vma  <-------------------------
+//  -------------------<-|--   --------------   |                 |
+//  |                 |  | |   | root       |----                 |------    page
+//  |  anon_vma       |--- |   | refcount-1 |                     |     |  --------------
+//  |                 |    |   | parent     |                     |     |  |            |
+//  |                 |    |   | degree-1   |                     |     |--| mapping    |
+//  |  ...            |    |   | rb_root    |---------> +         |     |  -------------
+//  |                 |    |   --------------   |     +   +       |     |    page 
+//  |                 |    |                    |   +       +     |     |  --------------  
+//  |                 |    |    vma_P1 꺼avc_P1 |  avc     avc_P1 |     |  |            |
+//  |                 |    |    anon_vma_chain  |  ...            |     ---| mapping    |
+//  |                 |    |   --------------   |  interval tree  |        -------------
+//  |                 |    ----| vma        |   |                 |        ...
+//  |                 |        | rb         |----                 |
+//  |                 |        | anon_vma   |----------------------
+//  |  anon_vma_chain |<------>| same_vma   |
+//  -------------------        --------------
+//                                              
+// child P2
+//
+//  vma_P2 vma 
+//  -------------------
+//  |                 |
+//  |  anon_vma       |
+//  |  ...            |
+//  |                 |
+//  |  anon_vma_chain |
+//  -------------------
+
+	error = anon_vma_clone(vma, pvma); // (1),(2),(3),(4)
 	if (error)
 		return error;
+//
+// parent P1
+//                               P1 꺼                    
+//  vma_P1 pvma            ----> anon_vma  <--------------------------
+//  -------------------<---|--   --------------   |                  |   
+//  |                 |    | |   | root       |----                  |------    page
+//  |  anon_vma       |----- |   | refcount-1 |                      |     |  --------------
+//  |                 |      |   | parnet     |                      |     |  |            |
+//  |                 |      |   | degree-1   |                      |     |--| mapping    |
+//  |  ...            |      |   | rb_root    |----------> +         |     |  -------------
+//  |                 |      |   --------------   |추가  +   +       |     |    page 
+//  |                 |      |                    |(4) +       +     |     |  --------------  
+//  |                 |      |                    |   avc     avc_P1 |     |  |            |
+//  |                 |      |    vma_P1 꺼avc_P1 |      ...         |     ---| mapping    |
+//  |                 |      |    anon_vma_chain  |   avc_P1_P2      |        -------------
+//  |                 |      |   --------------   |  interval tree   |        ...
+//  |                 |      ----| vma        |   |                  |
+//  |                 |          | rb         |---|                  |
+//  |                 |          | anon_vma   |---|------------------|
+//  |  anon_vma_chain |<-------->| same_vma   |   |                  |
+//  -------------------          --------------   |                  |
+//                                                |                  |
+// child P2                                       |                  |
+//                                                |                  |
+//  vma_P2 vma                                    |                  |
+//  -------------------<------                    |                  |
+//  |                 |      |                    |                  |
+//  |  anon_vma       |      |                    |                  |
+//  |  ...            |      |                    |                  |
+//  |                 |      | P1_P2_연결avc_P1_P2|                  |
+//  |                 |      |    anon_vma_chain  |                  |
+//  |                 |      |(1)--------------   |                  |
+//  |                 |      ----| vma        |   |                  |
+//  |                 |          | rb         |----               (2)|
+//  |                 |     (3)  | anon_vma   |-----------------------
+//  |  anon_vma_chain |<-------->| same_vma   |
+//  -------------------          --------------                 
+//
+// 
+//
 
 	/* An existing anon_vma has been reused, all done then. */
 	if (vma->anon_vma)
-		return 0;
+		return 0; 
+    // anon_vma 를 재사용 한 경우
 
 	/* Then add our own anon_vma. */
-	anon_vma = anon_vma_alloc();
+	anon_vma = anon_vma_alloc();//(5)
 	if (!anon_vma)
 		goto out_error;
-	avc = anon_vma_chain_alloc(GFP_KERNEL);
+	avc = anon_vma_chain_alloc(GFP_KERNEL);//(6)
 	if (!avc)
 		goto out_error_free_anon_vma;
 
@@ -401,22 +454,63 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	 * The root anon_vma's spinlock is the lock actually used when we
 	 * lock any of the anon_vmas in this anon_vma tree.
 	 */
-	anon_vma->root = pvma->anon_vma->root;
-	anon_vma->parent = pvma->anon_vma;
+	anon_vma->root = pvma->anon_vma->root; // (7)
+	anon_vma->parent = pvma->anon_vma; // (8)
 	/*
 	 * With refcounts, an anon_vma can stay around longer than the
 	 * process it belongs to. The root anon_vma needs to be pinned until
 	 * this anon_vma is freed, because the lock lives in the root.
 	 */
-	get_anon_vma(anon_vma->root);
+	get_anon_vma(anon_vma->root); // (9)
 	/* Mark this anon_vma as the one where our new (COWed) pages go. */
-	vma->anon_vma = anon_vma;
-	anon_vma_lock_write(anon_vma);
-	anon_vma_chain_link(vma, avc, anon_vma);
+	vma->anon_vma = anon_vma; // (10)
+	anon_vma_lock_write(anon_vma); 
+	anon_vma_chain_link(vma, avc, anon_vma); // (11),(12),(13),(14)
     // vma, avc, av 를 연결
-	anon_vma->parent->degree++;
+	anon_vma->parent->degree++;//(15)
 	anon_vma_unlock_write(anon_vma);
 
+//
+// parent 
+//                               P1 꺼
+//  vma_P1                 ----> anon_vma  <---------------------------- 
+//  -------------------<---|--   --------------   |                    |   
+//  |                 |    | |   | root       |----                    |------    page
+//  |  anon_vma       |----- |   | refcount-2 |(9)                     |     |  --------------   
+//  |                 |      |   | degree-2   |(15)                    |     |  |            |
+//  |  ...            |      |   | rb_root    |------------> + <-------|--   |--| mapping    |  
+//  |                 |      |   --------------   |        +   +       | |   |  -------------    
+//  |                 |      |                    |      +       +     | |   |    page           
+//  |                 |      |    vma_P1 꺼avc_P1 |     avc     avc_P1 | |   |  --------------   
+//  |                 |      |    anon_vma_chain  |        ...         | |   |  |            |   
+//  |                 |      |   --------------   |     avc_P1_P2(5)   | |   ---| mapping    |  
+//  |                 |      ----| vma        |   |    interval tree   | |      -------------    
+//  |                 |          | rb         |----                    | |      ...              
+//  |                 |          | anon_vma   |------------------------| |
+//  |  anon_vma_chain |<-------->| same_vma   |                        | |
+//  -------------------          --------------                        | |
+//                                                                     | |
+// child                                                               | |
+//                       ----------------------------------------------|-|--
+//                       |       P2 꺼(5)                              | | |
+//  vma_P2               | ----> anon_vma  <------------               | | |
+//  -------------------<---|--   --------------        |            (7)| | |
+//  |                 |    | |   | root       |--------|---------------|-|-|
+//  |  anon_vma  (10) |----- |   | refcount-1 |        |            (8)| | |
+//  |                 |      |   | parent     |--------|---------------| | | 
+//  |                 |      |   | degree     |        |               | | |
+//  |  ...            |      |   | rb_root    |--------|----->  +      | | | 
+//  |                 |      |   --------------   |    |(14)  +   +    | | |
+//  |                 |      |                    |    |추가 +     +   | | |
+//  |                 |      | vma_P2 꺼avc_P2 (6)|    |  avc   avc_P2 | | | P1_P2_연결 avc_P1_P2
+//  |                 |      |    anon_vma_chain  |    |     ...       | | |  anon_vma_chain
+//  |                 |      |(11)-------------   |    |               | | | --------------
+//  |                 |      ----| vma        |   |    | interval tree | | --| (1) vma        |
+//  |                 |          | rb         |----(12)|               | ----| (4) rb         |
+//  |                 |          | anon_vma   |---------               ------| (2) anon_vma   |
+//  |  anon_vma_chain |<-------->| same_vma   |<---------------------------->| (3) same_vma   |
+//  -------------------   (13)    --------------                              --------------
+               
 	return 0;
 
  out_error_free_anon_vma:
