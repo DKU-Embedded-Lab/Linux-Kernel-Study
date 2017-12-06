@@ -2054,7 +2054,9 @@ long _do_fork(unsigned long clone_flags,
 	      unsigned long stack_size,
 	      int __user *parent_tidptr,
 	      int __user *child_tidptr,
-	      unsigned long tls)
+	      unsigned long tls)    
+    // parent_tidptr,child_tidptr  는 Native Posix Thread Lilbrary 를 위해 parent 와 
+    //                                child process 의 TID 의 정보의 userspace memory address
     // tls 는thread-specific-storage
 {
 	struct task_struct *p;
@@ -2080,7 +2082,7 @@ long _do_fork(unsigned long clone_flags,
 		if (likely(!ptrace_event_enabled(current, trace)))
 			trace = 0;
 	}
-
+    // 새로운 task_struct 를 생성하며 
 	p = copy_process(clone_flags, stack_start, stack_size,
 			 child_tidptr, NULL, trace, tls, NUMA_NO_NODE);
 	add_latent_entropy();
@@ -2191,7 +2193,8 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 #ifdef __ARCH_WANT_SYS_FORK
 SYSCALL_DEFINE0(fork)
 {
-#ifdef CONFIG_MMU
+#ifdef CONFIG_MMU 
+    // SIGCHLD : child process 가 죽으면 SIGCHLD signal 을 부모에게 날림
 	return _do_fork(SIGCHLD, 0, 0, NULL, NULL, 0);
 #else
 	/* can not support in nommu mode */

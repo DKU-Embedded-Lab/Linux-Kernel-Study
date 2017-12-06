@@ -142,9 +142,9 @@ static void anon_vma_chain_link(struct vm_area_struct *vma,
     // 새로 만든 복제한 vma 를 위한 avc 에 parent process 의 
     // anon_vma 를 여결해줌
     //
-	avc->vma = vma;
-	avc->anon_vma = anon_vma;
-	list_add(&avc->same_vma, &vma->anon_vma_chain); 
+	avc->vma = vma; // (1)
+	avc->anon_vma = anon_vma; // (2)
+	list_add(&avc->same_vma, &vma->anon_vma_chain); // (3)
     // parent process 의 abc interval tree 에 COW 한 child 의 
     // avc 를 추가해줌 
     // 결과적으로 요 avc 는...
@@ -154,7 +154,7 @@ static void anon_vma_chain_link(struct vm_area_struct *vma,
     //      avc->same_vma : parent vma 를 복제한 child vma 를 
     //                      관리하는 child 의 avc 와 연결
     //
-	anon_vma_interval_tree_insert(avc, &anon_vma->rb_root);
+	anon_vma_interval_tree_insert(avc, &anon_vma->rb_root); // (4)
 }
 
 /**
@@ -299,10 +299,45 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 		anon_vma = pavc->anon_vma;
         // parent process 의 anon_vma 를 의미
 		root = lock_anon_vma_root(root, anon_vma);
-		anon_vma_chain_link(dst, avc, anon_vma);
-        // 현재 새로 생성한 avc 에 child 의 vma, parent 의 anon_vma, 연결 
-        // child 의 vma 와 새로 생성한 avc 를 same_vma 연결 
-        // parent 의 interval tree 에 avc insert
+		anon_vma_chain_link(dst, avc, anon_vma); // (1),(2),(3),(4)
+//
+// parent P1
+//                               P1 꺼                    
+//  vma_P1 pvma            ----> anon_vma  <--------------------------
+//  -------------------<---|--   --------------   |                  |   
+//  |                 |    | |   | root       |----                  |------    page
+//  |  anon_vma       |----- |   | refcount-1 |                      |     |  --------------
+//  |                 |      |   | parnet     |                      |     |  |            |
+//  |                 |      |   | degree-1   |                      |     |--| mapping    |
+//  |  ...            |      |   | rb_root    |----------> +         |     |  -------------
+//  |                 |      |   --------------   |추가  +   +       |     |    page 
+//  |                 |      |                    |(4) +       +     |     |  --------------  
+//  |                 |      |                    |   avc     avc_P1 |     |  |            |
+//  |                 |      |    vma_P1 꺼avc_P1 |      ...         |     ---| mapping    |
+//  |                 |      |    anon_vma_chain  |   avc_P1_P2      |        -------------
+//  |                 |      |   --------------   |  interval tree   |        ...
+//  |                 |      ----| vma        |   |                  |
+//  |                 |          | rb         |---|                  |
+//  |                 |          | anon_vma   |---|------------------|
+//  |  anon_vma_chain |<-------->| same_vma   |   |                  |
+//  -------------------          --------------   |                  |
+//                                                |                  |
+// child P2                                       |                  |
+//                                                |                  |
+//  vma_P2 vma                                    |                  |
+//  -------------------<------                    |                  |
+//  |                 |      |                    |                  |
+//  |  anon_vma       |      |                    |                  |
+//  |  ...            |      |                    |                  |
+//  |                 |      | P1_P2_연결avc_P1_P2|                  |
+//  |                 |      |    anon_vma_chain  |                  |
+//  |                 |      |(1)--------------   |                  |
+//  |                 |      ----| vma        |   |                  |
+//  |                 |          | rb         |----               (2)|
+//  |                 |     (3)  | anon_vma   |-----------------------
+//  |  anon_vma_chain |<-------->| same_vma   |
+//  -------------------          --------------                 
+//
 		/*
 		 * Reuse existing anon_vma if its degree lower than two,
 		 * that means it has no vma and only one anon_vma child.
@@ -504,12 +539,12 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 //  |                 |      |                    |    |추가 +     +   | | |
 //  |                 |      | vma_P2 꺼avc_P2 (6)|    |  avc   avc_P2 | | | P1_P2_연결 avc_P1_P2
 //  |                 |      |    anon_vma_chain  |    |     ...       | | |  anon_vma_chain
-//  |                 |      |(11)-------------   |    |               | | | --------------
+//  |                 |      |(11)-------------   |    |               | | | ------------------
 //  |                 |      ----| vma        |   |    | interval tree | | --| (1) vma        |
 //  |                 |          | rb         |----(12)|               | ----| (4) rb         |
 //  |                 |          | anon_vma   |---------               ------| (2) anon_vma   |
 //  |  anon_vma_chain |<-------->| same_vma   |<---------------------------->| (3) same_vma   |
-//  -------------------   (13)    --------------                              --------------
+//  -------------------   (13)    --------------                              -----------------
                
 	return 0;
 
@@ -1852,19 +1887,17 @@ static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 	}
 	if (!anon_vma)
 		return ret;
-
+    // reverse mapping 에서의 검색을 위해 virtual address 에서의 start,end 가져옴
 	pgoff_start = page_to_pgoff(page);
-    // mapping 에서의 start offset 가져옴
+    // virtual address 에서의 start offset 즉 insex 가져옴
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
-    // pgoff_start ~ pagoff_end 까지의 page frame주소에 대해 mapping 된
-    // vm을 가져옴
-    // FIXME 
-    //  page frame 주소로 interval tree 에서 원하는 avc 를 찾는다?
-    //  여기는 page->index 를 다시 이해하고 보면 좋을듯
+    // index 를 통해 huge page 의 경우, 512 개로, 일반 page 의 경우 1 개로 
+    // virtual page offset end 를 계산
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
 			pgoff_start, pgoff_end) { 
-        // anon_vma 의 rbtree 에 존재하는 anon_vma_chain 를 순회
-        // #define anon_vma_interval_tree_foreach(avc, root, start, last)		 
+        // anon_vma 의 rbtree 에 존재하는 anon_vma_chain 를 순회 
+        // 계산한 start~end 까지의 범위를 가지는 avc 를 anon_vma 가 가리키는
+        // interval tree 에서 찾음         
         //	for (avc = anon_vma_interval_tree_iter_first(root, start, last); 
         //	     avc; 
         //	     avc = anon_vma_interval_tree_iter_next(avc, start, last))
@@ -1873,13 +1906,11 @@ static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
         //                          unsigned long start, unsigned long last)      
         //          : 일단 start<rb_subtree_last 를 통해 범위내에 존재하는지 
         //            판단 후,  search 수행
-        //      __anon_vma_interval_tree_subtree_search(struct anon_vma_chain *node, 
-        //                          unsigned long start, unsigned long last)	      
-        //          : interval tree search 함수  
         //      __anon_vma_interval_tree_iter_next(struct anon_vma_chain *node, 
         //                          unsigned long start, unsigned long last)	      
         //          : 찾은avc 기준으로 parent 타면서 left child 연결된것 찾아 
         //            right 에서 다시 검사 
+        //
 		struct vm_area_struct *vma = avc->vma; 
         // internal tree 에서 search 결과 찾은 vmc 가 관리하는 vma 가져옴
 		unsigned long address = vma_address(page, vma);

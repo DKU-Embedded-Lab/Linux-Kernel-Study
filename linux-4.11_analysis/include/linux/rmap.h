@@ -81,10 +81,12 @@ struct anon_vma {
     //                                          |               |
     //                                      C3_anon_vma     C4_anon_vma
     // 
-    //  이런 상황이면 C0~C4 의       root     는 P_anon_vma
-    //                C3    의       parent   는 C1_anon_vma 
-    //                P_anon_vma 의  refcount 는 5  
-    //                C1_anon_vma 의 degree   는 2
+    //  이런 상황이면 C0~C4 의        root     는 P_anon_vma
+    //                C3_anon_vma  의 parent   는 C1_anon_vma 
+    //                P_anon_vma   의 refcount 는 5  
+    //                C1_anon_vma  의 degree   는 2
+    //                P_anon_vma   의 degree   는 3
+    //
     //
 	struct anon_vma *parent;	/* Parent of this anon_vma */ 
     // anon_vma tree 에서 현재 anon_vma 의 parent anon_vma 즉  

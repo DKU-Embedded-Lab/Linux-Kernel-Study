@@ -364,8 +364,10 @@ struct vm_area_struct {
 		unsigned long rb_subtree_last;
         // left subtree 들중에서의 vm_end max 값
 	} shared;
-    // file-backed page 를 위한 rmap
-    // 옛날엔 prio_tree 로 관리 되었지만, rb_tree 로 관리되도록 patch 됨
+    // anonymous page 의 경우엔 anon_vma_struct 를 통해 
+    // vma 가 관리되어 reverse mapping 이 되지만
+    // file-backed page 의 경우엔 vm_area_struct 를 직접 관리
+    // 옛날엔 prio_tree 로 관리 되었지만, interval tree 로 관리되도록 patch 됨
 	/*
 	 * A file's MAP_PRIVATE vma can be in both i_mmap tree and anon_vma
 	 * list, after a COW of one of the file pages.	A MAP_SHARED vma
