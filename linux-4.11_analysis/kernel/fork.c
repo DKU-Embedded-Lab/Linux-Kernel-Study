@@ -491,7 +491,8 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 	int err;
 
 	if (node == NUMA_NO_NODE)
-		node = tsk_fork_get_node(orig);
+		node = tsk_fork_get_node(orig); 
+    // task_struct 할당
 	tsk = alloc_task_struct_node(node);
 	if (!tsk)
 		return NULL;
@@ -1248,16 +1249,19 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 	oldf = current->files;
 	if (!oldf)
 		goto out;
-
-	if (clone_flags & CLONE_FILES) {
+    // CLONE_FILES 설정시 부모와 자식은 
+    // 같은 file 정보을 공유
+	if (clone_flags & CLONE_FILES) { 
+        // 같은 file descriptor 를 공유할 
+        // 것이므로 복사과정 pass (COW)
 		atomic_inc(&oldf->count);
 		goto out;
 	}
-
+    // file descriptor 복사
 	newf = dup_fd(oldf, &error);
 	if (!newf)
 		goto out;
-
+    // 새로운 file descriptor 관리 구조체를 task_struct 에 설정
 	tsk->files = newf;
 	error = 0;
 out:
@@ -1543,12 +1547,14 @@ static __latent_entropy struct task_struct *copy_process(
 
     // 다양한 flag 설정값들이 clone_flags 로 넘어오기 때문에, 말도 안되는 값들을 잡아내야 함
     // e.g. CLONE_NEWNS 와 CLONE_FS 가 조합된 flag 
-    //  - CLONE_NEWNS : 새로운 namespace 를 생성 
-    //  - CLONE_FS : parent&child process 가 같은 fs 를 공유
+    //  - CLONE_NEWNS : child 가 새로운 mount namespace 를 가짐 
+    //  - CLONE_FS : parent&child process 가 같은 fs information 을 공유
+    //                                            e.g. root file system, curdir, umask ...
     //
 	if ((clone_flags & (CLONE_NEWNS|CLONE_FS)) == (CLONE_NEWNS|CLONE_FS))
 		return ERR_PTR(-EINVAL);
 
+    // CLONE_NEWUSER : 새로운 user namespace 생성
 	if ((clone_flags & (CLONE_NEWUSER|CLONE_FS)) == (CLONE_NEWUSER|CLONE_FS))
 		return ERR_PTR(-EINVAL);
 
@@ -1577,7 +1583,8 @@ static __latent_entropy struct task_struct *copy_process(
 	 * not reaped by their parent (swapper). To solve this and to avoid
 	 * multi-rooted process trees, prevent global and container-inits
 	 * from creating siblings.
-	 */
+	 */ 
+    // CLONE_PARENT 로 sibling process 를 만드는 상황이면
 	if ((clone_flags & CLONE_PARENT) &&
 				current->signal->flags & SIGNAL_UNKILLABLE)
 		return ERR_PTR(-EINVAL);
@@ -1842,7 +1849,8 @@ static __latent_entropy struct task_struct *copy_process(
 	clear_all_latency_tracing(p);
 
 	/* ok, now we should be set up.. */
-	p->pid = pid_nr(pid);
+    // pid 할당 및 thread 일 경우 thread group id 설정
+    p->pid = pid_nr(pid);
 	if (clone_flags & CLONE_THREAD) {
 		p->exit_signal = -1;
 		p->group_leader = current->group_leader;
@@ -1921,7 +1929,9 @@ static __latent_entropy struct task_struct *copy_process(
 
 		init_task_pid(p, PIDTYPE_PID, pid);
 		if (thread_group_leader(p)) {
-            // p 의 pid 와 tgit 가 같은 경우 즉, thread group 의 leader 인지 검사
+            // p 의 pid 와 tgit 가 같은 경우 즉, thread group 의 leader 인지 검사 
+            // group_leader 이면서 새로운 name space 가 생성된 경우, 이 process 가
+            // init 의 역할도 해 주어야함           
 			init_task_pid(p, PIDTYPE_PGID, task_pgrp(current));
 			init_task_pid(p, PIDTYPE_SID, task_session(current));
 
@@ -2082,7 +2092,7 @@ long _do_fork(unsigned long clone_flags,
 		if (likely(!ptrace_event_enabled(current, trace)))
 			trace = 0;
 	}
-    // 새로운 task_struct 를 생성하며 
+    // 새로운 task_struct 를 생성하며 clone_flags 에 따라 부모 process 의 자원 복제
 	p = copy_process(clone_flags, stack_start, stack_size,
 			 child_tidptr, NULL, trace, tls, NUMA_NO_NODE);
 	add_latent_entropy();
@@ -2117,7 +2127,7 @@ long _do_fork(unsigned long clone_flags,
 
         // child process 가 wake up 됨(child process 의 task_struct 가 scheduler queue 에 추가됨)
         // 바로 child process 를 실행한다는 말이 아니라, shceduler 가 child process 를 선택 할 수 있도록
-        // 되어진 상태라는 것
+        // scheduler queue 에 enqueue 되어진 상태라는 것
 		wake_up_new_task(p);
 
 		/* forking complete and child started to run, tell ptracer */
@@ -2381,6 +2391,9 @@ static int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp
 
 	if ((unshare_flags & CLONE_FILES) &&
 	    (fd && atomic_read(&fd->count) > 1)) {
+        // 맨처음 COW 를 통해 files_struct 가 복사 될 때 fd->count 가 증가함
+        // 즉 fd->count 가 부모 process 가 처음 생성될 때 1 되고, 자식이 하나
+        // 생성되어 같이 공유되면 2 가 됨
 		*new_fdp = dup_fd(fd, &error);
 		if (!*new_fdp)
 			return error;
@@ -2516,7 +2529,7 @@ bad_unshare_out:
  *	We don't want to expose copy_files internals to
  *	the exec layer of the kernel.
  */
-
+// 공유도던 file descriptor 정보를 복사함
 int unshare_files(struct files_struct **displaced)
 {
 	struct task_struct *task = current;

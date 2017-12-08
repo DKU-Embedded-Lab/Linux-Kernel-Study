@@ -1,6 +1,12 @@
 #ifndef _LINUX_SCHED_PRIO_H
 #define _LINUX_SCHED_PRIO_H
 
+
+// nice 값 범위 -20 ~ +19 이며 낮을수록 priority 높음 
+// 이렇게 설정된 값이 kernel 내부에서
+// priority 값 범위 100 ~ 139 로 표현됨 
+//
+// 0~100 은 rt priority
 #define MAX_NICE	19
 #define MIN_NICE	-20
 #define NICE_WIDTH	(MAX_NICE - MIN_NICE + 1)

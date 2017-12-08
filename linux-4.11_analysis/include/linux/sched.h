@@ -358,16 +358,25 @@ struct sched_statistics {
 
 struct sched_entity {
 	/* For load-balancing: */
-	struct load_weight		load;
+	struct load_weight		load; 
+    // runqueue 의 load 와 관련된 현재 scheduling  
+    // entity 의 load 
+    // 이 값을 기반으로 virtual clock 의 speed 결정
 	struct rb_node			run_node;
+    // scheduling entity 가 sort 된 
+    // red black tree node 즉 runqueue
 	struct list_head		group_node;
 	unsigned int			on_rq;
+    // runqueue 에 올라가 있으면 1 아니면 0
 
 	u64				exec_start;
+    // process 가 running 시작할 때의 timestamp
 	u64				sum_exec_runtime;
+    // process 가 총 running 한 time
 	u64				vruntime;
+    // virtual clock 기반 이 entity 가 얼마나 돌았나
 	u64				prev_sum_exec_runtime;
-
+    // 이 entity 가 그 전에 얼마나 돌았나
 	u64				nr_migrations;
 
 	struct sched_statistics		statistics;
@@ -397,7 +406,8 @@ struct sched_rt_entity {
 	unsigned long			timeout;
 	unsigned long			watchdog_stamp;
 	unsigned int			time_slice;
-	unsigned short			on_rq;
+	unsigned short			on_rq; 
+    // runqueue 에 올라가 있으면 1 아니면 0
 	unsigned short			on_list;
 
 	struct sched_rt_entity		*back;
@@ -540,15 +550,44 @@ struct task_struct {
 	int				wake_cpu;
 #endif
 	int				on_rq;
-
+    // 
+    // cfs scheduler priority : static_prio, normal_prio, prio 
+    // rt scheduler priority : rt_priority
+    //
+    // 동적 우선 순위 : prio, normal_prio 
+    // 정적 우선 순위: static_prio
+    //
+    // static_prio :
+    //      부모로부터 static_prio 를 상속받으며
+    //      nice 또는 sched_setscheduler system call 을 통해 설정 
+    //      process runtime 동안 변하지 않음 
+    //      fork 시 부모의 static_prio 상속
+    //
+    // normal_prio :
+    //      static priority 와 scheduling policy 기반으로 계산된 priority. 
+    //          => 같은 static priority 를 가진 process 라도 scheduling 정책에
+    //             따라 rt, regular 등등 각각 normal_prio 가 다름 
+    //      이값 기반으로 얼마나 running time 받을지 결정 
+    //      새로 생성된 task 가 wake_up_new_task 등으로 초괴화 될 때, static_prio 로 설정
+    //
+    // prio :
+    //      scheduler 에 의해 정해진 priority
+    //      scheduler 가 기존 priority 값은 가진 채로 임시로 priority 를 boost 해야 할 때 등 사용 
+    //      fork 시 부모의 normal_prio 로 설정
+    //
+    // rt_priority : 
+    //      rreal-time process 의 priority 로 0 ~ 99 까지 존재하며 높을수록 우선순위 높음(nice 랑 다른것)
+    //
 	int				prio;
 	int				static_prio;
-	nt				normal_prio;
+	int				normal_prio;
 	unsigned int			rt_priority;
-
-	const struct sched_class	*sched_class;
-	struct sched_entity		se;
-	struct sched_rt_entity		rt;
+	const struct sched_class	*sched_class; 
+    // 현재 task_struct 가 속한 scheduling class
+	struct sched_entity		se; 
+    // cfs 의 group scheduling 관련 현재 task_struct 가 속한 scheduling entity(scheduling group)
+	struct sched_rt_entity		rt; 
+    // real time scheduler 의 group scheduling 관련 scheduling entiry 
 #ifdef CONFIG_CGROUP_SCHED
 	struct task_group		*sched_task_group;
 #endif
@@ -563,9 +602,16 @@ struct task_struct {
 	unsigned int			btrace_seq;
 #endif
 
-	unsigned int			policy;
+	unsigned int			policy; 
+    // scheduling policy 
+    //      - SCHED_NORMAL : cfs, normal process
+    //      - SCHED_BATCH  : cfs, 우선순위 낮음(not interactive/CPU-intensive batch process), 다른것 선점 불가
+    //      - SCHED_IDLE   : cfs, 우선순위 낮음(task weight 이 낮아서)
+    //      - SCHED_RR     : rr, soft real time process 
+    //      - SCHED_FIFO   : fifo, soft real time process
 	int				nr_cpus_allowed;
-	cpumask_t			cpus_allowed;
+	cpumask_t			cpus_allowed; 
+    // 특정 cpu 에서만 돌게 설정하는 mask
 
 #ifdef CONFIG_PREEMPT_RCU
 	int				rcu_read_lock_nesting;

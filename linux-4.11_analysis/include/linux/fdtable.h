@@ -23,10 +23,15 @@
 
 struct fdtable {
 	unsigned int max_fds;
-	struct file __rcu **fd;      /* current fd array */
-	unsigned long *close_on_exec;
+    // 허용 파일객체수 최대
+	struct file __rcu **fd;      /* current fd array */ 
+    // 파일 객체 포인터 배열
+	unsigned long *close_on_exec; 
+    // exec 를 통해 닫을 file descriptor bitmap 
 	unsigned long *open_fds;
-	unsigned long *full_fds_bits;
+    // 열린file descriptor bitmap 
+    // bit 로 열린 파일들을 관리
+	unsigned long *full_fds_bits; 
 	struct rcu_head rcu;
 };
 
@@ -42,13 +47,18 @@ static inline bool fd_is_open(unsigned int fd, const struct fdtable *fdt)
 
 /*
  * Open file table structure
- */
+ */ 
+// 현재 process 가 사용하고 있는 모든 파일들에 대한 정보
 struct files_struct {
   /*
    * read mostly part
    */
-	atomic_t count;
-	bool resize_in_progress;
+	atomic_t count; 
+    // reference count 즉 처음 process 가 files_struct 생성 시,
+    // count 가 1 이 되며, COW로 복사되면 현재 file descriptor 를 
+    // share 하므로 1 씩 증가(dup_fd 시에 count 검사)
+	bool resize_in_progress; 
+    // 뭐한느 거임?
 	wait_queue_head_t resize_wait;
 
 	struct fdtable __rcu *fdt;
@@ -57,10 +67,13 @@ struct files_struct {
    * written part on a separate cache line in SMP
    */
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
-	unsigned int next_fd;
+	unsigned int next_fd; 
+    // 다음 할당할 file descriptor 번호
 	unsigned long close_on_exec_init[1];
+    // exec 를 통해 닫을 file descriptor bitmap 초기 집합
 	unsigned long open_fds_init[1];
-	unsigned long full_fds_bits_init[1];
+    // file descriptor bitmap 초기 집합
+	unsigned long full_fds_bits_init[1]; 
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
 };
 

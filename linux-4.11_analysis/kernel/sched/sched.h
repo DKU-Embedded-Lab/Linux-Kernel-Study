@@ -129,7 +129,7 @@ static inline int fair_policy(int policy)
 {
 	return policy == SCHED_NORMAL || policy == SCHED_BATCH;
 }
-
+// real time class 에 속하는지 검사
 static inline int rt_policy(int policy)
 {
 	return policy == SCHED_FIFO || policy == SCHED_RR;
@@ -144,7 +144,7 @@ static inline bool valid_policy(int policy)
 	return idle_policy(policy) || fair_policy(policy) ||
 		rt_policy(policy) || dl_policy(policy);
 }
-
+// p 가 real time schedulering class 에 속해있나 검사
 static inline int task_has_rt_policy(struct task_struct *p)
 {
 	return rt_policy(p->policy);
@@ -621,7 +621,11 @@ extern void rq_attach_root(struct rq *rq, struct root_domain *rd);
  * Locking rule: those places that want to lock multiple runqueues
  * (such as the load balancing or the thread migration code), lock
  * acquire operations must be ordered by ascending &runqueue.
- */
+ */ 
+// 각 core 마다 runqueue 가 있으며, task 는 core 마다의 runqueue 중 
+// 하나에 추가됨. runnable state 의 process 를 담는 곳
+// load balancer 에 의해 특정 core 의 runqueue 에서 다른 runqueue 
+// 로는 이동 가능
 struct rq {
 	/* runqueue lock: */
 	raw_spinlock_t lock;
@@ -631,12 +635,14 @@ struct rq {
 	 * remote CPUs use both these fields when doing load calculation.
 	 */
 	unsigned int nr_running;
+    // scheduling class 구분 없이 runqueue 에 존재하는 process 의 수
 #ifdef CONFIG_NUMA_BALANCING
 	unsigned int nr_numa_running;
 	unsigned int nr_preferred_running;
 #endif
 	#define CPU_LOAD_IDX_MAX 5
 	unsigned long cpu_load[CPU_LOAD_IDX_MAX];
+    // 과거CPU runqueue load 
 #ifdef CONFIG_NO_HZ_COMMON
 #ifdef CONFIG_SMP
 	unsigned long last_load_update_tick;
@@ -647,13 +653,17 @@ struct rq {
 	unsigned long last_sched_tick;
 #endif
 	/* capture load from *all* tasks on this cpu: */
-	struct load_weight load;
+	struct load_weight load; 
+    // 현재 runqueue 의 load. 즉 runqueue 내의 process 들의 weight 
+    // 이거 기반으로 virtual per-runqueue clock 계산
 	unsigned long nr_load_updates;
 	u64 nr_switches;
 
 	struct cfs_rq cfs;
+    // cfs scheduler runqueue
 	struct rt_rq rt;
-	struct dl_rq dl;
+    // rt scheduler runqueue
+	struct dl_rq dl;    
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	/* list of leaf cfs_rq on this cpu: */
@@ -669,12 +679,17 @@ struct rq {
 	 */
 	unsigned long nr_uninterruptible;
 
-	struct task_struct *curr, *idle, *stop;
+	struct task_struct *curr, *idle, *stop; 
+    // curr : 현재 돌던 task_struct 
+    // idle : 돌게 없으면 실행항 task_struct 즉 다른 runnable process 가 없을 때
+    //        실행되될 idle  proces
 	unsigned long next_balance;
 	struct mm_struct *prev_mm;
 
 	unsigned int clock_update_flags;
 	u64 clock;
+    // per-run queue clock
+    // scheduler 가 호출시마다 clock 이 변경됨 
 	u64 clock_task;
 
 	atomic_t nr_iowait;
@@ -1348,14 +1363,23 @@ extern const u32 sched_prio_to_wmult[40];
 
 struct sched_class {
 	const struct sched_class *next;
-
+    // 다음 scheduling class 
+    //  RT -> CFQ -> ..
 	void (*enqueue_task) (struct rq *rq, struct task_struct *p, int flags);
+    // process 를 runqueue 에 추가( sleep->runnable 되었을 때) 
+    // scheduling entity 를 runqueue 에 넣으며, nr_running 증가
 	void (*dequeue_task) (struct rq *rq, struct task_struct *p, int flags);
-	void (*yield_task) (struct rq *rq);
+    // runqueue 에서 process 빼냄(runnable -> unrunnable)
+    // scheduling entity 를 runqueue 에서 빼내며, nr_running 감소
+	void (*yield_task) (struct rq *rq); 
+    // process 가 스스로 CPU 놓아줌 
+    // runnable state 는 유지
 	bool (*yield_to_task) (struct rq *rq, struct task_struct *p, bool preempt);
 
 	void (*check_preempt_curr) (struct rq *rq, struct task_struct *p, int flags);
-
+    // 현재 새로 workup 된 task 가 current 돌고 있는 task 를 선점 
+    // wake_up_new_task 함수를 통해 process 가 깨어 났을 때 호출되어 선점.
+    
 	/*
 	 * It is the responsibility of the pick_next_task() method that will
 	 * return the next task to call put_prev_task() on the @prev task or
@@ -1367,7 +1391,9 @@ struct sched_class {
 	struct task_struct * (*pick_next_task) (struct rq *rq,
 						struct task_struct *prev,
 						struct rq_flags *rf);
+    // 다른 task 로 전환되기 위해 다음 돌 task 를 선택
 	void (*put_prev_task) (struct rq *rq, struct task_struct *p);
+    // 다른 task 로 전환되기 전 current task 를 queue 에 넣는등을 수행하기 위해 호출
 
 #ifdef CONFIG_SMP
 	int  (*select_task_rq)(struct task_struct *p, int task_cpu, int sd_flag, int flags);
@@ -1383,9 +1409,13 @@ struct sched_class {
 #endif
 
 	void (*set_curr_task) (struct rq *rq);
+    // task 의 scheduling policy 가 바뀔 때, task group 바뀔 때 호출
 	void (*task_tick) (struct rq *rq, struct task_struct *p, int queued);
+    // time tick function 에서 호출되며 process switch 
 	void (*task_fork) (struct task_struct *p);
+    // new task spawn
 	void (*task_dead) (struct task_struct *p);
+    // task 죽음
 
 	/*
 	 * The switched_from() call is allowed to drop rq->lock, therefore we

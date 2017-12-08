@@ -278,7 +278,10 @@ static unsigned int count_open_files(struct fdtable *fdt)
 		if (fdt->open_fds[--i])
 			break;
 	}
-	i = (i + 1) * BITS_PER_LONG;
+    // 열린 file descriptor 중의 가장 큰 값을 반환함
+	i = (i + 1) * BITS_PER_LONG; 
+    // BITS_PER_LONG 곱해줌 즉 64bit 에선 64 곱해줌. 왜?...
+    // file descriptor 하나당 64bit?
 	return i;
 }
 
@@ -300,19 +303,23 @@ struct files_struct *dup_fd(struct files_struct *oldf, int *errorp)
 		goto out;
 
 	atomic_set(&newf->count, 1);
-
+    // 새로 생성한 files_struct 는 하나의 process 에 의해
+    // 소유되므로 reference count 가 1이 됨
 	spin_lock_init(&newf->file_lock);
 	newf->resize_in_progress = false;
 	init_waitqueue_head(&newf->resize_wait);
-	newf->next_fd = 0;
+	newf->next_fd = 0; 
+    // file descriptor 는 0 부터 시작
 	new_fdt = &newf->fdtab;
 	new_fdt->max_fds = NR_OPEN_DEFAULT;
+    // NR_OPEN_DEFAULT 는 64?..
 	new_fdt->close_on_exec = newf->close_on_exec_init;
 	new_fdt->open_fds = newf->open_fds_init;
 	new_fdt->full_fds_bits = newf->full_fds_bits_init;
 	new_fdt->fd = &newf->fd_array[0];
+    // 여기까지 files_struct 생성 및 fdtable 초기화 과정
 
-	spin_lock(&oldf->file_lock);
+    spin_lock(&oldf->file_lock);
 	old_fdt = files_fdtable(oldf);
 	open_files = count_open_files(old_fdt);
 

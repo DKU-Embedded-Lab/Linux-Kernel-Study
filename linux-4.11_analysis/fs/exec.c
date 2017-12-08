@@ -389,7 +389,7 @@ static int bprm_mm_init(struct linux_binprm *bprm)
 	err = -ENOMEM;
 	if (!mm)
 		goto err;
-
+    // mm 을위한 vma 의 initial stack 설정
 	err = __bprm_mm_init(bprm);
 	if (err)
 		goto err;
@@ -1474,15 +1474,19 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	 */
 	bprm->cred->euid = current_euid();
 	bprm->cred->egid = current_egid();
-
+    // 파일이 mount 된 설저이 MNT_NOSUID 설정이 되어있지 않아야 함 
+    // 그외에도 몇가지 검사... 나중에 다시
 	if (!mnt_may_suid(bprm->file->f_path.mnt))
 		return;
 
 	if (task_no_new_privs(current))
 		return;
+    // 이거 뭐임 
 
 	inode = bprm->file->f_path.dentry->d_inode;
 	mode = READ_ONCE(inode->i_mode);
+    // 파일의 inode 에 설정된 flag 에 S_ISUID 또는 S_ISGID 가
+    // 설정되어 있어야한다. 즉 실행파일이어야 한다.
 	if (!(mode & (S_ISUID|S_ISGID)))
 		return;
 
@@ -1643,7 +1647,19 @@ static int exec_binprm(struct linux_binprm *bprm)
 	rcu_read_lock();
 	old_vpid = task_pid_nr_ns(current, task_active_pid_ns(current->parent));
 	rcu_read_unlock();
-
+    // magic number 등을 통해 binary format 을 찾아 그에 맞는 handler 로 수행 
+    //
+    // binary format handler ?
+    //  - old process 의 자원 해제
+    //  - application을 virtual address space 에 정의된 segment 값에 맞게 설정
+    //    e.g. text segment, data segment, heap, stack, argument, environment
+    //    text segment : start_code ~ end_code
+    //    data segment : start_data ~ end_data
+    //    heap : start_brk ~ brk 
+    //    stack : start_stack 
+    //    argument : arg_start ~ arg_end
+    //    environment : env_start ~ env_end
+    //
 	ret = search_binary_handler(bprm);
 	if (ret >= 0) {
 		audit_bprm(bprm);
@@ -1658,12 +1674,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 /*
  * sys_execve() executes a new program.
  */ 
-
-// 
 // 1. filename 경로에 있는 실행될 file 의 inode 를 찾아 file descriptors 생성
-//
-//
-
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
@@ -1685,7 +1696,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	 * don't check setuid() return code.  Here we additionally recheck
 	 * whether NPROC limit is still exceeded.
 	 */
-    // rlimit 의 제한을 넘지 않는지 검사
+    // rlimit 의 process 개수 제한을 넘지 않는지 검사
 	if ((current->flags & PF_NPROC_EXCEEDED) &&
 	    atomic_read(&current_user()->processes) > rlimit(RLIMIT_NPROC)) {
 		retval = -EAGAIN;
@@ -1697,7 +1708,8 @@ static int do_execveat_common(int fd, struct filename *filename,
     // rlimit 검사 끝났으니 PF_NPROC_EXCEEDED flag 를 제거
 	current->flags &= ~PF_NPROC_EXCEEDED;
 
-    // current task 의 file 들을 복사?...
+    // COW 되고 있던경우 공유되던 file 정보를 
+    // 이제 복사 수행
 	retval = unshare_files(&displaced);
 	if (retval)
 		goto out_ret;
@@ -1713,7 +1725,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 	check_unsafe_exec(bprm);
 	current->in_execve = 1;
-
+    // filename 에 대한 inode 를 찾아 file struct 생성
 	file = do_open_execat(fd, filename, flags);
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
@@ -1744,7 +1756,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		bprm->filename = pathbuf;
 	}
 	bprm->interp = bprm->filename;
-
+    // mm 새로 만들어 bprm 에 담기 및 새로운 process 를 위한 stack vma 생성 
 	retval = bprm_mm_init(bprm);
 	if (retval)
 		goto out_unmark;
@@ -1756,7 +1768,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	bprm->envc = count(envp, MAX_ARG_STRINGS);
 	if ((retval = bprm->envc) < 0)
 		goto out;
-
+    // 실행파일인지 검사 등 수행
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		goto out;
@@ -1775,7 +1787,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		goto out;
 
 	would_dump(bprm, bprm->file);
-
+    // 현재 실행 파일의 binary format 을 찾아 수행
 	retval = exec_binprm(bprm);
 	if (retval < 0)
 		goto out;

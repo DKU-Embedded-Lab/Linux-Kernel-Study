@@ -39,6 +39,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+// core 수만큼 runqueues 생성
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 /*
@@ -168,7 +169,7 @@ struct rq *task_rq_lock(struct task_struct *p, struct rq_flags *rf)
 /*
  * RQ-clock updating methods:
  */
-
+// run queue 의 clock을 update
 static void update_rq_clock_task(struct rq *rq, s64 delta)
 {
 /*
@@ -741,7 +742,7 @@ int tg_nop(struct task_group *tg, void *data)
 	return 0;
 }
 #endif
-
+// priority 값에 따른 0~100 사이의 weight 곡선은 log
 static void set_load_weight(struct task_struct *p)
 {
 	int prio = p->static_prio - MAX_RT_PRIO;
@@ -841,12 +842,18 @@ static inline int normal_prio(struct task_struct *p)
 {
 	int prio;
 
-	if (task_has_dl_policy(p))
+	if (task_has_dl_policy(p)) // SCHED_DEADLINE
 		prio = MAX_DL_PRIO-1;
-	else if (task_has_rt_policy(p))
+	else if (task_has_rt_policy(p)){ // SCHED_RR || SCHED_FIFO
 		prio = MAX_RT_PRIO-1 - p->rt_priority;
-	else
-		prio = __normal_prio(p);
+    // rt_priority 는 high 일수록 priority 가 높은 것.
+    // 이를 kernel 내부의 priority 표현으로 변환하여 
+    // lower 일수록 높은 priority 를 가지게 함 
+    // 이렇게 effective_prio 로 변환하는 이유는 non real time task 에서 
+    // real time task 로의 boost 때문?
+    }else
+		prio = __normal_prio(p); // SCHED_NORMAL || SCHED_BATCH || SCHED_IDLE 
+    // cfq 일 경우 그냥 static priority 반환
 	return prio;
 }
 
@@ -856,7 +863,8 @@ static inline int normal_prio(struct task_struct *p)
  * be boosted by RT tasks, or might be boosted by
  * interactivity modifiers. Will be RT if the task got
  * RT-boosted. If not then it returns p->normal_prio.
- */
+ */ 
+// static priority 값을 기반으로 normal_prio 와 prio 계산
 static int effective_prio(struct task_struct *p)
 {
 	p->normal_prio = normal_prio(p);
@@ -7284,7 +7292,10 @@ void dump_cpu_task(int cpu)
  * it's +10% CPU usage. (to achieve that we use a multiplier of 1.25.
  * If a task goes up by ~10% and another task goes down by ~10% then
  * the relative distance between them is ~25%.)
- */
+ */ 
+// -20 ~ +19 의 nice 에 상응하는 0 ~ 39 까지의 index 에 해당하는 값 
+// nive level +1 : 10% CPU time 덜 받음
+//            -1 : 10% CPU time 더 받음
 const int sched_prio_to_weight[40] = {
  /* -20 */     88761,     71755,     56483,     46273,     36291,
  /* -15 */     29154,     23254,     18705,     14949,     11916,

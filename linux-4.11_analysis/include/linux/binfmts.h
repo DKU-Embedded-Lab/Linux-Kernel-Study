@@ -78,8 +78,11 @@ struct linux_binfmt {
 	struct list_head lh;
 	struct module *module;
 	int (*load_binary)(struct linux_binprm *);
+    // 일반 프로그램 실행
 	int (*load_shlib)(struct file *);
+    // 공유 라이브러리 실행
 	int (*core_dump)(struct coredump_params *cprm);
+    // 프로그램 에러시 core dump 파일 생성
 	unsigned long min_coredump;	/* minimal dump size */
 };
 
