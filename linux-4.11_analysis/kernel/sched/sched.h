@@ -1364,7 +1364,7 @@ extern const u32 sched_prio_to_wmult[40];
 struct sched_class {
 	const struct sched_class *next;
     // 다음 scheduling class 
-    //  RT -> CFQ -> ..
+    //  DL -> RT -> CFQ -> ..
 	void (*enqueue_task) (struct rq *rq, struct task_struct *p, int flags);
     // process 를 runqueue 에 추가( sleep->runnable 되었을 때) 
     // scheduling entity 를 runqueue 에 넣으며, nr_running 증가

@@ -2849,7 +2849,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	struct mm_struct *mm, *oldmm;
 
 	prepare_task_switch(rq, prev, next);
-
+    // architecture specific context switch 준비
 	mm = next->mm;
 	oldmm = prev->active_mm;
 	/*
@@ -2859,10 +2859,12 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	 */
 	arch_start_context_switch(prev);
 
-	if (!mm) {
+	if (!mm) { 
+        // kernel thread 인 경우
 		next->active_mm = oldmm;
 		mmgrab(oldmm);
-		enter_lazy_tlb(oldmm, next);
+		enter_lazy_tlb(oldmm, next); 
+        // user space virtual address 전환 안할 꺼임
 	} else
 		switch_mm_irqs_off(oldmm, mm, next);
 
@@ -2883,7 +2885,8 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	spin_release(&rq->lock.dep_map, 1, _THIS_IP_);
 
 	/* Here we just switch the register state and the stack. */
-	switch_to(prev, next, prev);
+	switch_to(prev, next, prev); 
+    // context switch 수행
 	barrier();
 
 	return finish_task_switch(prev);
@@ -3106,6 +3109,7 @@ void scheduler_tick(void)
 
 	raw_spin_lock(&rq->lock);
 	update_rq_clock(rq);
+    // runqueue 의 clock 을 update
 	curr->sched_class->task_tick(rq, curr, 0);
 	cpu_load_update_active(rq);
 	calc_global_load_tick(rq);
@@ -3381,10 +3385,10 @@ static void __sched notrace __schedule(bool preempt)
 	prev = rq->curr;
 
 	schedule_debug(prev);
-
+    // schedule time 에 체크할 통계 수행
 	if (sched_feat(HRTICK))
 		hrtick_clear(rq);
-
+    // high-resolution timer 를 사용한 경우, hrtick 타이머 동작중이면 정지
 	local_irq_disable();
 	rcu_note_context_switch();
 
@@ -3399,14 +3403,18 @@ static void __sched notrace __schedule(bool preempt)
 
 	/* Promote REQ to ACT */
 	rq->clock_update_flags <<= 1;
+    // clock_update_flags 를 RQCF_REQ_SKIP 에서 RQCF_ACT_SKIP 으로 전환
 
 	switch_count = &prev->nivcsw;
 	if (!preempt && prev->state) {
 		if (unlikely(signal_pending_state(prev->state, prev))) {
 			prev->state = TASK_RUNNING;
+            // signal 처리가 와있는 signal 처리를 해야하는 경우, 상태를 바꿈            
 		} else {
 			deactivate_task(rq, prev, DEQUEUE_SLEEP);
-			prev->on_rq = 0;
+			prev->on_rq = 0; 
+            // signal 처리가 필요 없다면 기존 task 를 runqueue 에서 제거하고 
+            // 그 process 의 task_struct 에 runqueue 에 없다는걸 마킹
 
 			if (prev->in_iowait) {
 				atomic_inc(&rq->nr_iowait);
@@ -3425,18 +3433,22 @@ static void __sched notrace __schedule(bool preempt)
 				if (to_wakeup)
 					try_to_wake_up_local(to_wakeup, &rf);
 			}
+            // 기존 task 가 wait queue worker 인 경우 sleep ?..
 		}
 		switch_count = &prev->nvcsw;
 	}
 
 	if (task_on_rq_queued(prev))
-		update_rq_clock(rq);
+		update_rq_clock(rq); 
+    // 기존 task 가 아직 runqueue 에 있다면 clock update
 
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
-
-	if (likely(prev != next)) {
+    // runqueue 의 다음 처리할 task 가져오고, reschedule 요청 clear
+	if (likely(prev != next)) { 
+        // 새로 고른 task 가 그전 task 랑 다를 경우, C.S. 관련 count 높이고
+        // context_switch 수행
 		rq->nr_switches++;
 		rq->curr = next;
 		++*switch_count;
@@ -3497,6 +3509,8 @@ static inline void sched_submit_work(struct task_struct *tsk)
 		blk_schedule_flush_plug(tsk);
 }
 
+// __sched prefix 는 이 compile 된 code 를 code segment 내의 특정 부분에 두어 
+// 다른 것의해 접근시, 즉 stack dump 등... 그 영역의 code 들은 제외되로록
 asmlinkage __visible void __sched schedule(void)
 {
 	struct task_struct *tsk = current;
