@@ -3765,7 +3765,8 @@ unlock:
  * The mmap_sem may have been released depending on flags and our
  * return value.  See filemap_fault() and __lock_page_or_retry().
  *
- * 새로운 물리 page 를 할당하고 mapping 하는 함수.
+ * 새로운 물리 page 를 할당하고 mapping 하는 함수. 
+ * vma : address 가 속한 vma
  */
 static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 		unsigned int flags)

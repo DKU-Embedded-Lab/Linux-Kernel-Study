@@ -1210,7 +1210,7 @@ static inline bool smap_violation(int error_code, struct pt_regs *regs)
  * This function must have noinline because both callers
  * {,trace_}do_page_fault() have notrace on. Having this an actual function
  * guarantees there's a function trace entry.
- */
+ */ 
 static noinline void
 __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 		unsigned long address)
@@ -1227,7 +1227,8 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 	/*
 	 * Detect and handle instructions that would cause a page fault for
 	 * both a tracked kernel page and a userspace page.
-	 */
+	 */ 
+    // kmemcheck : heavyweight memory checker
 	if (kmemcheck_active(regs))
 		kmemcheck_hide(regs);
 	prefetchw(&mm->mmap_sem);
@@ -1442,10 +1443,28 @@ good_area:
 }
 NOKPROBE_SYMBOL(__do_page_fault);
 
+
+
+// page fault 함수
+//  regs : fault 시에 active 한 register set 으로 kernel stack 의 register 값 
+//         pt_regs 는 register 를 stack 에 저장하기 위해 사용
+//  error_code : err code 로 3bit 사용...지금도?
+//                     |        Set(1)          |                Not Set(0)              |
+//               -------------------------------------------------------------------------
+//               0 bit | no page present in RAM |   Protection fault(access persmission)
+//               -------------------------------------------------------------------------
+//               1 bit | read access            |   write access
+//               -------------------------------------------------------------------------
+//               2 bit | kernel mode            |   user mode 
+// 
+//
 dotraplinkage void notrace
 do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
-	unsigned long address = read_cr2(); /* Get the faulting address */
+	unsigned long address = read_cr2(); /* Get the faulting address */ 
+    // intel 의 cr0, cr1, cr2, cr3 들에서... cr2 를 읽어들여옴
+    //  - cr2 : page fault linear register 
+    //  - cr3 : page directory base register 
 	enum ctx_state prev_state;
 
 	/*
@@ -1457,8 +1476,10 @@ do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	 */
 
 	prev_state = exception_enter();
+    // kernel context 로의 진입 flag 
 	__do_page_fault(regs, error_code, address);
 	exception_exit(prev_state);
+    // kernel context 에서의 out flag
 }
 NOKPROBE_SYMBOL(do_page_fault);
 
