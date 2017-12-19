@@ -448,6 +448,9 @@ struct mm_struct {
 	unsigned long highest_vm_end;		/* highest vma end address */ 
     // vma 중 맨 끝 
 	pgd_t * pgd;
+    // pgd_t 들을 가지고 있는 page frame 에 대한 주소
+    // kernel address space 들에 대한 mapping 은 모든 process 가 동일 
+    // kernel vaddr 에 대한 mapping 은 kernel global page table(swapper_pg_dir) 를 통해 참조하여 가져옴
 
 	/**
 	 * @mm_users: The number of users including userspace.

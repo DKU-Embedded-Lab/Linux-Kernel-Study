@@ -116,13 +116,14 @@ int fixup_exception(struct pt_regs *regs, int trapnr)
 		panic("do_trap: can't hit this");
 	}
 #endif
-
+    // 등록된 Exception Handler 검색 
 	e = search_exception_tables(regs->ip);
 	if (!e)
 		return 0;
 
 	handler = ex_fixup_handler(e);
 	return handler(e, regs, trapnr);
+    // Exception hansler 수행
 }
 
 extern unsigned int early_recursion_flag;

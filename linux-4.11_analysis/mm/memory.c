@@ -3408,7 +3408,7 @@ static int do_cow_fault(struct vm_fault *vmf)
 
 	if (unlikely(anon_vma_prepare(vma)))
 		return VM_FAULT_OOM;
-
+    // private mapping 을 위한 새로운 anonymous page 할당
 	vmf->cow_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma, vmf->address);
 	if (!vmf->cow_page)
 		return VM_FAULT_OOM;
@@ -3420,14 +3420,15 @@ static int do_cow_fault(struct vm_fault *vmf)
 	}
 
 	ret = __do_fault(vmf);
+    // file 로부터 vm->ops->fault 에서filemap_fault 을 통해 data 읽어들임
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
 		goto uncharge_out;
 	if (ret & VM_FAULT_DONE_COW)
 		return ret;
-
+    
 	copy_user_highpage(vmf->cow_page, vmf->page, vmf->address, vma);
 	__SetPageUptodate(vmf->cow_page);
-
+    // file 로부터의 page 를 cow_page 에 복사
 	ret |= finish_fault(vmf);
 	unlock_page(vmf->page);
 	put_page(vmf->page);
@@ -3491,10 +3492,17 @@ static int do_fault(struct vm_fault *vmf)
 		ret = VM_FAULT_SIGBUS;
 	else if (!(vmf->flags & FAULT_FLAG_WRITE))
 		ret = do_read_fault(vmf);
+    // 현재 fault 요청이 write fault 가 아닌 경우(read fault) 
+    // file 로부터 page 를 읽기위해 do_read_fault 호출
 	else if (!(vma->vm_flags & VM_SHARED))
 		ret = do_cow_fault(vmf);
+    // 현재 fault 요청이 write fault 이며 
+    // shared memory 가 아닌 경우(private mapping) 
+    // file 로부터 page 를 읽어 page cache 에저장&새 page 에 복사
 	else
-		ret = do_shared_fault(vmf);
+		ret = do_shared_fault(vmf); 
+    // 현재 fault 요청이 write fault 이며 
+    // shared mmemory 인 경우 (shared mapping)
 
 	/* preallocated pagetable is unused: free it */
 	if (vmf->prealloc_pte) {
@@ -3682,6 +3690,12 @@ static int handle_pte_fault(struct vm_fault *vmf)
 	pte_t entry;
 
 	if (unlikely(pmd_none(*vmf->pmd))) {
+        // pmd entry 내의 값이 비어 있다면. 즉 page table 을 
+        // 가리키는 주소가 설저되어 있지 않다면(page table 할당해야 하는 상태) 
+        // 기존 code 들에는 pte alloc 함수가 hamdle_mm_fault 내에서 수행되었지만 
+        // v4.11 에서는 do_anonymous_page, do_fault 등 의 함수들에서 pte_alloc 을 
+        // 수행하도록 delay 하여 vm_ops->fault 에서 huge page 할당이 가능하도록 함
+        //
 		/*
 		 * Leave __pte_alloc() until later: because vm_ops->fault may
 		 * want to allocate huge page, and if we expose page table
@@ -3690,7 +3704,8 @@ static int handle_pte_fault(struct vm_fault *vmf)
 		 */
 		vmf->pte = NULL;
 	} else {
-		/* See comment in pte_alloc_one_map() */
+		/* See comment in pte_alloc_one_map() */ 
+        // page table 주소가 pmd entry 에 기록되어 있다면
 		if (pmd_trans_unstable(vmf->pmd) || pmd_devmap(*vmf->pmd))
 			return 0;
 		/*
@@ -3711,36 +3726,49 @@ static int handle_pte_fault(struct vm_fault *vmf)
 		 * ptl lock held. So here a barrier will do.
 		 */
 		barrier();
-		if (pte_none(vmf->orig_pte)) {
+		if (pte_none(vmf->orig_pte)) { 
+            // page table 에 4KB page 가 위치한 주소가 적혀있지 안다면
 			pte_unmap(vmf->pte);
 			vmf->pte = NULL;
 		}
 	}
 
 	if (!vmf->pte) {
+        // pte 에 4KB physical page frame 의 물리주소가 적혀있지 않다면 
+        //  -> swap 된건 아님 그냥 새로 할당만 하면 됨
 		if (vma_is_anonymous(vmf->vma))
 			return do_anonymous_page(vmf);
 		else
-			return do_fault(vmf);
+			return do_fault(vmf); 
+        // anonymous page 의 경우 vm_ops 가 없으므로 do_anonymous_page 
+        // file_backed page의 경우 do_fault 수행 
 	}
-
+    
 	if (!pte_present(vmf->orig_pte))
 		return do_swap_page(vmf);
-
+    // pte 에 물리주소 써있지만 물리 memory 에 올라와 있지 않다면 
+    // swap out 된 상태이므로 do_swap_page 에서 swapin
 	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
 		return do_numa_page(vmf);
+    // TODO. do_numa_page 이거 뭐지...
 
-	vmf->ptl = pte_lockptr(vmf->vma->vm_mm, vmf->pmd);
+    // 여기까지 온 것은 pte 에 기록되어 있으며, 물리주소 memory 에 있음
+    vmf->ptl = pte_lockptr(vmf->vma->vm_mm, vmf->pmd);
 	spin_lock(vmf->ptl);
 	entry = vmf->orig_pte;
 	if (unlikely(!pte_same(*vmf->pte, entry)))
 		goto unlock;
-	if (vmf->flags & FAULT_FLAG_WRITE) {
+	if (vmf->flags & FAULT_FLAG_WRITE) { 
+        // 현재 write 요청인 경우 
 		if (!pte_write(entry))
 			return do_wp_page(vmf);
-		entry = pte_mkdirty(entry);
+        // write 금지된 page 라면 새로운 page 할당하여 
+        // 물리주소초기화 하고 복사하여 사용
+		entry = pte_mkdirty(entry); 
+        // write 금지된 page 가 아니라면 dirty bit 설정
 	}
 	entry = pte_mkyoung(entry);
+    // accesed bit 설정
 	if (ptep_set_access_flags(vmf->vma, vmf->address, vmf->pte, entry,
 				vmf->flags & FAULT_FLAG_WRITE)) {
 		update_mmu_cache(vmf->vma, vmf->address, vmf->pte);
@@ -3788,56 +3816,82 @@ static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	if (!p4d)
 		return VM_FAULT_OOM;
 
-	vmf.pud = pud_alloc(mm, p4d, address);
+	vmf.pud = pud_alloc(mm, p4d, address); 
+    // pud 가 할당되어 있지 않을시 할당
 	if (!vmf.pud)
 		return VM_FAULT_OOM;
+    // address 에 해당하는 pgd, pud 를 얻어옴
 	if (pud_none(*vmf.pud) && transparent_hugepage_enabled(vma)) {
+        // pud entry 가 비어있고,  현재 THP 설정된 경우 
 		ret = create_huge_pud(&vmf);
+        // pud 단위 THP인 1G 크기의 THP  할당 시도(1G THP) 
+        // - v4.11 에서는 anonymous page 에 대해 pud 단위 THP 아직 지원안함 
+        //   => ret 는 VM_FAULT_FALLBACK 
+        // - file backed 도 huge_fault 설정 안되있는듯
 		if (!(ret & VM_FAULT_FALLBACK))
-			return ret;
+			return ret; 
+        // 1G THP 할당이 실패하지 않았다면 여기서 종료 
+        // VM_FAULT_FALLBACK 설정시... 1G THP 할당 불가(연속된 영역 없음)
+        //  -> 그다음 level 인 2MB 단위 THP 할당 시도
 	} else {
 		pud_t orig_pud = *vmf.pud;
-
+        // pud entry 가 비어있지 않은 경우
 		barrier();
-		if (pud_trans_huge(orig_pud) || pud_devmap(orig_pud)) {
+		if (pud_trans_huge(orig_pud) || pud_devmap(orig_pud)) { 
+            // pud entry 가 THP 이면...
 			unsigned int dirty = flags & FAULT_FLAG_WRITE;
+            // 현재 page fault 가 write 요청일 경우
 
 			/* NUMA case for anonymous PUDs would go here */
 
 			if (dirty && !pud_write(orig_pud)) {
+                // write 접근이지만, pud 에 대해 write 금지가 되어 있다면
 				ret = wp_huge_pud(&vmf, orig_pud);
+                // 여기도 아직 지원안됨 => ret 는 VM_FAULT_FALLBACK 
+                // 원래 목적은 새 page 할당 후, copy 하여 사용
 				if (!(ret & VM_FAULT_FALLBACK))
 					return ret;
 			} else {
 				huge_pud_set_accessed(&vmf, orig_pud);
+                // writable 하므로 이거 그냥 사용
 				return 0;
 			}
 		}
 	}
 
-	vmf.pmd = pmd_alloc(mm, vmf.pud, address);
+	vmf.pmd = pmd_alloc(mm, vmf.pud, address); 
+    // pmd 가 할당되어 있지 않을 시 할당
 	if (!vmf.pmd)
 		return VM_FAULT_OOM;
 	if (pmd_none(*vmf.pmd) && transparent_hugepage_enabled(vma)) {
-        // 여기가 2MB hugepage 관련 부분 start 
+        // pmd entry 가 비어 있고, THP 설정이 되어 있을 경우
 		ret = create_huge_pmd(&vmf);
+        // pmd 단위 THP 인 2MB 크기의 THP 할당 시도(2MB THP)
 		if (!(ret & VM_FAULT_FALLBACK))
 			return ret;
+        // 2MB THP 할당이 실패하지 않았다면 여기서 종료
+        // VM_FAULT_FALLBACK 설정시... 2MB THP 할당 불가(연속된 영역 없음)
+        //  -> 그 다음 level 인 default page 할당 시도
 	} else {
 		pmd_t orig_pmd = *vmf.pmd;
-
+        // pmd entry 가 비어있지 않은 경우
 		barrier();
 		if (pmd_trans_huge(orig_pmd) || pmd_devmap(orig_pmd)) {
+            // pmd entry 가 THP 이면...
 			if (pmd_protnone(orig_pmd) && vma_is_accessible(vma))
 				return do_huge_pmd_numa_page(&vmf, orig_pmd);
-
+            // TODO. 뭐지 이거...
 			if ((vmf.flags & FAULT_FLAG_WRITE) &&
 					!pmd_write(orig_pmd)) {
+                // write 접근이지만 pmd 가 write 불가능하게 설정된 경우 
 				ret = wp_huge_pmd(&vmf, orig_pmd);
+                // 새 page 할당 후, copy 하여  사용.
+                // 불가능하면 FALLBACK  
 				if (!(ret & VM_FAULT_FALLBACK))
 					return ret;
 			} else {
 				huge_pmd_set_accessed(&vmf, orig_pmd);
+                // writeable 하므로 이거 그냥 사용
 				return 0;
 			}
 		}
@@ -3858,8 +3912,9 @@ int handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	int ret;
 
 	__set_current_state(TASK_RUNNING);
-
+    // 현재 tas 를 TASK_RUNNING 상태로 설정
 	count_vm_event(PGFAULT);
+    // page fault vm counter 증가
 	mem_cgroup_count_vm_event(vma->vm_mm, PGFAULT);
 
 	/* do counter updates before entering really critical section. */
@@ -3881,6 +3936,8 @@ int handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
 	else
 		ret = __handle_mm_fault(vma, address, flags);
+    // 새로운 물리 page 를 할당하고 mapping, 해당 page 가 swapout 되었거나 
+    // file cache 된 경우, 읽어들여옴
 
 	if (flags & FAULT_FLAG_USER) {
 		mem_cgroup_oom_disable();

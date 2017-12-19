@@ -419,16 +419,21 @@ typedef struct {
 	unsigned long		seg;
 } mm_segment_t;
 
+// 추후 register 값 복원을 위해 regiseter 상태 값들을 저장 
+//  e.g. GPR(General Purpose Regiseter), SR(Segment Register)
+//       , CR(Control Register)
 struct thread_struct {
 	/* Cached TLS descriptors: */
 	struct desc_struct	tls_array[GDT_ENTRY_TLS_ENTRIES];
 	unsigned long		sp0;
+    // user space stack 의 stack pointer 값을 저장
 	unsigned long		sp;
+    // kernel space stack 의 stack pointer 값을 저장
 #ifdef CONFIG_X86_32
 	unsigned long		sysenter_cs;
 #else
-	unsigned short		es;
-	unsigned short		ds;
+	unsigned short		es; // DS-Data 영역 접근시 사용하는 CR
+	unsigned short		ds; // data 영역 가리키는 SR
 	unsigned short		fsindex;
 	unsigned short		gsindex;
 #endif
@@ -443,7 +448,7 @@ struct thread_struct {
 	 * XXX: this could presumably be unsigned short.  Alternatively,
 	 * 32-bit kernels could be taught to use fsindex instead.
 	 */
-	unsigned long fs;
+	unsigned long fs; // ES-String 작업 처리시 사용한는 CR
 	unsigned long gs;
 #endif
 
@@ -454,9 +459,13 @@ struct thread_struct {
 	/* Keep track of the exact dr7 value set by the user */
 	unsigned long           ptrace_dr7;
 	/* Fault info: */
-	unsigned long		cr2;
+	unsigned long		cr2; 
+    // page fault 발생 시, page fault 발생한 vaddr 의 주소가 저장
 	unsigned long		trap_nr;
-	unsigned long		error_code;
+    // interrupt/exception 발생 이유 e.g. X86_TRAP_PF, X86_TRAP_GP
+	unsigned long		error_code; 
+    // page fault 관련 error_code 로 user/kernel mode, 
+    // read/write mode 등의 정보 기록
 #ifdef CONFIG_VM86
 	/* Virtual 86 mode info */
 	struct vm86		*vm86;

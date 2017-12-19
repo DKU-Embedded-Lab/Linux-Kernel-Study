@@ -249,6 +249,8 @@ DEFINE_SPINLOCK(pgd_lock);
 LIST_HEAD(pgd_list);
 
 #ifdef CONFIG_X86_32
+// 32bit 일 경우, vmalloc fault 과정에서의 pgd 의 address 관련 entry 를
+// master kernel page table 과 동기화
 static inline pmd_t *vmalloc_sync_one(pgd_t *pgd, unsigned long address)
 {
 	unsigned index = pgd_index(address);
@@ -257,8 +259,9 @@ static inline pmd_t *vmalloc_sync_one(pgd_t *pgd, unsigned long address)
 	pmd_t *pmd, *pmd_k;
 
 	pgd += index;
+    // process page table 에서의 pgd entry
 	pgd_k = init_mm.pgd + index;
-
+    // master page table 에서의 pgd entry 의 위치
 	if (!pgd_present(*pgd_k))
 		return NULL;
 
@@ -267,21 +270,31 @@ static inline pmd_t *vmalloc_sync_one(pgd_t *pgd, unsigned long address)
 	 * and redundant with the set_pmd() on non-PAE. As would
 	 * set_pud.
 	 */
-	pud = pud_offset(pgd, address);
+	pud = pud_offset(pgd, address); 
+    // process page table 에서의 pud
 	pud_k = pud_offset(pgd_k, address);
+    // master page table 에서의 pud
 	if (!pud_present(*pud_k))
 		return NULL;
-
 	pmd = pmd_offset(pud, address);
+    // process page table 에서의 pmd
 	pmd_k = pmd_offset(pud_k, address);
+    // master page table 에서의 pmd
 	if (!pmd_present(*pmd_k))
 		return NULL;
+    // master kernel page table 에서 해당 pud 나 pmd 가 없다면
+    // 즉 현재 memory 에 올라와 있지 않은 상태라면 
+    // 지금 바로 sync 할 수 없으므로 일단 vmalloc_fault 종료 후    
+    // 추후 no_context 함수 등으로 reload
 
 	if (!pmd_present(*pmd))
 		set_pmd(pmd, *pmd_k);
 	else
 		BUG_ON(pmd_page(*pmd) != pmd_page(*pmd_k));
-
+    // process 의 page table 내에 page middle directory 가 
+    // 메모리에 올라와 있지 않다면 kernel master table 에 기록된 
+    // pmd 메모리 위치로 update.
+    // 있다면 뭔가 이상한거... page fault 난건데 있다니..
 	return pmd_k;
 }
 
@@ -340,10 +353,13 @@ static noinline int vmalloc_fault(unsigned long address)
 	 * Do _not_ use "current" here. We might be inside
 	 * an interrupt in the middle of a task switch..
 	 */
-	pgd_paddr = read_cr3();
+	pgd_paddr = read_cr3(); 
+    // cr3 register 로부터 현재 process 의 pgd 주소 가져옴
 	pmd_k = vmalloc_sync_one(__va(pgd_paddr), address);
 	if (!pmd_k)
-		return -1;
+		return -1; 
+    // kernel 의 master page table 에서의 해당 address 에 대한 
+    // page middle directory 를 가져옴
 
 	if (pmd_huge(*pmd_k))
 		return 0;
@@ -351,7 +367,8 @@ static noinline int vmalloc_fault(unsigned long address)
 	pte_k = pte_offset_kernel(pmd_k, address);
 	if (!pte_present(*pte_k))
 		return -1;
-
+    // kernel 의 pmd 주소의 address 관련 pte 가 없다면 
+    // 나중에 처리하기로 하고 함수종료
 	return 0;
 }
 NOKPROBE_SYMBOL(vmalloc_fault);
@@ -441,7 +458,9 @@ static noinline int vmalloc_fault(unsigned long address)
 	 * case just flush:
 	 */
 	pgd = (pgd_t *)__va(read_cr3()) + pgd_index(address);
-	pgd_ref = pgd_offset_k(address);
+    // 현재 process page table 에서의 pgd 
+	pgd_ref = pgd_offset_k(address); 
+    // init_mm 의 즉 master kernel page table 의 pgd offset 가져옴
 	if (pgd_none(*pgd_ref))
 		return -1;
 
@@ -461,7 +480,7 @@ static noinline int vmalloc_fault(unsigned long address)
 	pud_ref = pud_offset(pgd_ref, address);
 	if (pud_none(*pud_ref))
 		return -1;
-
+   
 	if (pud_none(*pud) || pud_pfn(*pud) != pud_pfn(*pud_ref))
 		BUG();
 
@@ -859,7 +878,11 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 	struct task_struct *tsk = current;
 
 	/* User mode accesses just cause a SIGSEGV */
-	if (error_code & PF_USER) {
+	if (error_code & PF_USER) { 
+        // error_code 의 2 번 bit 가 설정된 경우.. user mode 
+        // user mode 에서 kernel address 에대한 접근일 경우 그냥
+        // segmentation fault 발생
+        
 		/*
 		 * It's possible to have interrupts off here:
 		 */
@@ -871,10 +894,10 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		 */
 		if (is_prefetch(regs, error_code, address))
 			return;
-
+        // prefetch 로 인한 것이라면 그냥 넘어감
 		if (is_errata100(regs, address))
 			return;
-
+        // 이건 뭐지... TODO
 #ifdef CONFIG_X86_64
 		/*
 		 * Instruction fetch faults in the vsyscall page might need
@@ -884,7 +907,11 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 			     ((address & ~0xfff) == VSYSCALL_ADDR))) {
 			if (emulate_vsyscall(regs, address))
 				return;
-		}
+            // instructino fetch 에 의한 것이며, address 가 vsyscall 영역일 시, 
+            // system call 번호 확인하여 vsyscall 로 등록해 놓은 것이 아닐 경우 
+            // segmentation fault
+
+		}        
 #endif
 
 		/*
@@ -894,7 +921,8 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		 */
 		if (address >= TASK_SIZE_MAX)
 			error_code |= PF_PROT;
-
+        // kernel address 다시 확인 후, 현재는 user mode 이므로 
+        // protection fault 설정.
 		if (likely(show_unhandled_signals))
 			show_signal_msg(regs, error_code, address, tsk);
 
@@ -903,14 +931,15 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		tsk->thread.trap_nr	= X86_TRAP_PF;
 
 		force_sig_info_fault(SIGSEGV, si_code, address, tsk, vma, 0);
-
+        // segmentation fault 발생
 		return;
 	}
 
 	if (is_f00f_bug(regs, address))
 		return;
 
-	no_context(regs, error_code, address, SIGSEGV, si_code);
+	no_context(regs, error_code, address, SIGSEGV, si_code); 
+    // kernel 영역 page fault함수
 }
 
 static noinline void
@@ -1152,7 +1181,8 @@ access_error(unsigned long error_code, struct vm_area_struct *vma)
 	 */
 	if (error_code & PF_PK)
 		return 1;
-
+    // protection key 가 설정되어 rea/write 등이 금지되어 있다면 
+    // SIGSEGV 반환을 위해 바로 종료 
 	/*
 	 * Make sure to check the VMA so that we do not perform
 	 * faults just to hit a PF_PK as soon as we fill in a
@@ -1163,20 +1193,23 @@ access_error(unsigned long error_code, struct vm_area_struct *vma)
 		return 1;
 
 	if (error_code & PF_WRITE) {
-		/* write, present and write, not present: */
+		/* write, present and write, not present: */ 
+        // 현재가 write access 라면
 		if (unlikely(!(vma->vm_flags & VM_WRITE)))
 			return 1;
+        // VM_WRITE 설정되어 WRITE 가능한 상태이어야 함 
 		return 0;
 	}
 
 	/* read, present: */
 	if (unlikely(error_code & PF_PROT))
 		return 1;
+    // protection fault 
 
 	/* read, not present: */
 	if (unlikely(!(vma->vm_flags & (VM_READ | VM_EXEC | VM_WRITE))))
 		return 1;
-
+    
 	return 0;
 }
 
@@ -1228,13 +1261,19 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 	 * Detect and handle instructions that would cause a page fault for
 	 * both a tracked kernel page and a userspace page.
 	 */ 
-    // kmemcheck : heavyweight memory checker
+    // kmemcheck subsystem 이란?
+    //  - kernel memory debugging feature / x86 feature
+    //  - page 에 접근이 발생하여 page fault 발생시... 
+    //  - page 내의 각 byte 의 상태 tracking 
+    //  TODO
+
 	if (kmemcheck_active(regs))
 		kmemcheck_hide(regs);
 	prefetchw(&mm->mmap_sem);
 
 	if (unlikely(kmmio_fault(regs, address)))
 		return;
+    // TODO mmiotrace?
 
 	/*
 	 * We fault-in kernel-space virtual memory on-demand. The
@@ -1249,38 +1288,72 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 	 * (error_code & 4) == 0, and that the fault was not a
 	 * protection error (error_code & 9) == 0.
 	 */
-	if (unlikely(fault_in_kernel_space(address))) {
-		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {
+	if (unlikely(fault_in_kernel_space(address))) { 
+        // TASK_SIZE_MAX 보다 큰 영역의 address 인지 검사 즉
+        // kernel space 로의 fault 인지 검사 
+		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) { 
+            // PF_PROT bit(error_code 의 0 bit) 가 0 : page 가 memory 에 없다.
+            // PF_USER bit(error_code 의 2 bit) 가 0 : kernel mode access 이다.
+            // PF_RSVD bit(error code 의 1 bit) 가 0 : reserved bit 사용 안함 
+            // 
+            // 즉 kernel 영역 접근이고, 해당 page 가 현재 memory 에 없는 상태이면..           
 			if (vmalloc_fault(address) >= 0)
 				return;
-
+            // <kernel mode virtual address 에 대한 page table entry 는 
+            //  master kernel page table 에서 가져옴.>
+            //   master page table (swapper_pg_dir)에서 kernel virtual address 에 대한 
+            //   kernel physical address mapping 이 있는지 검사 후, 없다면 fault 수행 후,
+            //   해당 mapping 사항을 현재 process page table 에 반영해줌 
+            //
+            //
+            //   => 모든 process 의 kernel vaddr 영역의 mapping 이 공유됨 
+            //
 			if (kmemcheck_fault(regs, address, error_code))
-				return;
+				return; 
+            // kmemcheck 기능 관련
 		}
 
 		/* Can handle a stale RO->RW TLB: */
 		if (spurious_fault(error_code, address))
 			return;
+        // kernel page 의 read only -> read&write 등의 권한 변경 관련 fault 일 경우 처리
 
 		/* kprobes don't want to hook the spurious faults: */
 		if (kprobes_fault(regs))
 			return;
+        // kprobe page 관련 fault 일 경우 처리
 		/*
 		 * Don't take the mm semaphore here. If we fixup a prefetch
 		 * fault we could otherwise deadlock:
 		 */
+        //   여기까지 온다는 것은...
+        //   32bit 
+        //    - vmalloc 범위가 아님
+        //    - kernel 의 pmd 를 process page의 pmd 로 복사 수행을 하였으며
+        //      address 관련 pte 도 메모리에 올라와 있는 상태이다. 
+        //    - 여기 아래까지 올 경우....
+        //      pmd 가 master page table 에 memory 에 없는 상태
+        //      pmd 는 있지만 address 관련 pte 가 memory 에 없는 상태 
+        //    - kernel 영역으로 user mode 접근
+        //   64bit 
+        //    - vmalloc 범위가 아님
+        //    - pgd 까지 설정 후, master page table 내의 pud, pmd, pte 중에 하나라도 
+        //      memory 에 올라와 있는 것이 없는 경우
+        //    - kernel 영역으로 user mode 접근
+
 		bad_area_nosemaphore(regs, error_code, address, NULL);
 
 		return;
 	}
-
+    // address 가 user space 에서의 fault 일 경우
 	/* kprobes don't want to hook the spurious faults: */
 	if (unlikely(kprobes_fault(regs)))
 		return;
 
 	if (unlikely(error_code & PF_RSVD))
 		pgtable_bad(regs, error_code, address);
-
+    // Reserved bit 를 넘어가는 접근 발생했으므로 Oops 발생 
+    // reserved bit 는 MMU 에 의해 설정됨
 	if (unlikely(smap_violation(error_code, regs))) {
 		bad_area_nosemaphore(regs, error_code, address, NULL);
 		return;
@@ -1294,6 +1367,8 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 		bad_area_nosemaphore(regs, error_code, address, NULL);
 		return;
 	}
+    // pagefault 가 disable 되어 있는 경우 -> interrupt 
+    // user space 에 대한 접근이며, mm 을 가지고 있지 않은 경우 -> kernel thread 인 경우 
 
 	/*
 	 * It's safe to allow irq's after cr2 has been saved and the
@@ -1317,7 +1392,7 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 		flags |= FAULT_FLAG_WRITE;
 	if (error_code & PF_INSTR)
 		flags |= FAULT_FLAG_INSTRUCTION;
-
+    // error code 에 따른 fault flag 설정
 	/*
 	 * When running in the kernel we expect faults to occur only to
 	 * addresses in user space.  All other faults represent errors in
@@ -1350,18 +1425,51 @@ retry:
 		 */
 		might_sleep();
 	}
-
+    // 위에서 예외상황 처리함 이제 user space address space 에대한 
+    // page fault 처리 시작
 	vma = find_vma(mm, address);
 	if (unlikely(!vma)) {
-		bad_area(regs, error_code, address);
+		bad_area(regs, error_code, address);        
 		return;
+        // case1. address 가 모든 vma 의 vm_end 보다 큼
+        //
+        //  ...         vm_start ~ vm_end      vm_start ~ vm_end
+        //                |          |           |          |   
+        // 0 <- ... ------++++++++++++-----------++++++++++++----------+--- -> 3G
+        //                                                             |
+        //                                                          address
+        //
+        // 이경우는 user mode 접근이며, 접근하려는 address 에 대한 
+        // vma 가 없는 경우이므로 bad_area 내부에서 SIGSEGV 처리
 	}
 	if (likely(vma->vm_start <= address))
 		goto good_area;
+        // case2. address 보다 큰 vma 찾았으며, address 가 vma 에 속함
+        //
+        //  ...         vm_start ~ vm_end      vm_start ~ vm_end
+        //                |          |           |          |   
+        // 0 <- ... ------++++++++++++-----------++++++++++++-------------- -> 3G
+        //                                            |
+        //                                         address
+        //
+        // process address space 에 있는 상태 -> 정상적인 page fault 처리
+        //
 	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN))) {
 		bad_area(regs, error_code, address);
+        // case3. address 보다큰 vma 찾았으며, address 가 vma 에 속하지 않으며 
+        // 해당 vma 가 stack 이 아님
+        //
+        //  ...         vm_start ~ vm_end      vm_start ~ vm_end
+        //                |          |           |          |   
+        // 0 <- ... ------++++++++++++-----------++++++++++++-------------- -> 3G
+        //                              |
+        //                            address
+        //
+        // process address space 에 있는 상태 -> 정상적인 page fault 처리
+        //
 		return;
 	}
+    // 
 	if (error_code & PF_USER) {
 		/*
 		 * Accessing the stack below %sp is always a bug.
@@ -1373,10 +1481,13 @@ retry:
 			bad_area(regs, error_code, address);
 			return;
 		}
+        // TODO - stack pointer 보다 낮은 주소 접근 검사인가?...
 	}
 	if (unlikely(expand_stack(vma, address))) {
-		bad_area(regs, error_code, address);
+		bad_area(regs, error_code, address);     
 		return;
+        // case3. 에서 stack 이 더 자랄 수 있는지 검사.
+        // 더 커질 수 없다면 SIGSEGV 발생
 	}
 
 	/*
@@ -1386,7 +1497,8 @@ retry:
 good_area:
 	if (unlikely(access_error(error_code, vma))) {
 		bad_area_access_error(regs, error_code, address, vma);
-		return;
+		return; 
+        // access permission 검사 후, persmission error 인 경우, SIGSEGV 발생
 	}
 
 	/*
@@ -1395,27 +1507,36 @@ good_area:
 	 * the fault.  Since we never set FAULT_FLAG_RETRY_NOWAIT, if
 	 * we get VM_FAULT_RETRY back, the mmap_sem has been unlocked.
 	 */
-	fault = handle_mm_fault(vma, address, flags);
+	fault = handle_mm_fault(vma, address, flags); 
+    // fault correction 수행( e.g. demand paging, swap-in )
+    // page fault 제대로 수행되면 fault 에 VM_FAULT_MAJOR 또는 VM_FAULT_MINOR 설정
 	major |= fault & VM_FAULT_MAJOR;
-
+    // major fault 인지 확인
 	/*
 	 * If we need to retry the mmap_sem has already been released,
 	 * and if there is a fatal signal pending there is no guarantee
 	 * that we made any progress. Handle this case first.
 	 */
 	if (unlikely(fault & VM_FAULT_RETRY)) {
+        // fault 수행 결과 resource 를 lock 때문에 얻을 수 없는 상황일 경우 
+        // 한번 더 page fault 재시도 가능(mmap_sem 풀린 상태이므로 다시 
+        // retry 에서 down 해주어야 함)
 		/* Retry at most once */
-		if (flags & FAULT_FLAG_ALLOW_RETRY) {
+		if (flags & FAULT_FLAG_ALLOW_RETRY) {            
 			flags &= ~FAULT_FLAG_ALLOW_RETRY;
 			flags |= FAULT_FLAG_TRIED;
 			if (!fatal_signal_pending(tsk))
 				goto retry;
+            // 두번째 시도임을 FLAULT_FLAG_TRIED 를 통해 마킹 후 retry 로 
+            // 돌아가 재시도
 		}
-
+        // 두번째 시도 실해 후 user space 에서의 fault 라면 그냥 
+        // page fault 를 user process 에 반환
 		/* User mode? Just return to handle the fatal exception */
 		if (flags & FAULT_FLAG_USER)
 			return;
-
+        // 두번째 시도 실패 후 usser space 에서의 fault 가 아니라면
+        // Oops 검사 또는 Exception handler 수행
 		/* Not returning to user mode? Handle exceptions or die: */
 		no_context(regs, error_code, address, SIGBUS, BUS_ADRERR);
 		return;
@@ -1430,7 +1551,8 @@ good_area:
 	/*
 	 * Major/minor page fault accounting. If any of the events
 	 * returned VM_FAULT_MAJOR, we account it as a major fault.
-	 */
+	 */ 
+    // perf flag update 해줌
 	if (major) {
 		tsk->maj_flt++;
 		perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS_MAJ, 1, regs, address);
@@ -1448,15 +1570,23 @@ NOKPROBE_SYMBOL(__do_page_fault);
 // page fault 함수
 //  regs : fault 시에 active 한 register set 으로 kernel stack 의 register 값 
 //         pt_regs 는 register 를 stack 에 저장하기 위해 사용
-//  error_code : err code 로 3bit 사용...지금도?
-//                     |        Set(1)          |                Not Set(0)              |
-//               -------------------------------------------------------------------------
-//               0 bit | no page present in RAM |   Protection fault(access persmission)
-//               -------------------------------------------------------------------------
-//               1 bit | read access            |   write access
-//               -------------------------------------------------------------------------
-//               2 bit | kernel mode            |   user mode 
-// 
+//  error_code : err code 로 3bit 사용(v2.6)...지금은 5 bit 가 사용(v4.11)
+//                     |        Not Set(0)        |                Set(1)                  |
+//               --------------------------------------------------------------------------------
+//               0 bit | no page present in RAM   |   Protection fault(access persmission)
+//               --------------------------------------------------------------------------------
+//               1 bit | 현재 acces 가read access |   현재 access 가 write access
+//               --------------------------------------------------------------------------------
+//               2 bit | kernel mode access       |   user mode access
+//               --------------------------------------------------------------------------------
+//               3 bit |                          |   use of reserved bit detected 
+//                     |                          |   reserved bit 에 무언가 사용됨 즉 Oops 발생
+//               --------------------------------------------------------------------------------
+//               4 bit |                          |   instruction fetch 로 인한 page fault 임
+//               --------------------------------------------------------------------------------
+//               5 bit |                          |   protection key block access 
+//                     |                          |   v4.6 부터 추가된 intel protection key 기능
+//               --------------------------------------------------------------------------------
 //
 dotraplinkage void notrace
 do_page_fault(struct pt_regs *regs, unsigned long error_code)
@@ -1475,11 +1605,19 @@ do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	 * exception_{enter,exit}() contain all sorts of tracepoints.
 	 */
 
+    // kernel context tracking subsystem 이란?
+    //  The context tracking in the Linux kernel subsystem 
+    //  which provide kernel boundaries probes to keep track of 
+    //  the transitions between level contexts with two basic 
+    //  initial contexts: user or kernel.
+
 	prev_state = exception_enter();
-    // kernel context 로의 진입 flag 
+    // kernel context tracking 에 user -> kernel 로의 
+    // context 전환한다고 알림
 	__do_page_fault(regs, error_code, address);
 	exception_exit(prev_state);
-    // kernel context 에서의 out flag
+    // kernel context tracking 에 kernel -> user 로의 
+    // context 전환한다고 알림
 }
 NOKPROBE_SYMBOL(do_page_fault);
 

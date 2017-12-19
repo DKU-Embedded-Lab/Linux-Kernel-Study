@@ -50,10 +50,12 @@ static inline enum ctx_state exception_enter(void)
 
 	if (!context_tracking_is_enabled())
 		return 0;
-
+    // context tracking 이 설정되어 있는지 검사
 	prev_ctx = this_cpu_read(context_tracking.state);
 	if (prev_ctx != CONTEXT_KERNEL)
-		context_tracking_exit(prev_ctx);
+		context_tracking_exit(prev_ctx); 
+    // 현재 user context 에서 kernel context 로 전환한다고 
+    // context tracking 에 알림
 
 	return prev_ctx;
 }
