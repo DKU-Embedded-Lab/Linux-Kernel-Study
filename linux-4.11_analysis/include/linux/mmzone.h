@@ -649,7 +649,7 @@ static inline bool zone_is_empty(struct zone *zone)
 
 /* Maximum number of zones on a zonelist */
 #define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
-
+// 모든 node 에 있는 zone 들 다 합친 것
 enum {
 	ZONELIST_FALLBACK,	/* zonelist with fallback */
 #ifdef CONFIG_NUMA
@@ -689,8 +689,76 @@ struct zoneref {
 // 할당하려 하지만 local 에 할당이 실패할 경우를 대비하여 memory allocation 을 위한 
 // alternative node 의 list 를 가진다.
 // zonelist  배열에서 뒷 entry 일수록 할당 우선순위가 낮음 
+// 
+// UMA 의 경우.. fallback list 의 초기화 결과
+//  NODE : A, B, C (A->B->C)
+//  ZONE : ZONE_HIGHMEM-2, ZONE_NORMAL-1, ZONE_DMA-0
+//   위와 같다고할 때...
+// 
+//  node A 의 fallback list 할당 상태는...  
+// 
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[0] = A2
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[1] = A1
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[2] = A0
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[3] = B2
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[4] = B1
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[5] = B0
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[6] = C2
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[7] = C1
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[8] = C0
+//
+// NUMA 의 경우 ... 
+//  node A 의 할당 순서가 C,B,D 라고 할때...
+//      1
+//   A ---- C
+// 2 |      | 2
+//   |      |
+//   B ---- D
+//      1
+//
+//                        |         32bit        |         64bit        |
+//                        -----------------------------------------------
+// current_zonelist_order | ZONELIST_ORDER_ZONE  |  ZONELIST_ORDER_NODE |
+//
+// < 32 bit 는... default 로 ZONELIST_ORDER_ZONE 
+// 
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[0]  = A HIGHMEM
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[1]  = C HIGHMEM
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[2]  = B HIGHMEM
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[3]  = D HIGHMEM 
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[4]  = A NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[5]  = C NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[6]  = B NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[7]  = D NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[8]  = A DMA
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[9]  = C DMA
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[10] = B DMA
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[11] = D DMA
+//   
+//      node_zonelist[ZONELIST_NOFALLBACK]->_zonerefs[0] = A HIGHMEM
+//      node_zonelist[ZONELIST_NOFALLBACK]->_zonerefs[1] = A NORMAL
+//      node_zonelist[ZONELIST_NOFALLBACK]->_zonerefs[2] = A DMA
+//
+// < 64 bit 는... default 로 ZONELIST_ORDER_NODE >
+//
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[0]  = A NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[1]  = A DMA
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[2]  = C NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[3]  = C DMA
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[4]  = B NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[5]  = B DMA
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[6]  = D NORMAL
+//      node_zonelist[ZONELIST_FALLBACK]->_zonerefs[7]  = D DMA 
+//
+//      node_zonelist[ZONELIST_NOFALLBACK]->_zonerefs[0] = A NORMAL
+//      node_zonelist[ZONELIST_NOFALLBACK]->_zonerefs[1] = A DMA
+
+
+
+
 struct zonelist {
-	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1];
+	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1]; 
+    // +1 은 list 의 end 를 위한 null pointer
 };
 
 #ifndef CONFIG_DISCONTIGMEM

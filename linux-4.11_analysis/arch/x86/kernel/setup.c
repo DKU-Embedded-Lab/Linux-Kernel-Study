@@ -968,7 +968,9 @@ void __init setup_arch(char **cmdline_p)
 		/* append boot loader cmdline to builtin */
 		strlcat(builtin_cmdline, " ", COMMAND_LINE_SIZE);
 		strlcat(builtin_cmdline, boot_command_line, COMMAND_LINE_SIZE);
-		strlcpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+		 rse       // order 가 node 순이면 zonelist 를 order 순으로 구성하고 
+        // zone 순이면 node 선택한 순서 기억?... 뭔소리?.. 
+strlcpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
 	}
 #endif
 #endif

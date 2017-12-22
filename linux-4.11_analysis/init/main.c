@@ -484,7 +484,8 @@ static void __init mm_init(void)
 	vmalloc_init();
 	ioremap_huge_init();
 }
-
+// kernel 의entry point 로 커널의 거의 모든 초기화를 처리하는 함수 
+// kernel 이 loading 및 architecture specific set up 이후 바로 호출
 asmlinkage __visible void __init start_kernel(void)
 {
 	char *command_line;
@@ -512,14 +513,28 @@ asmlinkage __visible void __init start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
+    // architecture specific 설정 함수 
+    //
+    //
 	mm_init_cpumask(&init_mm);
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
 	setup_per_cpu_areas();
+    // per-CPU 변수들 초기화
 	boot_cpu_state_init();
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
 
 	build_all_zonelists(NULL, NULL);
+    // node, zone 관련 data structure 초기화 수행 
+    // node, zone 들의 memory 할당 순서를 결정하고 그 순서대로 memory 할당 진행 
+    //  
+    //  e.g. ZONE_HIGHMEM -> ZONE_NORMAL -> ZONE_DMA 순서로 할당 하려 시도...
+    //       다 실패할 시, 다른 node 로 넘어가 같은 순서로 할당 시도. 
+    //
+    //     * ZONE_HIGHMEM : 여기에 할당된 memory 에 kernel 이영향 안받음 즉 
+    //                      highmem 부족해도 kernel 은 no negative effect 
+    //     * ZONE_NORMAL  : 여러가지 kernel 관련 구조체들이 할당됨
+    //
 	page_alloc_init();
 
 	pr_notice("Kernel command line: %s\n", boot_command_line);
@@ -544,7 +559,9 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
-
+    // bootmemory allocator 을 중지 시키고, 
+    // 실제 kernel memory management 로의 전환 함수 
+    // mem_init 등의 함수 수행.
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
 	 * timer interrupt). Full topology setup happens at smp_init()
@@ -627,6 +644,7 @@ asmlinkage __visible void __init start_kernel(void)
 	debug_objects_mem_init();
 	kmemleak_init();
 	setup_per_cpu_pageset();
+    // 각 zone 들의 CPU 들에게 각각 할당될 order 0 짜리 page 들을 초기화
 	numa_policy_init();
 	if (late_time_init)
 		late_time_init();

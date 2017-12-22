@@ -4658,6 +4658,15 @@ static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
  *
  * Add all populated zones of a node to the zonelist.
  */
+// 
+// zone_type 의 상위 type 의 zone 부터 검사하여 page 가 있는 zone 일 시, 
+// pg_data_t 의 fallback list 에 추가시킴 
+// 
+// e.g. ZONE_DMA, ZONE_NORMAL, ZONE_HIGHMEM 이 있다고 할 때...
+//      zonelist->_zonerefs[0] = ZONE_HIGHMEM
+//      zonelist->_zonerefs[1] = ZONE_NORMAL
+//      zonelist->_zonerefs[2] = ZONE_DMA
+//
 static int build_zonelists_node(pg_data_t *pgdat, struct zonelist *zonelist,
 				int nr_zones)
 {
@@ -4666,10 +4675,18 @@ static int build_zonelists_node(pg_data_t *pgdat, struct zonelist *zonelist,
 
 	do {
 		zone_type--;
-		zone = pgdat->node_zones + zone_type;
+		zone = pgdat->node_zones + zone_type; 
+        // MAX_NR_ZONES 부터 시작하여 zone의 managed_pages 즉 buddy 에의해
+        // 관리되는 page가 존재하는지 검사(zone 에 page 가 있는지 검사)
 		if (managed_zone(zone)) {
 			zoneref_set_zone(zone,
 				&zonelist->_zonerefs[nr_zones++]);
+            // nr_zones 는 0부터 증가하고, zone_type 는 5 (MAX_NR_ZONES)
+            // 부터 감소 하므로 fallback list 를 
+            // ZONE_DEVICE -> ZONE_MOVABLE -> ZONE_HIGHMEM -> ZONE_NORMAL -> ZONE_DMA32 -> ZONE_DMA 
+            // 순서로 fallback list 로 구성하여 zonelist 내의 zoneref 배열 내에 
+            // 초기화 되도록 함 
+            // 위의 ZONE 순서에서 page 가 없다면 하위 type 의 zone 으로 내려가 검사
 			check_highest_zone(zone_type);
 		}
 	} while (zone_type);
@@ -4864,8 +4881,12 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int node)
 
 	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK];
 	for (j = 0; zonelist->_zonerefs[j].zone != NULL; j++)
-		;
-	j = build_zonelists_node(NODE_DATA(node), zonelist, j);
+		; 
+    // 이미 등록된 다른 node 들의 zone을 지나 현재 pgdat 의 zone 이 들어갈 
+    // 위치를 찾는 for 문
+	j = build_zonelists_node(NODE_DATA(node), zonelist, j); 
+    // pgdat 의 zonelist 에 node 에 해당하는 pg_data_t 에 존재하는 zone 을
+    // 거꾸로 순서부터( e.g. highmem 부터 추가 )
 	zonelist->_zonerefs[j].zone = NULL;
 	zonelist->_zonerefs[j].zone_idx = 0;
 }
@@ -4880,6 +4901,8 @@ static void build_thisnode_zonelists(pg_data_t *pgdat)
 
 	zonelist = &pgdat->node_zonelists[ZONELIST_NOFALLBACK];
 	j = build_zonelists_node(pgdat, zonelist, 0);
+    // NOFALLBACK 의 경우 현재 node 에 대해서만 fallback 순서 지정.
+    // zone_type 거꾸로 추가  
 	zonelist->_zonerefs[j].zone = NULL;
 	zonelist->_zonerefs[j].zone_idx = 0;
 }
@@ -4899,18 +4922,26 @@ static void build_zonelists_in_zone_order(pg_data_t *pgdat, int nr_nodes)
 	struct zone *z;
 	struct zonelist *zonelist;
 
-	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK];
+	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK]; 
+    // fallback list 를 구성할 node 의 zonelist
 	pos = 0;
 	for (zone_type = MAX_NR_ZONES - 1; zone_type >= 0; zone_type--) {
+        // zone_type 별로.. 
 		for (j = 0; j < nr_nodes; j++) {
 			node = node_order[j];
-			z = &NODE_DATA(node)->node_zones[zone_type];
+			z = &NODE_DATA(node)->node_zones[zone_type]; 
+            // 그전 외부러부터 distance 를 기반으로 설정한 node_order 를 
+            // 기반으로 node 번호에 해당하는 pg_data_t 를 가져와 그 node 에서
+            // zone_type 에 해당하는 zone 을 가져옴
+        
 			if (managed_zone(z)) {
 				zoneref_set_zone(z,
 					&zonelist->_zonerefs[pos++]);
 				check_highest_zone(zone_type);
 			}
-		}
+		} 
+        // node_order 의 순서대로 
+        // ZONE_HIGHMEM 다 추가 -> ZONE_NORMAL다 추가 -> ZONE_DMA 다 추가
 	}
 	zonelist->_zonerefs[pos].zone = NULL;
 	zonelist->_zonerefs[pos].zone_idx = 0;
@@ -4948,32 +4979,70 @@ static void set_zonelist_order(void)
 	else
 		current_zonelist_order = user_zonelist_order;
 }
-
+// NUMA 일 경우 
+// pgdat 라는 ZONE 의 fallback hierarchy 를 생성
+//
 static void build_zonelists(pg_data_t *pgdat)
 {
 	int i, node, load;
 	nodemask_t used_mask;
 	int local_node, prev_node;
 	struct zonelist *zonelist;
-	unsigned int order = current_zonelist_order;
-
+	unsigned int order = current_zonelist_order; 
+    //
+    //                        |         32bit        |         64bit        |
+    //                        -----------------------------------------------
+    // current_zonelist_order | ZONELIST_ORDER_ZONE  |  ZONELIST_ORDER_NODE |
+    //
+    //
 	/* initialize zonelists */
 	for (i = 0; i < MAX_ZONELISTS; i++) {
 		zonelist = pgdat->node_zonelists + i;
+        // NUMA 의 경우엔 ZONELIST_FALLBACK, ZONELIST_NOFALLBACK 두개의 
+        // LIST 를 가지고 있지만 UMA 의 경우엔 ZONELIST_FALLBACK 하나만 
+        // 가지고있음
 		zonelist->_zonerefs[0].zone = NULL;
 		zonelist->_zonerefs[0].zone_idx = 0;
 	}
 
 	/* NUMA-aware ordering of nodes */
 	local_node = pgdat->node_id;
+    // 현재 zone order 를 요청중인 pgdat 의 node id
 	load = nr_online_nodes;
+    // 운용중인 node 수
 	prev_node = local_node;
-	nodes_clear(used_mask);
+    // 이전 node 에 현재 요청 node 를 초기값으로 설정
+	nodes_clear(used_mask);    
 
-	memset(node_order, 0, sizeof(node_order));
+	memset(node_order, 0, sizeof(node_order)); 
+    // 총 node 수만큼의 크기를 가진 node_order 배열을 0 으로 초기화
 	i = 0;
 
-	while ((node = find_next_best_node(local_node, &used_mask)) >= 0) {
+	while ((node = find_next_best_node(local_node, &used_mask)) >= 0) { 
+        // used_mask bitmap 에 포함되지 않은 node 중 가장 인접한 node 선택 
+        // A(0)   B(1)   C(2)   D(3)
+        //  
+        //      1
+        //   A ---- B
+        // 2 |      | 2
+        //   |      |
+        //   C ---- D
+        //      1
+        //
+        //  요청이 A 일때..
+        // 
+        // step 1) A-B:1 != A-A:0
+        //  node_load  [0][3][0][0] 3
+        //  node_order [a][b][ ][ ]
+        //
+        // step 2) A-C:2 != A-B:1
+        //  node_load  [0][3][2][0] 2
+        //  node_order [a][b][c][ ]
+        //
+        // step 3) A-D:3 != A-C:2
+        //  node_load  [0][3][2][1] 1
+        //  node_order [a][b][c][d] 
+        //
 		/*
 		 * We don't want to pressure a particular node.
 		 * So adding penalty to the first node in same
@@ -4982,21 +5051,31 @@ static void build_zonelists(pg_data_t *pgdat)
 		if (node_distance(local_node, node) !=
 		    node_distance(local_node, prev_node))
 			node_load[node] = load;
-
+            // 이전 노드와 거리가 다르라면 운용중인 node 수를 node_load 에 대입
 		prev_node = node;
 		load--;
 		if (order == ZONELIST_ORDER_NODE)
 			build_zonelists_in_node_order(pgdat, node);
+            // ZONELIST_FALLBACK 초기화       
+            // 64bit default 
+            // 현재 선택한 node 의 zone 을 ZONELIST_FALLBACK 에 추가
 		else
-			node_order[i++] = node;	/* remember order */
+			node_order[i++] = node;	/* remember order */ 
+            // 현재 while 문 끝나고 build_zonelists_in_zone_order 에 쓰임
 	}
 
 	if (order == ZONELIST_ORDER_ZONE) {
 		/* calculate node order -- i.e., DMA last! */
 		build_zonelists_in_zone_order(pgdat, i);
+        // ZONELIST_FALLBACK 초기화
+        // 32bit default 
+        // i : node 의 총 수 
+        // node_order 에 정해놓은 순서대로 zone type 의 높은 type 부터 
+        // 다 추가        
 	}
 
 	build_thisnode_zonelists(pgdat);
+    // ZONELIST_NOFALLBACK 부분 초기화 
 }
 
 #ifdef CONFIG_HAVE_MEMORYLESS_NODES
@@ -5025,7 +5104,9 @@ static void set_zonelist_order(void)
 {
 	current_zonelist_order = ZONELIST_ORDER_ZONE;
 }
-
+// UMA 일 경우
+// pgdat 라는 ZONE 의 fallback hierarchy 를 생성
+//
 static void build_zonelists(pg_data_t *pgdat)
 {
 	int node, local_node;
@@ -5034,9 +5115,15 @@ static void build_zonelists(pg_data_t *pgdat)
 
 	local_node = pgdat->node_id;
 
-	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK];
+	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK]; 
+    // NUMA 의 경우엔 ZONELIST_FALLBACK, ZONELIST_NOFALLBACK 두개의 
+    // LIST 를 가지고 있지만 UMA 의 경우엔 ZONELIST_FALLBACK 하나만 
+    // 가지고있음
+    //
+    // zonelist 를 pgdat 의 node_zonelist 를 가리키도록 함 즉
+    // fallback list 를 가리키도록 하여 조작이 가능하도록 함
 	j = build_zonelists_node(pgdat, zonelist, 0);
-
+    // fallback order 가 j 에zone_type 형식으로 반환
 	/*
 	 * Now we build the zonelist so that it contains the zones
 	 * of all the other nodes.
@@ -5099,13 +5186,16 @@ static int __build_all_zonelists(void *data)
 #endif
 
 	if (self && !node_online(self->node_id)) {
-		build_zonelists(self);
+		build_zonelists(self); 
+        // 현재 system 내에 있는 node 들을 순회하며 zonelist 를 생성
 	}
 
 	for_each_online_node(nid) {
 		pg_data_t *pgdat = NODE_DATA(nid);
 
 		build_zonelists(pgdat);
+        // node 별로 순회하며 zone 들의 fallback hierarchy 구성 및 
+        // pg_data_t 내부의 data structure 생성
 	}
 
 	/*
@@ -5158,6 +5248,21 @@ build_all_zonelists_init(void)
  * (2) call of __init annotated helper build_all_zonelists_init
  * [protected by SYSTEM_BOOTING].
  */
+// 
+// node, zone 관련 data structure 초기화 수행 
+// node, zone 들의 memory 할당 순서를 결정하고 그 순서대로 memory 할당 진행 
+//  
+//  e.g. ZONE_HIGHMEM -> ZONE_NORMAL -> ZONE_DMA 순서로 할당 하려 시도...
+//       다 실패할 시, 다른 node 로 넘어가 같은 순서로 할당 시도. 
+//
+//     * ZONE_HIGHMEM : 여기에 할당된 memory 에 kernel 이영향 안받음 즉 
+//                      highmem 부족해도 kernel 은 no negative effect 
+//     * ZONE_NORMAL  : 여러가지 kernel 관련 구조체들이 할당됨, normal 영역의 
+//                      memory 가 부족하게 되면, kernel 에 negative effect
+//                      highmem 의 memory 가 다차기 전까지 normal 에 할당 안함 
+//     * ZONE_DMA     : 주변장치와 data 를 주고 받을 때 사용되기 때문에 가장 critical
+//                      
+//
 void __ref build_all_zonelists(pg_data_t *pgdat, struct zone *zone)
 {
 	set_zonelist_order();
@@ -5172,6 +5277,10 @@ void __ref build_all_zonelists(pg_data_t *pgdat, struct zone *zone)
 		/* we have to stop all cpus to guarantee there is no user
 		   of zonelist */
 		stop_machine(__build_all_zonelists, pgdat, NULL);
+        // 여기 내부에서 interrupt save 후 
+        // __build_all_zonelists 호출
+        // 끝나고 interrupt restore
+
 		/* cpuset refresh routine should be here */
 	}
 	vm_total_pages = nr_free_pagecache_pages();

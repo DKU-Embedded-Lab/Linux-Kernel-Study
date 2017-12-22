@@ -20,9 +20,19 @@
 
 #include "internal.h"
 
-#ifndef CONFIG_NEED_MULTIPLE_NODES
+#ifndef CONFIG_NEED_MULTIPLE_NODES 
+// 
+// CONFIG_NEED_MULTIPLE_NODES 설정이 되어 있지 않다면...
+// contig_page_data 를 통해 하나의 node 에 해당하는 pglist_data 가리킴
+//
+// 설정되어 있다면 NODE_DATA 매크롤를 사용하여 NUMA 의 NODE 마다의 
+// pglist_data 를 통해 pglist_data 가리킴 
+// 
+// UMA 의 경우임
 struct pglist_data __refdata contig_page_data = {
-	.bdata = &bootmem_node_data[0]
+	.bdata = &bootmem_node_data[0] 
+    // node 가 하나이므로 bootmem_node_data 배열의 첫번째를 pglist_data 가 
+    // 가리키도록 설정함
 };
 EXPORT_SYMBOL(contig_page_data);
 #endif
@@ -33,6 +43,8 @@ unsigned long max_pfn;
 unsigned long long max_possible_pfn;
 
 bootmem_data_t bootmem_node_data[MAX_NUMNODES] __initdata;
+// NUMA 의 경우 node 의 수 만큼 bootmem_data 가 node 마다 존재 하며 
+// bootmem_data.list 를 통해 연결
 
 static struct list_head bdata_list __initdata = LIST_HEAD_INIT(bdata_list);
 
@@ -694,6 +706,9 @@ static void * __init ___alloc_bootmem(unsigned long size, unsigned long align,
  *
  * The function panics if the request can not be satisfied.
  */
+//
+// size : reserve 하려는 memory size 
+// goal : free area 를 검색하려는주소의 시작 위치
 void * __init __alloc_bootmem(unsigned long size, unsigned long align,
 			      unsigned long goal)
 {

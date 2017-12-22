@@ -9,7 +9,11 @@
 #include <asm/smp.h>
 
 #ifdef CONFIG_NUMA
-extern struct pglist_data *node_data[];
+extern struct pglist_data *node_data[]; 
+
+// architecture specific mecro 로 NUMA 의 각 node 에 해당하는 
+// pg_data 즉 pglist_data 를 불러옴
+// 
 #define NODE_DATA(nid)	(node_data[nid])
 #endif /* CONFIG_NUMA */
 

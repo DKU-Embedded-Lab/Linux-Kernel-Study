@@ -718,6 +718,7 @@ void free_init_pages(char *what, unsigned long begin, unsigned long end)
 	}
 }
 
+// kernel initialization 시에 사용된 memory 를 buddy allocator 에게 반환
 void __ref free_initmem(void)
 {
 	e820_reallocate_tables();

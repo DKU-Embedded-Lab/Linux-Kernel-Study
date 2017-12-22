@@ -31,15 +31,43 @@ extern unsigned long long max_possible_pfn;
  * memory pages (including holes) on the node.
  */
 typedef struct bootmem_data {
-	unsigned long node_min_pfn;
+	unsigned long node_min_pfn; 
+    // 시작 page frame , 대부분 0
 	unsigned long node_low_pfn;
+    // direct mapped 영역에서 관리 될 수 있는 
+    // physical page frame 의 수.
+    // 즉 ZONE_NORMAL 의 끝(vmalloc 영역 시작 전)
 	void *node_bootmem_map;
+    // allocation bitmap 이 저장된 memory 영역 즉 관리용 bitmap
+    // 
+    // 32bit 의 경우...
+    //
+    // PAGE_OFFSET 이후
+    //
+    //   0x00C0..                                                                                                                                       1G
+    //   |-----------------------------------------------------------------------------------------------------------------------------------------------|
+    //   |           direct mapping area                                                                     |  vmalloc area  | kmap area | fixed vaddr  |
+    //   |                                                                                                   |                |           |              |            
+    //   |  x86 area(1MB)      Kernel Image(8MB)      ZONE_DMA(16MB)        ZONE_NORMAL(871MB)               |                |           |              |
+    //   |   BIOS reserve       text, data                                   kernel pages                    |                |           |              |
+    //   |                      bootmem page bitmap                          slab caches                     |                |           |              |
+    //   |                      kernel page table                            (e.g. page tables, task_struct) |                |           |              |
+    //   -------------------------------------------------------------------------------------------------------------------------------------------------
+    //
 	unsigned long last_end_off;
+    // 마지막으로 할당한 위치 
+    // 즉 최 상단의 할당된 page frame
 	unsigned long hint_idx;
-	struct list_head list;
+    // 다음에 사용될 page frame 의 위치
+	struct list_head list; 
+    // 다른 node 의 bootmem_data
 } bootmem_data_t;
-
+// 
+// bootmem_node_data 라는 이름으로 각 node 마다 있음 
+// 대부분 이제 memblock 으로 전환됨
+//
 extern bootmem_data_t bootmem_node_data[];
+
 #endif
 
 extern unsigned long bootmem_bootmap_pages(unsigned long);
@@ -123,19 +151,22 @@ extern void *__alloc_bootmem_low_node(pg_data_t *pgdat,
 #ifndef ARCH_LOW_ADDRESS_LIMIT
 #define ARCH_LOW_ADDRESS_LIMIT  0xffffffffUL
 #endif
-
+// boot memory reserve 
 #define alloc_bootmem(x) \
-	__alloc_bootmem(x, SMP_CACHE_BYTES, BOOTMEM_LOW_LIMIT)
+	__alloc_bootmem(x, SMP_CACHE_BYTES, BOOTMEM_LOW_LIMIT) 
+// SMP_CACHE_BYTES 는 L1 cache 크기에 맞추어 align 하라는 것
 #define alloc_bootmem_align(x, align) \
 	__alloc_bootmem(x, align, BOOTMEM_LOW_LIMIT)
 #define alloc_bootmem_nopanic(x) \
-	__alloc_bootmem_nopanic(x, SMP_CACHE_BYTES, BOOTMEM_LOW_LIMIT)
+	__alloc_bootmem_nopanic(x, SMP_CACHE_BYTES, BOOTMEM_LOW_LIMIT) 
+// SMP_CACHE_BYTES 는 L1 cache 크기에 맞추어 align 하라는 것
 #define alloc_bootmem_pages(x) \
 	__alloc_bootmem(x, PAGE_SIZE, BOOTMEM_LOW_LIMIT)
 #define alloc_bootmem_pages_nopanic(x) \
 	__alloc_bootmem_nopanic(x, PAGE_SIZE, BOOTMEM_LOW_LIMIT)
 #define alloc_bootmem_node(pgdat, x) \
-	__alloc_bootmem_node(pgdat, x, SMP_CACHE_BYTES, BOOTMEM_LOW_LIMIT)
+	__alloc_bootmem_node(pgdat, x, SMP_CACHE_BYTES, BOOTMEM_LOW_LIMIT) 
+// NUMA 를 위한 boot memmory allcoator
 #define alloc_bootmem_node_nopanic(pgdat, x) \
 	__alloc_bootmem_node_nopanic(pgdat, x, SMP_CACHE_BYTES, BOOTMEM_LOW_LIMIT)
 #define alloc_bootmem_pages_node(pgdat, x) \

@@ -788,6 +788,7 @@ static void print_bad_pte(struct vm_area_struct *vma, unsigned long addr,
 #else
 # define HAVE_PTE_SPECIAL 0
 #endif
+// VM_MIXEDMAP, VM_PFNMAP, special mapping
 struct page *vm_normal_page(struct vm_area_struct *vma, unsigned long addr,
 				pte_t pte)
 {
@@ -2519,8 +2520,10 @@ static int do_wp_page(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 
-	vmf->page = vm_normal_page(vma, vmf->address, vmf->orig_pte);
-	if (!vmf->page) {
+	vmf->page = vm_normal_page(vma, vmf->address, vmf->orig_pte); 
+    // vmf->orig_pte 에 해당하는 struct page 를 가져옴
+	if (!vmf->page) { 
+        // pte 에 해당하는 struct page 가 현재 없다면
 		/*
 		 * VM_MIXEDMAP !pfn_valid() case, or VM_SOFTDIRTY clear on a
 		 * VM_PFNMAP VMA.
