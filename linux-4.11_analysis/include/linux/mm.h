@@ -383,8 +383,8 @@ struct vm_operations_struct {
     // vm_area_struct 가 삭제될 때
 	int (*mremap)(struct vm_area_struct * area);
 	int (*fault)(struct vm_fault *vmf); 
-    // physical memory 가 없는 page 에 access 시, page fault handler 가 
-    // 호출하는 함수
+    // file-backed page 에 대하여 physical memory 에 올라와 있지 않은 page 에 대해
+    // access 시, page fault handler 가 호출하는 함수
 	int (*huge_fault)(struct vm_fault *vmf, enum page_entry_size pe_size);
 	void (*map_pages)(struct vm_fault *vmf,
 			pgoff_t start_pgoff, pgoff_t end_pgoff);

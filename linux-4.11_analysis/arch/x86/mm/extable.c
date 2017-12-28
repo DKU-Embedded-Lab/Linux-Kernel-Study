@@ -116,8 +116,9 @@ int fixup_exception(struct pt_regs *regs, int trapnr)
 		panic("do_trap: can't hit this");
 	}
 #endif
-    // 등록된 Exception Handler 검색 
 	e = search_exception_tables(regs->ip);
+    // 등록된 Exception Handler 검색  
+    // regs->ip : fault 가 난 주소
 	if (!e)
 		return 0;
 

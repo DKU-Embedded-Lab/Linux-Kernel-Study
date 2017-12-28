@@ -216,6 +216,11 @@
 
 #define IDT_ENTRIES			256
 #define NUM_EXCEPTION_VECTORS		32
+// 전체 interrupt vector table 내의 entry 수는 255 개이며...
+//  0  ~ 31  : architecture-defined 된 exception, interrupts 로 reserved 된 것들 
+//  32 ~ 255 : user-defined interrrupt 이며(e.g. external I/O device 용도) 
+//             processor 에 의해 reserved 된 것 아님  
+//            
 
 /* Bitmask of exception vectors which push an error code on the stack: */
 #define EXCEPTION_ERRCODE_MASK		0x00027d00

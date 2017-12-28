@@ -59,9 +59,12 @@ static void reset_coprocessor(void)
  */
 
 struct gdt_ptr {
-	u16 len;
+	u16 len; 
+    // 2 byte 
 	u32 ptr;
+    // 4 byte 
 } __attribute__((packed));
+// 총 48-bit 이며 padding 없음 
 
 static void setup_gdt(void)
 {
@@ -92,10 +95,12 @@ static void setup_gdt(void)
 /*
  * Set up the IDT
  */
+// Interrupt Descriptor Table 에 NULL gate 를 load 
 static void setup_idt(void)
 {
 	static const struct gdt_ptr null_idt = {0, 0};
-	asm volatile("lidtl %0" : : "m" (null_idt));
+	asm volatile("lidtl %0" : : "m" (null_idt)); 
+    // null_idt 를 IDTR register 에 load 수행
 }
 
 /*

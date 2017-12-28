@@ -1269,8 +1269,9 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 
 	if (kmemcheck_active(regs))
 		kmemcheck_hide(regs);
+    // uninitialized memory 를 detect 
 	prefetchw(&mm->mmap_sem);
-
+    // get exclusive cache line 
 	if (unlikely(kmmio_fault(regs, address)))
 		return;
     // TODO mmiotrace?
@@ -1571,21 +1572,21 @@ NOKPROBE_SYMBOL(__do_page_fault);
 //  regs : fault 시에 active 한 register set 으로 kernel stack 의 register 값 
 //         pt_regs 는 register 를 stack 에 저장하기 위해 사용
 //  error_code : err code 로 3bit 사용(v2.6)...지금은 5 bit 가 사용(v4.11)
-//                     |        Not Set(0)        |                Set(1)                  |
+//                     |        Not Set(0)                |                Set(1)                  |
 //               --------------------------------------------------------------------------------
-//               0 bit | no page present in RAM   |   Protection fault(access persmission)
+//               0 bit | no page present in RAM           |   Protection fault(access persmission)
 //               --------------------------------------------------------------------------------
-//               1 bit | 현재 acces 가read access |   현재 access 가 write access
+//               1 bit | 현재 acces 가read/execute access |   현재 access 가 write access
 //               --------------------------------------------------------------------------------
-//               2 bit | kernel mode access       |   user mode access
+//               2 bit | kernel mode access               |   user mode access
 //               --------------------------------------------------------------------------------
-//               3 bit |                          |   use of reserved bit detected 
-//                     |                          |   reserved bit 에 무언가 사용됨 즉 Oops 발생
+//               3 bit |                                  |   use of reserved bit detected 
+//                     |                                  |   reserved bit 에 무언가 사용됨 즉 Oops 발생
 //               --------------------------------------------------------------------------------
-//               4 bit |                          |   instruction fetch 로 인한 page fault 임
+//               4 bit |                                  |   instruction fetch 로 인한 page fault 임
 //               --------------------------------------------------------------------------------
-//               5 bit |                          |   protection key block access 
-//                     |                          |   v4.6 부터 추가된 intel protection key 기능
+//               5 bit |                                  |   protection key block access 
+//                     |                                  |   v4.6 부터 추가된 intel protection key 기능
 //               --------------------------------------------------------------------------------
 //
 dotraplinkage void notrace

@@ -35,7 +35,8 @@ static inline void fill_ldt(struct desc_struct *desc, const struct user_desc *in
 }
 
 extern struct desc_ptr idt_descr;
-extern gate_desc idt_table[];
+extern gate_desc idt_table[]; 
+// interrupt descriptor table  
 extern const struct desc_ptr debug_idt_descr;
 extern gate_desc debug_idt_table[];
 
@@ -445,37 +446,43 @@ static inline void alloc_system_vector(int vector)
  */
 static inline void set_system_intr_gate(unsigned int n, void *addr)
 {
-	BUG_ON((unsigned)n > 0xFF);
+	BUG_ON((unsigned)n > 0xFF); 
+    // interrupt vector number 가 255 를 넘지 않는지 검사 수행
 	_set_gate(n, GATE_INTERRUPT, addr, 0x3, 0, __KERNEL_CS);
 }
 
 static inline void set_system_trap_gate(unsigned int n, void *addr)
 {
 	BUG_ON((unsigned)n > 0xFF);
+    // interrupt vector number 가 255 를 넘지 않는지 검사 수행
 	_set_gate(n, GATE_TRAP, addr, 0x3, 0, __KERNEL_CS);
 }
 
 static inline void set_trap_gate(unsigned int n, void *addr)
 {
 	BUG_ON((unsigned)n > 0xFF);
+    // interrupt vector number 가 255 를 넘지 않는지 검사 수행
 	_set_gate(n, GATE_TRAP, addr, 0, 0, __KERNEL_CS);
 }
 
 static inline void set_task_gate(unsigned int n, unsigned int gdt_entry)
 {
-	BUG_ON((unsigned)n > 0xFF);
+	BUG_ON((unsigned)n > 0xFF); 
+    // interrupt vector number 가 255 를 넘지 않는지 검사 수행
 	_set_gate(n, GATE_TASK, (void *)0, 0, 0, (gdt_entry<<3));
 }
 
 static inline void set_intr_gate_ist(int n, void *addr, unsigned ist)
 {
 	BUG_ON((unsigned)n > 0xFF);
+    // interrupt vector number 가 255 를 넘지 않는지 검사 수행
 	_set_gate(n, GATE_INTERRUPT, addr, 0, ist, __KERNEL_CS);
 }
 
 static inline void set_system_intr_gate_ist(int n, void *addr, unsigned ist)
 {
 	BUG_ON((unsigned)n > 0xFF);
+    // interrupt vector number 가 255 를 넘지 않는지 검사 수행
 	_set_gate(n, GATE_INTERRUPT, addr, 0x3, ist, __KERNEL_CS);
 }
 

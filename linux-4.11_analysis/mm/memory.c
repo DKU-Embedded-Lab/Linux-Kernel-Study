@@ -794,7 +794,8 @@ struct page *vm_normal_page(struct vm_area_struct *vma, unsigned long addr,
 {
 	unsigned long pfn = pte_pfn(pte);
 
-	if (HAVE_PTE_SPECIAL) {
+	if (HAVE_PTE_SPECIAL) { 
+        // special page setting 검사
 		if (likely(!pte_special(pte)))
 			goto check_pfn;
 		if (vma->vm_ops && vma->vm_ops->find_special_page)
@@ -2285,7 +2286,8 @@ static int wp_page_copy(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
-	struct page *old_page = vmf->page;
+	struct page *old_page = vmf->page; 
+    // 복사될 usefull data가 들어있는 page
 	struct page *new_page = NULL;
 	pte_t entry;
 	int page_copied = 0;
@@ -2295,7 +2297,7 @@ static int wp_page_copy(struct vm_fault *vmf)
 
 	if (unlikely(anon_vma_prepare(vma)))
 		goto oom;
-
+    // 새로 page 를 만들건데 이와 연결될 anon_vma  가져옴
 	if (is_zero_pfn(pte_pfn(vmf->orig_pte))) {
 		new_page = alloc_zeroed_user_highpage_movable(vma,
 							      vmf->address);
@@ -2303,10 +2305,12 @@ static int wp_page_copy(struct vm_fault *vmf)
 			goto oom;
 	} else {
 		new_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma,
-				vmf->address);
+				vmf->address); 
+        // 새로운 fresh page 준비
 		if (!new_page)
 			goto oom;
-		cow_user_page(new_page, old_page, vmf->address, vma);
+		cow_user_page(new_page, old_page, vmf->address, vma); 
+        // old_page 의 내용을 new_page 에 복사
 	}
 
 	if (mem_cgroup_try_charge(new_page, mm, GFP_KERNEL, &memcg, false))
@@ -2475,7 +2479,8 @@ static int wp_page_shared(struct vm_fault *vmf)
 		int tmp;
 
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		tmp = do_page_mkwrite(vmf);
+		tmp = do_page_mkwrite(vmf); 
+        // read-only 된 page 를 writable 하게 변경
 		if (unlikely(!tmp || (tmp &
 				      (VM_FAULT_ERROR | VM_FAULT_NOPAGE)))) {
 			put_page(vmf->page);
@@ -2521,7 +2526,7 @@ static int do_wp_page(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 
 	vmf->page = vm_normal_page(vma, vmf->address, vmf->orig_pte); 
-    // vmf->orig_pte 에 해당하는 struct page 를 가져옴
+    // mem_map 으로부터 linear mapping 일 경우 struct page 를 가져옴
 	if (!vmf->page) { 
         // pte 에 해당하는 struct page 가 현재 없다면
 		/*
@@ -2543,21 +2548,27 @@ static int do_wp_page(struct vm_fault *vmf)
 	 * Take out anonymous pages first, anonymous shared vmas are
 	 * not dirty accountable.
 	 */
-	if (PageAnon(vmf->page) && !PageKsm(vmf->page)) {
+	if (PageAnon(vmf->page) && !PageKsm(vmf->page)) { 
+        // anonymous page 인 경우
 		int total_mapcount;
 		if (!trylock_page(vmf->page)) {
-			get_page(vmf->page);
+            // PG_locked 를 획특 (flag 에 PG_locked 설정)
+			get_page(vmf->page); 
+            // page 의 _refcount 증가 
+            // struct page 의 정보를 수정 할 것이므로 getpage
 			pte_unmap_unlock(vmf->pte, vmf->ptl);
 			lock_page(vmf->page);
 			vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-					vmf->address, &vmf->ptl);
+					vmf->address, &vmf->ptl); 
+            // address 에 해당하는 pte 가져옴
 			if (!pte_same(*vmf->pte, vmf->orig_pte)) {
 				unlock_page(vmf->page);
 				pte_unmap_unlock(vmf->pte, vmf->ptl);
 				put_page(vmf->page);
 				return 0;
 			}
-			put_page(vmf->page);
+			put_page(vmf->page); 
+            // 수정을 마쳤으므로 put_page 수정
 		}
 		if (reuse_swap_page(vmf->page, &total_mapcount)) {
 			if (total_mapcount == 1) {
@@ -2568,7 +2579,8 @@ static int do_wp_page(struct vm_fault *vmf)
 				 * Protected against the rmap code by
 				 * the page lock.
 				 */
-				page_move_anon_rmap(vmf->page, vma);
+				page_move_anon_rmap(vmf->page, vma); 
+                // page->mapping 에 vma->anon_vma 정보를 기록
 			}
 			unlock_page(vmf->page);
 			wp_page_reuse(vmf);
@@ -2576,7 +2588,9 @@ static int do_wp_page(struct vm_fault *vmf)
 		}
 		unlock_page(vmf->page);
 	} else if (unlikely((vma->vm_flags & (VM_WRITE|VM_SHARED)) ==
-					(VM_WRITE|VM_SHARED))) {
+					(VM_WRITE|VM_SHARED))) { 
+        // anonymous page 가 아닐 경우, vm flag 가 writable 하게 되어 있으며
+        // shared page 일 경우 read-only page 를 writable 하게 변경
 		return wp_page_shared(vmf);
 	}
 
@@ -2584,9 +2598,10 @@ static int do_wp_page(struct vm_fault *vmf)
 	 * Ok, we need to copy. Oh, well..
 	 */
 	get_page(vmf->page);
-
+    // 다시 struct page 를 견드려야 함. 
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
-	return wp_page_copy(vmf);
+	return wp_page_copy(vmf); 
+    // new page 를 할당하고 기존 page 내용을 복사하여 pte 에 기록
 }
 
 static void unmap_mapping_range_vma(struct vm_area_struct *vma,
@@ -3011,11 +3026,14 @@ static int __do_fault(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 	int ret;
 
-	ret = vma->vm_ops->fault(vmf);
+	ret = vma->vm_ops->fault(vmf); 
+    // 각 file system 또는 device 에서 제공하는 vm_operations_struct 에서 
+    // fault 함수를 호출
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY |
 			    VM_FAULT_DONE_COW)))
 		return ret;
-
+    // memory 교정 관련 intel 기능 지원 여부
+    // HWPOISON
 	if (unlikely(PageHWPoison(vmf->page))) {
 		if (ret & VM_FAULT_LOCKED)
 			unlock_page(vmf->page);
@@ -3204,8 +3222,9 @@ int alloc_set_pte(struct vm_fault *vmf, struct mem_cgroup *memcg,
 	if (unlikely(!pte_none(*vmf->pte)))
 		return VM_FAULT_NOPAGE;
 
-	flush_icache_page(vma, page);
-	entry = mk_pte(page, vma->vm_page_prot);
+	flush_icache_page(vma, page); 
+	entry = mk_pte(page, vma->vm_page_prot); 
+    // page table 에 들어갈 entry 생성
 	if (write)
 		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
 	/* copy-on-write page */
@@ -3249,10 +3268,16 @@ int finish_fault(struct vm_fault *vmf)
 	/* Did we COW the page? */
 	if ((vmf->flags & FAULT_FLAG_WRITE) &&
 	    !(vmf->vma->vm_flags & VM_SHARED))
-		page = vmf->cow_page;
+		page = vmf->cow_page; 
+    // write 요청이고, shared 가 아니면(private 이면) 
+    // 새로 할당한 page가 읽어온 page 와 독립적이므로  즉(backing storage)
+    // 와 독립적이므로 anonymous page 인 cow_page 를 위한 pte 생성
 	else
 		page = vmf->page;
-	ret = alloc_set_pte(vmf, vmf->memcg, page);
+    // read 요청이거나 shared 라면 backing store 와 연결되도록 file-backed 
+    // page 를 위한 pte 생성
+	ret = alloc_set_pte(vmf, vmf->memcg, page); 
+    // page 를 위한 pte 를 생성하여 page table 에 설정 및 rmap 설정 등 수행
 	if (vmf->pte)
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 	return ret;
@@ -3410,12 +3435,14 @@ static int do_cow_fault(struct vm_fault *vmf)
 	int ret;
 
 	if (unlikely(anon_vma_prepare(vma)))
-		return VM_FAULT_OOM;
+		return VM_FAULT_OOM; 
+    // vma 를 위해 anon_vma, anon_vma_chain 구성
+
     // private mapping 을 위한 새로운 anonymous page 할당
 	vmf->cow_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma, vmf->address);
 	if (!vmf->cow_page)
 		return VM_FAULT_OOM;
-
+    // page 하나 할당함
 	if (mem_cgroup_try_charge(vmf->cow_page, vma->vm_mm, GFP_KERNEL,
 				&vmf->memcg, false)) {
 		put_page(vmf->cow_page);
@@ -3694,7 +3721,7 @@ static int handle_pte_fault(struct vm_fault *vmf)
 
 	if (unlikely(pmd_none(*vmf->pmd))) {
         // pmd entry 내의 값이 비어 있다면. 즉 page table 을 
-        // 가리키는 주소가 설저되어 있지 않다면(page table 할당해야 하는 상태) 
+        // 가리키는 주소가 설정되어 있지 않다면(page table 할당해야 하는 상태) 
         // 기존 code 들에는 pte alloc 함수가 hamdle_mm_fault 내에서 수행되었지만 
         // v4.11 에서는 do_anonymous_page, do_fault 등 의 함수들에서 pte_alloc 을 
         // 수행하도록 delay 하여 vm_ops->fault 에서 huge page 할당이 가능하도록 함
@@ -3705,10 +3732,13 @@ static int handle_pte_fault(struct vm_fault *vmf)
 		 * for an instant, it will be difficult to retract from
 		 * concurrent faults and from rmap lookups.
 		 */
-		vmf->pte = NULL;
+		vmf->pte = NULL; 
+        // page table 자체가 현재 할당되어 있지 않은 상태 이므로 
+        // page talbe entry 또한 NULL 로 설정
 	} else {
 		/* See comment in pte_alloc_one_map() */ 
-        // page table 주소가 pmd entry 에 기록되어 있다면
+        // page table 주소가 pmd entry 에 기록되어 있다면 즉 
+        // page table 이 할당되어 있는 상태라면
 		if (pmd_trans_unstable(vmf->pmd) || pmd_devmap(*vmf->pmd))
 			return 0;
 		/*
@@ -3717,7 +3747,9 @@ static int handle_pte_fault(struct vm_fault *vmf)
 		 * mmap_sem read mode and khugepaged takes it in write mode.
 		 * So now it's safe to run pte_offset_map().
 		 */
-		vmf->pte = pte_offset_map(vmf->pmd, vmf->address);
+		vmf->pte = pte_offset_map(vmf->pmd, vmf->address); 
+        // 할당되어 있는 page table 내에서 address 에 해당하는
+        // page table entry 를 가져옴 
 		vmf->orig_pte = *vmf->pte;
 
 		/*
@@ -3735,7 +3767,7 @@ static int handle_pte_fault(struct vm_fault *vmf)
 			vmf->pte = NULL;
 		}
 	}
-
+    // 물리 memory 가 할당된 상태인가?
 	if (!vmf->pte) {
         // pte 에 4KB physical page frame 의 물리주소가 적혀있지 않다면 
         //  -> swap 된건 아님 그냥 새로 할당만 하면 됨
@@ -3755,26 +3787,32 @@ static int handle_pte_fault(struct vm_fault *vmf)
 		return do_numa_page(vmf);
     // TODO. do_numa_page 이거 뭐지...
 
-    // 여기까지 온 것은 pte 에 기록되어 있으며, 물리주소 memory 에 있음
+    // 여기까지 온 것은 page table 에 물리 page 의 위치가 기록되어 있으며
+    // 해당 page 가 현재 물리 memory 에 올라와 있는 상태인 경우임
     vmf->ptl = pte_lockptr(vmf->vma->vm_mm, vmf->pmd);
 	spin_lock(vmf->ptl);
 	entry = vmf->orig_pte;
 	if (unlikely(!pte_same(*vmf->pte, entry)))
-		goto unlock;
+		goto unlock; 
+    // HELP
+    // 당연히 같지 않나?... 검사 왜하는 걸까 
 	if (vmf->flags & FAULT_FLAG_WRITE) { 
         // 현재 write 요청인 경우 
 		if (!pte_write(entry))
 			return do_wp_page(vmf);
         // write 금지된 page 라면 새로운 page 할당하여 
-        // 물리주소초기화 하고 복사하여 사용
+        // 물리주소초기화 하고 복사 및 page table 에 넣음  
+        // vmf->entry 를 이제 새로운 page 로 update
 		entry = pte_mkdirty(entry); 
-        // write 금지된 page 가 아니라면 dirty bit 설정
+        // 새로 복사한 즉 read-only 로만 marking 되고 실제로 복제되지 않았던  
+        // vmf->pte 의 page를 진짜로 복제한 page 인 entry page 에 dirty bit 설정
 	}
 	entry = pte_mkyoung(entry);
-    // accesed bit 설정
+    // entry page 에 accessed bit 설정
 	if (ptep_set_access_flags(vmf->vma, vmf->address, vmf->pte, entry,
 				vmf->flags & FAULT_FLAG_WRITE)) {
-		update_mmu_cache(vmf->vma, vmf->address, vmf->pte);
+        // 
+		update_mmu_cache(vmf->vma, vmf->address, vmf->pte); 
 	} else {
 		/*
 		 * This is needed only for protection faults but the arch code

@@ -367,23 +367,30 @@ struct orig_ist {
 DECLARE_PER_CPU(struct orig_ist, orig_ist);
 
 union irq_stack_union {
-	char irq_stack[IRQ_STACK_SIZE];
+	char irq_stack[IRQ_STACK_SIZE]; 
+    // kasan memory debugger 의 설정 유무에 따라 
+    // per-cpu interrupt stack 의 크기가 달라짐(설O->32KB, 설정X->16KB)
 	/*
 	 * GCC hardcodes the stack canary as %gs:40.  Since the
 	 * irq_stack is the object at %gs:0, we reserve the bottom
 	 * 48 bytes of the irq stack for the canary.
 	 */
 	struct {
-		char gs_base[40];
-		unsigned long stack_canary;
+		char gs_base[40]; 
+        // GS register 가 가리키는 곳
+		unsigned long stack_canary; 
+        // stack overflow 를 막기 위한 장치
 	};
-};
+}; 
+// per-cpu interrupt stack
 
 DECLARE_PER_CPU_FIRST(union irq_stack_union, irq_stack_union) __visible;
 DECLARE_INIT_PER_CPU(irq_stack_union);
 
-DECLARE_PER_CPU(char *, irq_stack_ptr);
+DECLARE_PER_CPU(char *, irq_stack_ptr); 
+// irq stack 의 top 을 가리키는 pointer 
 DECLARE_PER_CPU(unsigned int, irq_count);
+// CPU 가 interrupt stack 을 사용중인지 검사
 extern asmlinkage void ignore_sysret(void);
 #else	/* X86_64 */
 #ifdef CONFIG_CC_STACKPROTECTOR

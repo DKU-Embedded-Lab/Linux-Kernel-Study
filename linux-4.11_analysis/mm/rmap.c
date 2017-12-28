@@ -197,7 +197,8 @@ int __anon_vma_prepare(struct vm_area_struct *vma)
 	if (!avc)
 		goto out_enomem;
 
-	anon_vma = find_mergeable_anon_vma(vma);
+	anon_vma = find_mergeable_anon_vma(vma); 
+    // 부모 process 의 anon_vma 를 그대로 이용가능할지 검사?
 	allocated = NULL;
 	if (!anon_vma) {
 		anon_vma = anon_vma_alloc();

@@ -14,7 +14,9 @@
  */
 
 struct exception_table_entry {
-	int insn, fixup, handler;
+	int insn, fixup, handler; 
+    // insn : virtual address space 에서 fault 가 난 위치 
+    // fixup : fault 후 실행이 될 handler
 };
 struct pt_regs;
 

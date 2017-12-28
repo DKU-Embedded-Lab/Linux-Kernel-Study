@@ -5,14 +5,18 @@
 #include <asm/kaslr.h>
 #endif
 
-#ifdef CONFIG_KASAN
+#ifdef CONFIG_KASAN 
+// runtime memory debugger
 #define KASAN_STACK_ORDER 1
 #else
 #define KASAN_STACK_ORDER 0
 #endif
 
-#define THREAD_SIZE_ORDER	(2 + KASAN_STACK_ORDER)
-#define THREAD_SIZE  (PAGE_SIZE << THREAD_SIZE_ORDER)
+#define THREAD_SIZE_ORDER	(2 + KASAN_STACK_ORDER) 
+#define THREAD_SIZE  (PAGE_SIZE << THREAD_SIZE_ORDER) 
+// kernel stack 의 크기. 
+// KASAN_STACK 기능이 설정되어 있다면 kernel stack 크기가 32 KB (PAGE_SIZE << 3)
+// KASAN_STACK 기능이 설정되어 있지 않다면 Kernel stack 의 크기가 16 KB (PAGE_SIZE << 2)
 #define CURRENT_MASK (~(THREAD_SIZE - 1))
 
 #define EXCEPTION_STACK_ORDER (0 + KASAN_STACK_ORDER)
@@ -21,8 +25,11 @@
 #define DEBUG_STACK_ORDER (EXCEPTION_STACK_ORDER + 1)
 #define DEBUG_STKSZ (PAGE_SIZE << DEBUG_STACK_ORDER)
 
-#define IRQ_STACK_ORDER (2 + KASAN_STACK_ORDER)
+#define IRQ_STACK_ORDER (2 + KASAN_STACK_ORDER) 
 #define IRQ_STACK_SIZE (PAGE_SIZE << IRQ_STACK_ORDER)
+// 각 CPU 들이 가지고 있는 per-cpu stack 들 중의 interrupt stack 
+// KASAN_STACK 기능이 설정되어 있다면 per-cpu interrupt stack 크기가 32 KB (PAGE_SIZE << 3)
+// KASAN_STACK 기능이 설정되어 있지 않다면 per-cpu interrut stack 의 크기가 16 KB (PAGE_SIZE << 2)
 
 #define DOUBLEFAULT_STACK 1
 #define NMI_STACK 2

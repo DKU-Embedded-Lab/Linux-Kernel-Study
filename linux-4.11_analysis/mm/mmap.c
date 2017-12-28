@@ -1328,7 +1328,10 @@ struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *vma)
 
 	anon_vma = reusable_anon_vma(near, vma, near);
 	if (anon_vma)
-		return anon_vma;
+		return anon_vma; 
+    // vma->next 가 vma 와 연속적이고, 
+    // vma->next 가 anon_vma_chain 을 한개만 가지고(fork 된적이 없음) 
+    // 같은 mempolicy 가지고 등등 이면...
 try_prev:
 	near = vma->vm_prev;
 	if (!near)
