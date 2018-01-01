@@ -1187,7 +1187,8 @@ struct task_struct {
 	unsigned int			sequential_io_avg;
 #endif
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
-	unsigned long			task_state_change;
+	unsigned long			task_state_change; 
+
 #endif
 	int				pagefault_disabled;
 #ifdef CONFIG_MMU
