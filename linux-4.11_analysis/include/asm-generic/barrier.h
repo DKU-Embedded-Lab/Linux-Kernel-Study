@@ -157,6 +157,9 @@ do {									\
 #define smp_store_release(p, v) __smp_store_release(p, v)
 #endif
 
+// smp_load_acquire 는 smp_load_acquire 함수 이후의 memory operation 들이
+// smp_load_acquire 함수 전의 memory operation 들을 모두 완료한 후 
+// 수행되는 것을 보장 즉 memory barrier (UP 버전)
 #ifndef smp_load_acquire
 #define smp_load_acquire(p) __smp_load_acquire(p)
 #endif
@@ -184,6 +187,9 @@ do {									\
 } while (0)
 #endif
 
+// smp_load_acquire 는 smp_load_acquire 함수 이후의 memory operation 들이
+// smp_load_acquire 함수 전의 memory operation 들을 모두 완료한 후 
+// 수행되는 것을 보장 즉 memory barrier (SMP 버전)
 #ifndef smp_load_acquire
 #define smp_load_acquire(p)						\
 ({									\

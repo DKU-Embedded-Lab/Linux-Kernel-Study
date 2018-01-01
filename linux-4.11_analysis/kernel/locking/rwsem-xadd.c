@@ -81,13 +81,18 @@ void __init_rwsem(struct rw_semaphore *sem, const char *name,
 	 */
 	debug_check_no_locks_freed((void *)sem, sizeof(*sem));
 	lockdep_init_map(&sem->dep_map, name, key, 0);
+    // lock validator debugging  관련 정보
 #endif
 	atomic_long_set(&sem->count, RWSEM_UNLOCKED_VALUE);
+    // count 0 으로 초기화
 	raw_spin_lock_init(&sem->wait_lock);
+    // wait list 보호 spinlock 초기화
 	INIT_LIST_HEAD(&sem->wait_list);
+    // wait list 초기화
 #ifdef CONFIG_RWSEM_SPIN_ON_OWNER
 	sem->owner = NULL;
 	osq_lock_init(&sem->osq);
+    // OSQ lock 관련 필드 초기화
 #endif
 }
 
@@ -100,8 +105,12 @@ enum rwsem_waiter_type {
 
 struct rwsem_waiter {
 	struct list_head list;
+    // osq lock 으로 못얻을 경우, 
+    // wait list 연결될 부분
 	struct task_struct *task;
+    // lock 을 얻으려는 task_struct
 	enum rwsem_waiter_type type;
+    // lock 을 얻으려는 형태
 };
 
 enum rwsem_wake_type {
@@ -224,16 +233,18 @@ static void __rwsem_mark_wake(struct rw_semaphore *sem,
 __visible
 struct rw_semaphore __sched *rwsem_down_read_failed(struct rw_semaphore *sem)
 {
-	long count, adjustment = -RWSEM_ACTIVE_READ_BIAS;
+	long count, adjustment = -RWSEM_ACTIVE_READ_BIAS; // lock 얻은것이 아니니 빼줌
 	struct rwsem_waiter waiter;
-	DEFINE_WAKE_Q(wake_q);
-
+	DEFINE_WAKE_Q(wake_q); // wake up queue
+    // rwsem waiter 초기화
 	waiter.task = current;
 	waiter.type = RWSEM_WAITING_FOR_READ;
 
 	raw_spin_lock_irq(&sem->wait_lock);
 	if (list_empty(&sem->wait_list))
 		adjustment += RWSEM_WAITING_BIAS;
+    // waiting 하는 놈이 없었다면 waiting 하는놈이 있다는 것을 설정하기 
+    // 위해 RWSEM_WAITING_BIAS 설정
 	list_add_tail(&waiter.list, &sem->wait_list);
 
 	/* we're now waiting on the lock, but no longer actively locking */
@@ -307,10 +318,12 @@ static inline bool rwsem_try_write_lock_unqueued(struct rw_semaphore *sem)
 	while (true) {
 		if (!(count == 0 || count == RWSEM_WAITING_BIAS))
 			return false;
-
+        
 		old = atomic_long_cmpxchg_acquire(&sem->count, count,
 				      count + RWSEM_ACTIVE_WRITE_BIAS);
+        // 현재 count 를 RWSEM_ACTIVE_WRITE_BIAS 로 설정
 		if (old == count) {
+            // lock owner 설정
 			rwsem_set_owner(sem);
 			return true;
 		}
@@ -326,14 +339,20 @@ static inline bool rwsem_can_spin_on_owner(struct rw_semaphore *sem)
 
 	if (need_resched())
 		return false;
-
+    // 자신이 CPU yield 하려 하거나, reschedule 요청이 
+    // 있는 경우 osq spinning 포기
+    
 	rcu_read_lock();
 	owner = READ_ONCE(sem->owner);
 	if (!rwsem_owner_is_writer(owner)) {
+        // lock holder 가 reader 일 경우 or reader 가 잡았던 경우 
+        // or lock free
 		/*
 		 * Don't spin if the rwsem is readers owned.
 		 */
 		ret = !rwsem_owner_is_reader(owner);
+        // reader 일 경우 or reader 가 잡았던 경우.. true->false ret 가 0 
+        // lock free 일 경우 ...                     false->true ret 가 1
 		goto done;
 	}
 
@@ -342,6 +361,7 @@ static inline bool rwsem_can_spin_on_owner(struct rw_semaphore *sem)
 	 * on cpu or its cpu is preempted
 	 */
 	ret = owner->on_cpu && !vcpu_is_preempted(task_cpu(owner));
+    // owner 가 wirter 일 경우에..  실행중이어야함 .. .ret 가 1
 done:
 	rcu_read_unlock();
 	return ret;
@@ -356,9 +376,10 @@ static noinline bool rwsem_spin_on_owner(struct rw_semaphore *sem)
 
 	if (!rwsem_owner_is_writer(owner))
 		goto out;
-
+    // owner 가 writer 가 아니거나 lock free 라면 out
 	rcu_read_lock();
 	while (sem->owner == owner) {
+        // owner 가 unlock 과정에서 owner 를 clear 하면 break
 		/*
 		 * Ensure we emit the owner->on_cpu, dereference _after_
 		 * checking sem->owner still matches owner, if that fails,
@@ -374,6 +395,7 @@ static noinline bool rwsem_spin_on_owner(struct rw_semaphore *sem)
 		if (!owner->on_cpu || need_resched() ||
 				vcpu_is_preempted(task_cpu(owner))) {
 			rcu_read_unlock();
+            // owner 가 돌고 있는 상태가 아니면 false
 			return false;
 		}
 
@@ -397,26 +419,36 @@ static bool rwsem_optimistic_spin(struct rw_semaphore *sem)
 	/* sem->wait_lock should not be held when doing optimistic spinning */
 	if (!rwsem_can_spin_on_owner(sem))
 		goto done;
-
+    // optimistic spinning 하면 안되는 경우를 걸러줌
+    //  * reschedule 요청이 있으면 안됨  
+    //  * owner 가writer 일 경우, 실행중이어야 함 
+    //  * reader 가 owner 이면 안됨
 	if (!osq_lock(&sem->osq))
 		goto done;
-
+    // osq spinning 하다가 
+    //  lock  잡으면  true->false
+    //  lock 못잡으면 false->true->done 으로 이동
 	/*
 	 * Optimistically spin on the owner field and attempt to acquire the
 	 * lock whenever the owner changes. Spinning will be stopped when:
 	 *  1) the owning writer isn't running; or
 	 *  2) readers own the lock as we can't determine if they are
 	 *     actively running or not.
-	 */
-	while (rwsem_spin_on_owner(sem)) {
+	 */ 
+    // osq lock 을 잡았으니, 이제 owner 설정 및 count 설정을 해주어야 함 
+    // lock 을 잡고있던 writer thread 에서 owner 를 clear 해줄때 까지 spin
+	while (rwsem_spin_on_owner(sem)) { 
+        //  * reschedule 요청이 있으면 break
+        //  * owner 가reader 면 break
+        //  * owner 가 writer 이지만 실행중이지 않으면 break
 		/*
 		 * Try to acquire the lock
 		 */
 		if (rwsem_try_write_lock_unqueued(sem)) {
+            // count 설정 및 owner 설정
 			taken = true;
 			break;
 		}
-
 		/*
 		 * When there's no owner, we might have preempted between the
 		 * owner acquiring the lock and setting the owner field. If
@@ -425,7 +457,6 @@ static bool rwsem_optimistic_spin(struct rw_semaphore *sem)
 		 */
 		if (!sem->owner && (need_resched() || rt_task(current)))
 			break;
-
 		/*
 		 * The cpu_relax() call is a compiler barrier which forces
 		 * everything in this loop to be re-loaded. We don't need
@@ -474,10 +505,17 @@ __rwsem_down_write_failed_common(struct rw_semaphore *sem, int state)
 
 	/* undo write bias from down_write operation, stop active locking */
 	count = atomic_long_sub_return(RWSEM_ACTIVE_WRITE_BIAS, &sem->count);
-
+    // lock 을 얻은 것이 아니기 때문에 다시 RWSEM_ACTIVE_WRITE_BIAS 를 빼줌
 	/* do optimistic spinning and steal lock if possible */
 	if (rwsem_optimistic_spin(sem))
 		return sem;
+    // optimistic spinning 으로 lock 얻으려 시도 
+    //  * lock 을 얻게 되면 끝
+    //  * Optimistic spinning 으로 못얻으면 아래 path 로
+    //    못잡으면 계속 수행 
+    //    -> lock owner reader 인 경우
+    //    -> reschedule 요청이 있는 경우 
+    //    -> writer lock owner 가 돌고있지 않은 경우
 
 	/*
 	 * Optimistic spinning failed, proceed to the slowpath
@@ -485,17 +523,18 @@ __rwsem_down_write_failed_common(struct rw_semaphore *sem, int state)
 	 */
 	waiter.task = current;
 	waiter.type = RWSEM_WAITING_FOR_WRITE;
-
+    // wait list 에 추가하기 위해 초기화
 	raw_spin_lock_irq(&sem->wait_lock);
-
+    // wait_list 에 추가위해 lock 잡음
 	/* account for this before adding a new element to the list */
 	if (list_empty(&sem->wait_list))
 		waiting = false;
 
 	list_add_tail(&waiter.list, &sem->wait_list);
-
+    // rw_semaphore 의 wait list 에 추가
 	/* we're now waiting on the lock, but no longer actively locking */
 	if (waiting) {
+        // wait_list 에 먼저 queue 된 read/write lock 요청 thread 들이 있을 경우
 		count = atomic_long_read(&sem->count);
 
 		/*
@@ -504,7 +543,9 @@ __rwsem_down_write_failed_common(struct rw_semaphore *sem, int state)
 		 * wake any read locks that were queued ahead of us.
 		 */
 		if (count > RWSEM_WAITING_BIAS) {
+            // reader waiter 가 있으면  
 			__rwsem_mark_wake(sem, RWSEM_WAKE_READERS, &wake_q);
+            // read 요청한 wait_list 의 thread 들을 wake up queue 에 담음 
 			/*
 			 * The wakeup is normally called _after_ the wait_lock
 			 * is released, but given that we are proactively waking
@@ -512,29 +553,28 @@ __rwsem_down_write_failed_common(struct rw_semaphore *sem, int state)
 			 * similar to releasing and taking the wait_lock again
 			 * for attempting rwsem_try_write_lock().
 			 */
-			wake_up_q(&wake_q);
-
+			wake_up_q(&wake_q); // 기다리던 reader 들을 깨움
 			/*
 			 * Reinitialize wake_q after use.
 			 */
-			wake_q_init(&wake_q);
+			wake_q_init(&wake_q); // wake up queue 깨웠으니 다시 초기화
 		}
-
 	} else
 		count = atomic_long_add_return(RWSEM_WAITING_BIAS, &sem->count);
-
-	/* wait until we successfully acquire the lock */
+	
+    /* wait until we successfully acquire the lock */
 	set_current_state(state);
 	while (true) {
 		if (rwsem_try_write_lock(count, sem))
 			break;
+        // 위에서 깨운 reader 들이 끝날때까지 기다리며 lock 획득 시도
 		raw_spin_unlock_irq(&sem->wait_lock);
 
 		/* Block until there are no active lockers. */
 		do {
 			if (signal_pending_state(state, current))
 				goto out_nolock;
-
+            // pending signal 이 있다면 포기
 			schedule();
 			set_current_state(state);
 		} while ((count = atomic_long_read(&sem->count)) & RWSEM_ACTIVE_MASK);
@@ -606,24 +646,27 @@ struct rw_semaphore *rwsem_wake(struct rw_semaphore *sem)
 	 * trylock attempt on the rwsem later on.
 	 */
 	if (rwsem_has_spinner(sem)) {
+        // 현재 lock 을 얻으려 osq spinning 중인 writer 가 있는지 검사
 		/*
 		 * The smp_rmb() here is to make sure that the spinner
 		 * state is consulted before reading the wait_lock.
 		 */
 		smp_rmb();
 		if (!raw_spin_trylock_irqsave(&sem->wait_lock, flags))
-			return sem;
+			return sem; 
+        // spinning 중이던 것이 있으면 lock 얻는지 확인
 		goto locked;
 	}
 	raw_spin_lock_irqsave(&sem->wait_lock, flags);
 locked:
-
+    // spinning 으로 lock 을 못얻게 되는 상황이거나, spinning 중인 것이 
+    // 없는 경우...
 	if (!list_empty(&sem->wait_list))
 		__rwsem_mark_wake(sem, RWSEM_WAKE_ANY, &wake_q);
-
+    // wake queue 에 깨울 놈 추가
 	raw_spin_unlock_irqrestore(&sem->wait_lock, flags);
 	wake_up_q(&wake_q);
-
+    // 깨움 
 	return sem;
 }
 EXPORT_SYMBOL(rwsem_wake);

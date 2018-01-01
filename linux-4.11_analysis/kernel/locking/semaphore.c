@@ -56,11 +56,14 @@ void down(struct semaphore *sem)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&sem->lock, flags);
+    // semaphore 변수조정 전에 lock 잡고 IF 상태 저장
 	if (likely(sem->count > 0))
 		sem->count--;
+    // semaphore 획득 가능하다면 획득하고 종료
 	else
 		__down(sem);
 	raw_spin_unlock_irqrestore(&sem->lock, flags);
+    // lock 풀고 IF 상태 복구
 }
 EXPORT_SYMBOL(down);
 
@@ -181,20 +184,25 @@ void up(struct semaphore *sem)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&sem->lock, flags);
+    // lock 잡고 semaphore 변수 조작, IF 저장
 	if (likely(list_empty(&sem->wait_list)))
 		sem->count++;
+    // 대기중인 task 가 없다면 count 증가
 	else
 		__up(sem);
+    // 대기중인 task 있다면 깨움
 	raw_spin_unlock_irqrestore(&sem->lock, flags);
+    // lock 풀고 IF 복원
 }
 EXPORT_SYMBOL(up);
 
 /* Functions for the contended case */
-
+// semaphore.wait_list 에 연결될 node
 struct semaphore_waiter {
 	struct list_head list;
 	struct task_struct *task;
 	bool up;
+    // 깨어났는지 여부
 };
 
 /*
@@ -208,17 +216,25 @@ static inline int __sched __down_common(struct semaphore *sem, long state,
 	struct semaphore_waiter waiter;
 
 	list_add_tail(&waiter.list, &sem->wait_list);
+    // semaphore 의 waiter list에 현재 list 추가
 	waiter.task = current;
+    // 현재 task 로 waiter 초기화
 	waiter.up = false;
-
+    // sleep 로 들어갈 것이므로 false 
+    // up 이 true 가 될 때 까지 아래 loop spining
 	for (;;) {
 		if (signal_pending_state(state, current))
 			goto interrupted;
+        // TASK_INTERRUPTIBLE 이 아니고, pending signal 이 없어야 함 
 		if (unlikely(timeout <= 0))
 			goto timed_out;
 		__set_current_state(state);
-		raw_spin_unlock_irq(&sem->lock);
+        // task 상태 설정
+		raw_spin_unlock_irq(&sem->lock);        
 		timeout = schedule_timeout(timeout);
+        // timeout 만큼 현재 task sleep 하도록 함 
+        // timeout 만큼 sleep 하다가 up 확인하고 signal/interrupt 확인하고 
+        // 다시 sleep
 		raw_spin_lock_irq(&sem->lock);
 		if (waiter.up)
 			return 0;
@@ -226,10 +242,11 @@ static inline int __sched __down_common(struct semaphore *sem, long state,
 
  timed_out:
 	list_del(&waiter.list);
+    // semaphore 대기 list 에서 제거
 	return -ETIME;
 
  interrupted:
-	list_del(&waiter.list);
+	list_del(&waiter.list);    
 	return -EINTR;
 }
 
@@ -256,8 +273,15 @@ static noinline int __sched __down_timeout(struct semaphore *sem, long timeout)
 static noinline void __sched __up(struct semaphore *sem)
 {
 	struct semaphore_waiter *waiter = list_first_entry(&sem->wait_list,
-						struct semaphore_waiter, list);
+						struct semaphore_waiter, list); 
+    // waiter list 들 중에서 첫번째 것 가져옴
 	list_del(&waiter->list);
+    // waiter list 에서 지우고
 	waiter->up = true;
+    // up 을 true 로 변경하여 깨어날 수 있도록 함 
 	wake_up_process(waiter->task);
+    // sleep 하고 있을수도 있으므로 
+    // waiter task 를 TASK_RUNNING 상태로 바꾸고 run queue 의 맨 앞으로
 }
+
+

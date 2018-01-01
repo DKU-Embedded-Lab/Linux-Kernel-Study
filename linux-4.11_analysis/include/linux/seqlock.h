@@ -47,7 +47,8 @@
 typedef struct seqcount {
 	unsigned sequence;
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
-	struct lockdep_map dep_map;
+	struct lockdep_map dep_map; 
+    // lock validator
 #endif
 } seqcount_t;
 
@@ -110,8 +111,12 @@ static inline unsigned __read_seqcount_begin(const seqcount_t *s)
 
 repeat:
 	ret = READ_ONCE(s->sequence);
+    // sequence number 를 읽어옴
 	if (unlikely(ret & 1)) {
+        // 홀수일 경우, wirter 가 아직 critical section 에서
+        // 작업을 하는 도중이므로 짝수일때 까지 다시 읽어들임       
 		cpu_relax();
+        // writer 가 다 끝내도록 nop 한번 수행 
 		goto repeat;
 	}
 	return ret;
@@ -146,6 +151,7 @@ static inline unsigned raw_read_seqcount_begin(const seqcount_t *s)
 {
 	unsigned ret = __read_seqcount_begin(s);
 	smp_rmb();
+    // read memory barrier 를 통해 sequence number read 보장
 	return ret;
 }
 
@@ -160,7 +166,8 @@ static inline unsigned raw_read_seqcount_begin(const seqcount_t *s)
  */
 static inline unsigned read_seqcount_begin(const seqcount_t *s)
 {
-	seqcount_lockdep_reader_access(s);
+	seqcount_lockdep_reader_access(s); 
+    // debugging 관련 lock validator
 	return raw_read_seqcount_begin(s);
 }
 
@@ -202,6 +209,7 @@ static inline unsigned raw_seqcount_begin(const seqcount_t *s)
 static inline int __read_seqcount_retry(const seqcount_t *s, unsigned start)
 {
 	return unlikely(s->sequence != start);
+    // 현재 start 와 현재 sequence number 와 다르면 CS retry 해주어야 함
 }
 
 /**
@@ -217,6 +225,7 @@ static inline int __read_seqcount_retry(const seqcount_t *s, unsigned start)
 static inline int read_seqcount_retry(const seqcount_t *s, unsigned start)
 {
 	smp_rmb();
+    // read memory barrier 로 현재 sequence number 읽기전에 순서보장
 	return __read_seqcount_retry(s, start);
 }
 
@@ -225,13 +234,18 @@ static inline int read_seqcount_retry(const seqcount_t *s, unsigned start)
 static inline void raw_write_seqcount_begin(seqcount_t *s)
 {
 	s->sequence++;
+    // sequence number 증가
 	smp_wmb();
+    // write memory barrier 로 sequence number update 완료 보장
 }
 
 static inline void raw_write_seqcount_end(seqcount_t *s)
 {
 	smp_wmb();
+    // write memory barrier 로 sequence number 에 대한 
+    // 더이상 write 없음을 보장 후
 	s->sequence++;
+    // sequence number 증가
 }
 
 /**
@@ -362,9 +376,14 @@ static inline int raw_read_seqcount_latch(seqcount_t *s)
  */
 static inline void raw_write_seqcount_latch(seqcount_t *s)
 {
-       smp_wmb();      /* prior stores before incrementing "sequence" */
+       smp_wmb();      /* prior stores before incrementing "sequence" */ 
+       // sequence number 증가 전, write memory barrier 통해 
+       // sequence 에 대한 순서 보장
        s->sequence++;
+       // sequence number 증가
        smp_wmb();      /* increment "sequence" before following stores */
+       // sequence number 증가 후, write memory barrier 통해 
+       // sequence number 증가 수행 보장
 }
 
 /*
@@ -374,7 +393,9 @@ static inline void raw_write_seqcount_latch(seqcount_t *s)
 static inline void write_seqcount_begin_nested(seqcount_t *s, int subclass)
 {
 	raw_write_seqcount_begin(s);
+    // sequence number 증가 
 	seqcount_acquire(&s->dep_map, subclass, 0, _RET_IP_);
+    // lockdep debugging 관련
 }
 
 static inline void write_seqcount_begin(seqcount_t *s)
@@ -385,7 +406,9 @@ static inline void write_seqcount_begin(seqcount_t *s)
 static inline void write_seqcount_end(seqcount_t *s)
 {
 	seqcount_release(&s->dep_map, 1, _RET_IP_);
+    // lockdep debugging 관련
 	raw_write_seqcount_end(s);
+    // sequence number 증가
 }
 
 /**
@@ -402,8 +425,21 @@ static inline void write_seqcount_invalidate(seqcount_t *s)
 }
 
 typedef struct {
-	struct seqcount seqcount;
-	spinlock_t lock;
+	struct seqcount seqcount; 
+    // sequential lock counter 
+    //  writer - lock 잡을 때, 이 seqcount->sequence 
+    //           증가시키고 spinlock 얻은 후, CS 실행
+    //         - unlock 놓을 때, spinlock 놓고, 
+    //           seqcount->sequence 증가 
+    //         => 짝수이면 writer 가 CS 다 수행
+    //            홀수이면 writer 가 CS 실행중
+    //  reder  - seqcount->sequence 값을 읽어들인 후,
+    //           CS 실행. CS 끝에 seqcount->sequence 
+    //           다시 읽어들여 바뀌었나 확인 
+    //           (writer 가 들어왔었나) 
+    //           바뀌었으면 다시 CS 실행
+	spinlock_t lock; 
+    // 다른 writer 들간의 상호배제 용도
 } seqlock_t;
 
 /*
@@ -427,12 +463,14 @@ typedef struct {
 
 /*
  * Read side functions for starting and finalizing a read side section.
- */
+ */ 
+// reader 가 처음 CS 진입시, sequence numberber 구해옴
 static inline unsigned read_seqbegin(const seqlock_t *sl)
 {
 	return read_seqcount_begin(&sl->seqcount);
 }
 
+// read 시, CS 수행 후 start 와 현재 sequence number 비교 
 static inline unsigned read_seqretry(const seqlock_t *sl, unsigned start)
 {
 	return read_seqcount_retry(&sl->seqcount, start);
@@ -446,6 +484,7 @@ static inline unsigned read_seqretry(const seqlock_t *sl, unsigned start)
 static inline void write_seqlock(seqlock_t *sl)
 {
 	spin_lock(&sl->lock);
+    // 다른 writer 간의 상호배제
 	write_seqcount_begin(&sl->seqcount);
 }
 
@@ -453,6 +492,7 @@ static inline void write_sequnlock(seqlock_t *sl)
 {
 	write_seqcount_end(&sl->seqcount);
 	spin_unlock(&sl->lock);
+    // 다른 writer 간의 상호배제
 }
 
 static inline void write_seqlock_bh(seqlock_t *sl)
@@ -502,7 +542,9 @@ write_sequnlock_irqrestore(seqlock_t *sl, unsigned long flags)
  * A locking reader exclusively locks out other writers and locking readers,
  * but doesn't update the sequence number. Acts like a normal spin_lock/unlock.
  * Don't need preempt_disable() because that is in the spin_lock already.
- */
+ */ 
+
+// sequential lock 의 spinlock 을 통해 writer, reader 에게 모두 상호배제
 static inline void read_seqlock_excl(seqlock_t *sl)
 {
 	spin_lock(&sl->lock);

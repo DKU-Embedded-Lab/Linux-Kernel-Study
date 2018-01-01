@@ -97,7 +97,10 @@ static __always_inline void queued_spin_lock(struct qspinlock *lock)
 {
 	u32 val;
 
-	val = atomic_cmpxchg_acquire(&lock->val, 0, _Q_LOCKED_VAL);
+	val = atomic_cmpxchg_acquire(&lock->val, 0, _Q_LOCKED_VAL); 
+    // qspinlock 의 val 이 0 인지 확인 하고, 0 이라면 _Q_LOCKED_VAL 위치
+    // 즉 0 bit 위치에 1 을 write 하며 wite 되기 전의 val 을 return 함  
+    // 0 이라면.. pending 이든 뭐든 아무것도 없고 그냥 lock 안잡힌 상태
 	if (likely(val == 0))
 		return;
 	queued_spin_lock_slowpath(lock, val);

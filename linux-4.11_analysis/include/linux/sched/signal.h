@@ -356,10 +356,15 @@ static inline int signal_pending_state(long state, struct task_struct *p)
 {
 	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
 		return 0;
+    // p 의 state 가 TASK_INTERRUPTIBLE 가 설정되어 있지 않아 interrupt 를 
+    // 받을수 없거나 TASK_WAKEKILL 이 설정되어 있지 않아 fatal signal 이 와도
+    // task 를 깨울 수 없다면 종료
 	if (!signal_pending(p))
 		return 0;
-
+    // task 가pending signal 이 없다면 종료
+    // (받았지만 아직 처리 안된 signal 즉 받은 signal 이 있는지 검사)
 	return (state & TASK_INTERRUPTIBLE) || __fatal_signal_pending(p);
+    // TASK_INTERRUPTIBLE 상태이거나 SIGKILL signal 이 요청된 상태라면 TRUE
 }
 
 /*

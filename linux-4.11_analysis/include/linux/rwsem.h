@@ -27,19 +27,61 @@ struct rw_semaphore;
 #else
 /* All arch specific implementations share the same struct */
 struct rw_semaphore {
-	atomic_long_t count;
-	struct list_head wait_list;
+	atomic_long_t count; 
+    //  0x0000000000000000 - unlocked 상태이며, waiter 없음 
+    //                         (RWSEM_UNLOCKED_VALUE)
+    //  0x000000000000000x - x reader 가 CS 에 동작중 or lock 잡으려는 중, write waiter 없음 
+    //                         x = CS 에 동작중인 reader + lock 잡는중인 reader
+    //                         (x*RWSEM_ACTIVE_BIAS)
+    //  0xffffffff0000000x - 3 가지 경우 가능 
+    //                       * x reader 가 CS 에 동작중 or lock 잡으려는 중, waiter 있음 
+    //                         x = CS 에 동작중인 reader + lock 잡는중인 reader
+    //                         (x*RWSEM_ACTIVE_BIAS + RWSEM_WAITING_BIAS)
+    //                       * 1 writer 가 CS 에 동작중, waiter 없음
+    //                         ()
+    //                       * 1 writer 가 lock 잡으려는 중, waiter 없음 
+    //                         ()
+    //  0xffffffff00000001 - 2 가지 경우 가능 
+    //                       * 1 reader 가 CS 에 동작중 or lock 잡으려는 중, waiter 있음 
+    //                         (RWSEM_ACTIVE_BIAS + RWSEM_WAITING_BIAS)
+    //                       * 1 writer 가 CS 에 동작중 or lock 잡으려는 중, waiter 없음 
+    //                         (RWSEM_ACTIVE_WRITE_BIAS)
+    //  0xffffffff00000000 - reader or writer 가 queue 에 있지만, 아직 lock 잡으려 하지 
+    //                       않거나 CS 에 동작중이지 않음
+    //                         (RWSEM_WAITING_BIAS)
+    //  0xfffffffe00000001 - 1 writer 가 CS 에 동작중 or lock 잡으려는 중, queue 에 waiter 있음
+    //                         (RWSEM_ACTIVE_WRITE_BIAS + RWSEM_WAITING_BIAS)
+	struct list_head wait_list; 
+    // lock 얻기를 대기중인 process 들
 	raw_spinlock_t wait_lock;
+    // wait list 보호하기 위한 
 #ifdef CONFIG_RWSEM_SPIN_ON_OWNER
-	struct optimistic_spin_queue osq; /* spinner MCS lock */
+	struct optimistic_spin_queue osq; /* spinner MCS lock */ 
+    // MCS 알고리즘의 OSQ lock
 	/*
 	 * Write owner. Used as a speculative check to see
 	 * if the owner is running on the cpu.
 	 */
 	struct task_struct *owner;
+    // 현재 lock 소유한 task_struct  
+    // writer 가 
+    //    lock   하면... owner field 를 자신의 task_struct 씀 
+    //    unlock 하면... owner filed 를 clear
+    //    
+    // reader 가 
+    //    lock   하면... owner field 가 1 로 설정
+    //    unlock 하면    변경안하고 그대로 둠 
+    //
+    // => 0
+    //   lock 이 free
+    // => 1
+    //   lock 을 reader 가 잡았었거나, 바로 전 lock holder 가 reader 였음
+    // => task_struct 주소
+    //   writer 가 lock 잡은 상태
 #endif
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
-	struct lockdep_map	dep_map;
+	struct lockdep_map	dep_map; 
+    // lock debugging 관련
 #endif
 };
 
@@ -58,7 +100,9 @@ static inline int rwsem_is_locked(struct rw_semaphore *sem)
 	return atomic_long_read(&sem->count) != 0;
 }
 
+// rwsem 의 count 를
 #define __RWSEM_INIT_COUNT(name)	.count = ATOMIC_LONG_INIT(RWSEM_UNLOCKED_VALUE)
+
 #endif
 
 /* Common initializer macros and functions */
@@ -69,7 +113,8 @@ static inline int rwsem_is_locked(struct rw_semaphore *sem)
 # define __RWSEM_DEP_MAP_INIT(lockname)
 #endif
 
-#ifdef CONFIG_RWSEM_SPIN_ON_OWNER
+#ifdef CONFIG_RWSEM_SPIN_ON_OWNER 
+// rwsem 내의 OSQ lock 관련 필드 초기화
 #define __RWSEM_OPT_INIT(lockname) , .osq = OSQ_LOCK_UNLOCKED, .owner = NULL
 #else
 #define __RWSEM_OPT_INIT(lockname)

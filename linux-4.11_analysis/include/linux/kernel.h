@@ -200,7 +200,10 @@ extern int _cond_resched(void);
  * supposed to.
  */
 # define might_sleep() \
-	do { __might_sleep(__FILE__, __LINE__, 0); might_resched(); } while (0)
+	do { __might_sleep(__FILE__, __LINE__, 0); might_resched(); } while (0) 
+  // CONFIG_DEBUG_ATOMIC_SLEEP 이 설정된 경우, __might_sleep 을 통해 debugging 용도로 
+  // atomic context 에서 stack trace 를 호출하고, might_resched 를 통해 CONFIG_PREEMPT_VOLUNTARY 가
+  // 설정되어 있을 경우, 자발적으로 CPU를 yield 할 수 있도록(preemt 될 수 있도록)중간에 scheduling 을 허용
 # define sched_annotate_sleep()	(current->task_state_change = 0)
 #else
   static inline void ___might_sleep(const char *file, int line,

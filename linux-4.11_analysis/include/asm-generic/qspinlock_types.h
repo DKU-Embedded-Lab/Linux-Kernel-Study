@@ -30,6 +30,24 @@
 
 typedef struct qspinlock {
 	atomic_t	val;
+    /*
+     * Bitfields in the atomic value:
+     *
+     * When NR_CPUS < 16K
+     *  0- 7: locked byte
+     *     8: pending
+     *  9-15: not used
+     * 16-17: tail index -> lock 이 잡힌 context.. 4 개중 하나
+     * 18-31: tail cpu (+1) -> 현재 lock 잡고있는 cpu number 
+     *                         14 bit 크기 이므로 16384 개의 
+     *                         core 까지 표현 가능
+     *
+     * When NR_CPUS >= 16K
+     *  0- 7: locked byte
+     *     8: pending
+     *  9-10: tail index
+     * 11-31: tail cpu (+1)
+     */
 } arch_spinlock_t;
 
 /*
@@ -37,22 +55,6 @@ typedef struct qspinlock {
  */
 #define	__ARCH_SPIN_LOCK_UNLOCKED	{ ATOMIC_INIT(0) }
 
-/*
- * Bitfields in the atomic value:
- *
- * When NR_CPUS < 16K
- *  0- 7: locked byte
- *     8: pending
- *  9-15: not used
- * 16-17: tail index
- * 18-31: tail cpu (+1)
- *
- * When NR_CPUS >= 16K
- *  0- 7: locked byte
- *     8: pending
- *  9-10: tail index
- * 11-31: tail cpu (+1)
- */
 #define	_Q_SET_MASK(type)	(((1U << _Q_ ## type ## _BITS) - 1)\
 				      << _Q_ ## type ## _OFFSET)
 #define _Q_LOCKED_OFFSET	0

@@ -84,6 +84,8 @@
  * PV doubles the storage and uses the second cacheline for PV state.
  */
 static DEFINE_PER_CPU_ALIGNED(struct mcs_spinlock, mcs_nodes[MAX_NODES]);
+// 즉 반가상화 환경이 아닌 경우 각 processor 별로 
+// struct mcs_spinlock mcs_nodes[4] 가 생성됨
 
 /*
  * We must be able to distinguish between no-tail and the tail at 0:0,
@@ -417,7 +419,7 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 
 	if (pv_enabled())
 		goto queue;
-
+    // 반가상화 환경인지 검사
 	if (virt_spin_lock(lock))
 		return;
 
@@ -429,7 +431,11 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	if (val == _Q_PENDING_VAL) {
 		while ((val = atomic_read(&lock->val)) == _Q_PENDING_VAL)
 			cpu_relax();
-	}
+	} 
+    // val 에 _Q_PENDING_VAL 이 설정되어 있는지 검사(val 의 8 번째 bit 가 1 인지)
+    // _Q_PENDING_VAL 이 설정된 경우... lock 을 얻으려 할 때, lock 을 thread 가 가지고
+    // 있는 상태이며, queue 가 비어있는 상태임
+    //
 
 	/*
 	 * trylock || pending
@@ -442,11 +448,16 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 		 * If we observe any contention; queue.
 		 */
 		if (val & ~_Q_LOCKED_MASK)
-			goto queue;
+			goto queue; 
+        // val 이 locked 되고, pending state 인지 검사 
 
 		new = _Q_LOCKED_VAL;
 		if (val == new)
 			new |= _Q_PENDING_VAL;
+        // 현재 lock 이 이미 잡힌 상태이고, pending 등 뭐다른거 설정되어 
+        // 있지 않다면 new lock 에 pending state 추가 
+        //  e.g. 첫 thread 가 lock 잡고 종료되고, 두번째 thread 가 lock 잡으려 
+        //       시도하는 경우에 해당
 
 		/*
 		 * Acquire semantic is required here as the function may
@@ -455,7 +466,8 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 		old = atomic_cmpxchg_acquire(&lock->val, val, new);
 		if (old == val)
 			break;
-
+        // lock->val 이 아직 val 과 같다면 즉 lock 된 상태라면 lock 변수에 
+        // pending state 설정된 new lock 을 write 후 break
 		val = old;
 	}
 
@@ -484,15 +496,37 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 */
 	clear_pending_set_locked(lock);
 	return;
-
+    // lock 이 release 를 기다리며 loop 돌다가 lock 이release 되면 
+    // pending bit clear 하고lock 잡고 종료
+    //
 	/*
 	 * End of pending bit optimistic spinning and beginning of MCS
 	 * queuing.
 	 */
-queue:
+queue: 
+    // 세번째 thread 가 lock 을 잡으려 하는 상황부터는 MCS queueing 으로 동작 
+    // Processor 별로 생성되 있는 mcs_spinlock[4] 중 첫번째 normal task context 
+    // 로부터 값을 읽어들임
 	node = this_cpu_ptr(&mcs_nodes[0]);
 	idx = node->count++;
 	tail = encode_tail(smp_processor_id(), idx);
+    // lock variable 의 16-32 bit 에 설정될 정보 구성
+    /*
+     * Bitfields in the atomic value:
+     *
+     * When NR_CPUS < 16K
+     *  0- 7: locked byte
+     *     8: pending
+     *  9-15: not used
+     * 16-17: tail index
+     * 18-31: tail cpu (+1)
+     *
+     * When NR_CPUS >= 16K
+     *  0- 7: locked byte
+     *     8: pending
+     *  9-10: tail index
+     * 11-31: tail cpu (+1)
+     */
 
 	node += idx;
 	node->locked = 0;
@@ -506,7 +540,7 @@ queue:
 	 */
 	if (queued_spin_trylock(lock))
 		goto release;
-
+    // queue 에 추가 전 lock 상태 한번 더 검사
 	/*
 	 * We have already touched the queueing cacheline; don't bother with
 	 * pending stuff.
@@ -515,14 +549,16 @@ queue:
 	 *
 	 * RELEASE, such that the stores to @node must be complete.
 	 */
-	old = xchg_tail(lock, tail);
+	old = xchg_tail(lock, tail); 
+    // lock 변수에 계산한 tail 정보를 기록
 	next = NULL;
 
 	/*
 	 * if there was a previous node; link it and wait until reaching the
 	 * head of the waitqueue.
 	 */
-	if (old & _Q_TAIL_MASK) {
+	if (old & _Q_TAIL_MASK) { 
+        // queue 가 비어있는 상태가 아니라면...
 		prev = decode_tail(old);
 		/*
 		 * The above xchg_tail() is also a load of @lock which generates,
@@ -534,6 +570,8 @@ queue:
 		smp_read_barrier_depends();
 
 		WRITE_ONCE(prev->next, node);
+        // 현재 processor 의 mcs_spinlock per-cpu variable 을 그전 
+        // variable 의 next 에 연결
 
 		pv_wait_node(node, prev);
 		arch_mcs_spin_lock_contended(&node->locked);
@@ -546,7 +584,12 @@ queue:
 		 */
 		next = READ_ONCE(node->next);
 		if (next)
-			prefetchw(next);
+			prefetchw(next); 
+        // 현재 mcs_spinlock per-cpu variable 의 next node 가 무언가 다른 processor 
+        // 의 per-cpu variable 에 연결된 상태라면(다른processor 도 접근 시도중이면)
+        // 그 processor 의 mcs_spinlock 을 미리 읽어옴 
+        // 추후 현재processor 가 lock 잡고 일하고 unlock 하게 되면 next 에게 
+        // 너차례라고 알려주어야 함
 	}
 
 	/*
@@ -574,7 +617,7 @@ queue:
 		goto locked;
 
 	val = smp_cond_load_acquire(&lock->val.counter, !(VAL & _Q_LOCKED_PENDING_MASK));
-
+    // lock 이 release 될 때까지 대기 
 locked:
 	/*
 	 * claim the lock:
@@ -599,7 +642,8 @@ locked:
 		 */
 		old = atomic_cmpxchg_relaxed(&lock->val, val, _Q_LOCKED_VAL);
 		if (old == val)
-			goto release;	/* No contention */
+			goto release;	/* No contention */ 
+        // lock 잡음
 
 		val = old;
 	}

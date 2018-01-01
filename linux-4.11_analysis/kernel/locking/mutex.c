@@ -83,17 +83,25 @@ static inline struct task_struct *__mutex_trylock_or_owner(struct mutex *lock)
 
 	owner = atomic_long_read(&lock->owner);
 	for (;;) { /* must loop, can race against a flag */
-		unsigned long old, flags = __owner_flags(owner);
+		unsigned long old, flags = __owner_flags(owner); 
+        // owner 에서 0~2 bit 에 설정된 flag 값 가져옴
 		unsigned long task = owner & ~MUTEX_FLAGS;
+        // owner 에서 task_strut 의 주소값 가져옴
 
 		if (task) {
+            // owner 가 있는 상태라면 즉 LOCK 이 잡혀 있는 상태라면
 			if (likely(task != curr))
 				break;
-
+            // 현재 lock 접근하는 task가 lock owner 와 
+            // 다르면 lock 얻을 수 없는 일반적 경우로 owner 반환하고 종료
+            // 같으면...
 			if (likely(!(flags & MUTEX_FLAG_PICKUP)))
 				break;
-
-			flags &= ~MUTEX_FLAG_PICKUP;
+            // 같은 owner 가 같은 lock 을 얻으려 한는 경우라면 
+            // MUTEX_FLAG_PICKUP 이 설정되어 있어야 함 
+			flags &= ~MUTEX_FLAG_PICKUP; 
+            // ok... 같은 lock 접근 인 경우, lock 획득 가능하기 위한 flag 를 
+            // 확인하였으므로 이제 flag 에서 MUTEX_FLAG_PICKUP 삭제해 줌
 		} else {
 #ifdef CONFIG_DEBUG_MUTEXES
 			DEBUG_LOCKS_WARN_ON(flags & MUTEX_FLAG_PICKUP);
@@ -104,17 +112,23 @@ static inline struct task_struct *__mutex_trylock_or_owner(struct mutex *lock)
 		 * We set the HANDOFF bit, we must make sure it doesn't live
 		 * past the point where we acquire it. This would be possible
 		 * if we (accidentally) set the bit on an unlocked mutex.
-		 */
+		 */ 
 		flags &= ~MUTEX_FLAG_HANDOFF;
-
+        // 이제 여기는 두가지 경우
+        //  - lock owner 가 없는 경우 
+        //  - lock owner 가 자기 자신이며 MUTEX_FLAG_PICKUP 이 설정되어 있던
+        //    경우
 		old = atomic_long_cmpxchg_acquire(&lock->owner, owner, curr | flags);
+        // current thread 가 lock 잡도록 수행
 		if (old == owner)
 			return NULL;
+        // lock 잡으면
 
 		owner = old;
 	}
 
 	return __owner_task(owner);
+    // lock->owner 에서 task_struct 만 반환
 }
 
 /*
@@ -141,7 +155,11 @@ static __always_inline bool __mutex_trylock_fast(struct mutex *lock)
 	unsigned long curr = (unsigned long)current;
 
 	if (!atomic_long_cmpxchg_acquire(&lock->owner, 0UL, curr))
-		return true;
+		return true; 
+    // cmpxchg 연산을 수행, lock owner 가 0 과 같다면 즉 mutex 에 대한 
+    // 소유자가 없어서lock 을 잡을 수 있는 상황이므로 currrent task_struct 의 
+    // 주소를 owner 에 설정 하고 빠르게 끝 
+    // fastpath 에서 lock 잡기 성공!!
 
 	return false;
 }
@@ -152,6 +170,12 @@ static __always_inline bool __mutex_unlock_fast(struct mutex *lock)
 
 	if (atomic_long_cmpxchg_release(&lock->owner, curr, 0UL) == curr)
 		return true;
+    // 현재 mutex_unlock 호출한 thread 가 lock holder 이며 mutex flag 따로 
+    // 설정이 안되어 있다면 owner 에 0 을 씀 
+    //  - MUTEX_FLAG_WAITERS 설정 안되어 있어야 함
+    //    => 있다면 wakeup 해주어야..
+    //  - MUTEX_FLAG_HANDOFF 설정 안되어 있어야 함
+    //    => 있다면 diret 로 wait_list 의 첫번째 놈에게 전달해 주어야..
 
 	return false;
 }
@@ -167,6 +191,7 @@ static inline void __mutex_clear_flag(struct mutex *lock, unsigned long flag)
 	atomic_long_andnot(flag, &lock->owner);
 }
 
+// mutex_waiter 가 지금 wait_list  의 첫번째 entry인가? 
 static inline bool __mutex_waiter_is_first(struct mutex *lock, struct mutex_waiter *waiter)
 {
 	return list_first_entry(&lock->wait_list, struct mutex_waiter, list) == waiter;
@@ -194,6 +219,7 @@ static void __mutex_handoff(struct mutex *lock, struct task_struct *task)
 		new |= (unsigned long)task;
 		if (task)
 			new |= MUTEX_FLAG_PICKUP;
+            // MUTEX_FLAG_PICKUP 설정 추가
 
 		old = atomic_long_cmpxchg_release(&lock->owner, owner, new);
 		if (old == owner)
@@ -236,9 +262,10 @@ static void __sched __mutex_lock_slowpath(struct mutex *lock);
 void __sched mutex_lock(struct mutex *lock)
 {
 	might_sleep();
-
-	if (!__mutex_trylock_fast(lock))
+    // debugging 목적 설정, 선점가능하도록 실행도중 scheduling 가능하도록 설정
+	if (!__mutex_trylock_fast(lock)) // fast path 로 lock 을 얻으려 시도
 		__mutex_lock_slowpath(lock);
+    // 바로 lock 획득 불가능 한 경우, midpath/slowpath 로..
 }
 EXPORT_SYMBOL(mutex_lock);
 #endif
@@ -467,7 +494,10 @@ static inline int mutex_can_spin_on_owner(struct mutex *lock)
 
 	if (need_resched())
 		return 0;
-
+    // 현재 task 가 CPU yield 요청 즉 preemption 요청이 설정되 있지 않아야 
+    // midpath 가 실행될 수 있음 
+    // 즉 현재 task 보다 우선순위가 높은 task 에 의해 
+    // CPU 요청이 있는 상태라면 midpath 포기하고, slowpath 로 전환
 	rcu_read_lock();
 	owner = __mutex_owner(lock);
 
@@ -476,7 +506,11 @@ static inline int mutex_can_spin_on_owner(struct mutex *lock)
 	 * on cpu or its cpu is preempted
 	 */
 	if (owner)
-		retval = owner->on_cpu && !vcpu_is_preempted(task_cpu(owner));
+		retval = owner->on_cpu && !vcpu_is_preempted(task_cpu(owner)); 
+    // 아래 조건을 만족해야
+    //  - lock 이 잡혀 있는 경우, lock 잡고있는 놈이 돌고 있는 thread 가 
+    //    running 상태여야 함
+
 	rcu_read_unlock();
 
 	/*
@@ -522,7 +556,12 @@ mutex_optimistic_spin(struct mutex *lock, struct ww_acquire_ctx *ww_ctx,
 		 */
 		if (!mutex_can_spin_on_owner(lock))
 			goto fail;
-
+        // 아래 조건을 만족하는 상황만 midpath 가능
+        //  - 현재 process 가 CPU 를 yield 하겠다는 선점요청을 한 
+        //    상태가 아니여야 함
+        //  - 이미 lock 잡고있는 thread 가 다른 CPU 에서 돌고 있는 중이어야함 
+        //
+        //  위에 해당되지 않는 놈을 미리 거름 
 		/*
 		 * In order to avoid a stampede of mutex spinners trying to
 		 * acquire the mutex all at once, the spinners need to take a
@@ -530,15 +569,33 @@ mutex_optimistic_spin(struct mutex *lock, struct ww_acquire_ctx *ww_ctx,
 		 */
 		if (!osq_lock(&lock->osq))
 			goto fail;
+        // mutex 의 osq lock 변수인 lock->osq 를 통해 mispath 수행  
+        //
+        // midpath 에서 lock 잡은 경우 !true => 계속 실행
+        // midpath 에서 slowpath 로 넘어가야 하는 경우 !false => fail 로 이동
 	}
-
+    // 
+    // case 1. waiter 가 NULL 이 아니거나 즉 wait-wound mutex 사용하는 경우 
+    //         FIXME
+    // case 2. waiter 가 NULL 이며, osq 의 선두에 있는 놈이 
+    //         midpath 에서 lock 잡기 성공!!
+    //         => 이제 owner 설정해 주어야 함
 	for (;;) {
 		struct task_struct *owner;
 
 		/* Try to acquire the mutex... */
 		owner = __mutex_trylock_or_owner(lock);
 		if (!owner)
-			break;
+			break; 
+        // case 2.
+        // osq 에서 spinning 하다가 자기 차례에서 lock 을 잡은 놈의 
+        // task_struct 를 owner 에 설정 해주고 break
+        //
+        // case 1. 
+        // wait-wound mutex 사용하는 경우
+        // fastpath 한번 더 확인하고, midpath 과정 시작하기 위헤 코드계속 
+        // FIXME
+        // 
 
 		/*
 		 * There's an owner, wait for it to either
@@ -558,9 +615,13 @@ mutex_optimistic_spin(struct mutex *lock, struct ww_acquire_ctx *ww_ctx,
 
 	if (!waiter)
 		osq_unlock(&lock->osq);
-
+        // case2. 
+        // osq lock 도 spinning 정상적으로 하다가 lock 잡고 끝났으므로 
+        // osq 에서 제거 및 spinning 하고 있는 다음 optimistic_spin_node 
+        // per-CPU 의 locked 에 1 을 write 하여 너차례라고 알림
 	return true;
-
+    // osq spinning 의 결과 성공적으로 osq lock 을 얻고, 
+    // mutex 의 owner 를 설정하였으니 true 로 함수 종료
 
 fail_unlock:
 	if (!waiter)
@@ -610,8 +671,10 @@ void __sched mutex_unlock(struct mutex *lock)
 #ifndef CONFIG_DEBUG_LOCK_ALLOC
 	if (__mutex_unlock_fast(lock))
 		return;
+    // owner 에 task_struct 만 있고 그게 current 라면 바로 unlock
 #endif
 	__mutex_unlock_slowpath(lock, _RET_IP_);
+    // midpath, slowpath 관련
 }
 EXPORT_SYMBOL(mutex_unlock);
 
@@ -743,36 +806,55 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	bool first = false;
 	struct ww_mutex *ww;
 	int ret;
-
+    // ip 는 debugging 용도
 	might_sleep();
 
 	ww = container_of(lock, struct ww_mutex, base);
 	if (use_ww_ctx && ww_ctx) {
 		if (unlikely(ww_ctx == READ_ONCE(ww->ctx)))
 			return -EALREADY;
+        // 
 	}
-
+    // ww_mutex 를 사용하는 경우 lock 으로부터 ww_mutex 가져옴
 	preempt_disable();
-	mutex_acquire_nest(&lock->dep_map, subclass, 0, nest_lock, ip);
+	mutex_acquire_nest(&lock->dep_map, subclass, 0, nest_lock, ip); 
+    // lock 추적 debugging 용도 정보 초기화
 
 	if (__mutex_trylock(lock) ||
-	    mutex_optimistic_spin(lock, ww_ctx, use_ww_ctx, NULL)) {
+	    mutex_optimistic_spin(lock, ww_ctx, use_ww_ctx, NULL)) { 
+        // __mutex_trylock 으로 fastpath 한번 더 확인 후, 
+        //   - 성공이면 !NULL => true
+        //   - 실패면 !owner 주소 => false => midpath 수행
+        // 
+        // mutex_optimistic_spin 함수를 통해 mid path 수행 
+        //
+        // => fastpath 또는 midpath 에서 lock 잡기 성공한다면 아래 코드 실행
+        //
 		/* got the lock, yay! */
-		lock_acquired(&lock->dep_map, ip);
+		lock_acquired(&lock->dep_map, ip); 
+        // lock debugging 정보 기록
 		if (use_ww_ctx && ww_ctx)
 			ww_mutex_set_context_fastpath(ww, ww_ctx);
+        // wait-wound mutex 관련 
+        // FIXME
 		preempt_enable();
 		return 0;
 	}
-
+    // midpath 로 진입을 아얘 못하거나, midpath 도중 CPU yield 해야하는 
+    // 상황이어서 osq 구성한거 되돌리고 여기로 오게되면...
+    //
+    // slowpath 로 lock 을 대기해야 하는 상황
+    //
 	spin_lock(&lock->wait_lock);
 	/*
 	 * After waiting to acquire the wait_lock, try again.
 	 */
-	if (__mutex_trylock(lock)) {
+	if (__mutex_trylock(lock)) { 
+        // fastpath 가능한지 한번 더 확인        
 		if (use_ww_ctx && ww_ctx)
 			__ww_mutex_wakeup_for_backoff(lock, ww_ctx);
-
+            // wait-wound mutex 관련 
+            // FIXME
 		goto skip_wait;
 	}
 
@@ -780,15 +862,17 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	debug_mutex_add_waiter(lock, &waiter, current);
 
 	lock_contended(&lock->dep_map, ip);
-
+    // lock validator 관련 초기화
 	if (!use_ww_ctx) {
 		/* add waiting tasks to the end of the waitqueue (FIFO): */
 		list_add_tail(&waiter.list, &lock->wait_list);
-
+        // mutex 의 wait_list 에 mutex_waiter 추가
 #ifdef CONFIG_DEBUG_MUTEXES
 		waiter.ww_ctx = MUTEX_POISON_WW_CTX;
 #endif
-	} else {
+	} else { 
+        // wait-wound mutex 관련 
+        // FIXME
 		/* Add in stamp order, waking up waiters that must back off. */
 		ret = __ww_mutex_add_waiter(&waiter, lock, ww_ctx);
 		if (ret)
@@ -798,12 +882,22 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	}
 
 	waiter.task = current;
+    // current task_struct 를 mutex_waiter 에 설정
 
 	if (__mutex_waiter_is_first(lock, &waiter))
 		__mutex_set_flag(lock, MUTEX_FLAG_WAITERS);
+    // mutex_waiter 가 wait_list 의 유일한 waier 라면, 
+    // MUTEX_FLAG_WAITERS 를 설정하여 현재 lock 을 
+    // 기다리며 잠들어 있는 놈이 있다는 것을 알림
+    // => unlock 시, wakeup 해주어야함을 알리기 위해
 
 	set_current_state(state);
+    // 현재 task 의 state 를 TASK_UNINTERRUPTIBLE, TASK_INTERRUPTIBLE 등 매개
+    // 변수로 받은 값으로 설정. 
+    // mutex_lock 에서는 TASK_UNINTERRUPTIBLE
 	for (;;) {
+        // 이제 sleep 했다가... 깨서 lock 획득 가능하나 확인했다가...
+        // 다시 sleep 했다가 반복
 		/*
 		 * Once we hold wait_lock, we're serialized against
 		 * mutex_unlock() handing the lock off to us, do a trylock
@@ -812,37 +906,51 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		 */
 		if (__mutex_trylock(lock))
 			goto acquired;
-
+        // mutex 얻을 수 있는지 확인
 		/*
 		 * Check for signals and wound conditions while holding
 		 * wait_lock. This ensures the lock cancellation is ordered
 		 * against mutex_unlock() and wake-ups do not go missing.
 		 */
 		if (unlikely(signal_pending_state(state, current))) {
+            // mutex_lock 으로 호출시, state 가 TASK_UNINTERRUPTIBLE 이므로 
+            // 관련 없지만. 
+            // TASK_INTERRUPTIBLE 로 설정시, mutex 를 기다리던 thread 가 
+            // signal 을 받아 mutex 획득을 중단 할 수 있음
 			ret = -EINTR;
 			goto err;
 		}
 
 		if (use_ww_ctx && ww_ctx && ww_ctx->acquired > 0) {
+            // FIXME
+            // wait-wound mutex 관련
 			ret = __ww_mutex_lock_check_stamp(lock, &waiter, ww_ctx);
 			if (ret)
 				goto err;
 		}
-
+        // 이제 현재 thread 를 sleep 시키고schedule 함수를 통해 다음 
+        // 수행해야 될 task 를 선택해야 하므로 wait_queue 를 지키고 있던 
+        // spinlock 을 풀음
 		spin_unlock(&lock->wait_lock);
 		schedule_preempt_disabled();
-
+        // 다시 수행되게 되면 여기부터 수행됨
 		/*
 		 * ww_mutex needs to always recheck its position since its waiter
 		 * list is not FIFO ordered.
 		 */
 		if ((use_ww_ctx && ww_ctx) || !first) {
+            // FIXME
+            // wait-wound mutex 관련
 			first = __mutex_waiter_is_first(lock, &waiter);
 			if (first)
 				__mutex_set_flag(lock, MUTEX_FLAG_HANDOFF);
+                // 현재 thread 가 wait_list 의 첫번째 놈이라면
+                // MUTEX_FLAG_HANDOFF 설정하여 lock 잡고있던 놈이lock 을
+                // 바로전달 할 수 있게 함 
 		}
 
-		set_current_state(state);
+		set_current_state(state); 
+        // task 상태를 다시 설정
 		/*
 		 * Here we order against unlock; we must either see it change
 		 * state back to RUNNING and fall through the next schedule(),
@@ -851,32 +959,38 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		if (__mutex_trylock(lock) ||
 		    (first && mutex_optimistic_spin(lock, ww_ctx, use_ww_ctx, &waiter)))
 			break;
-
+        // fastpath, midpath 로 lock acquire 시도
 		spin_lock(&lock->wait_lock);
 	}
 	spin_lock(&lock->wait_lock);
-acquired:
+acquired: 
+    // lock 을 얻은 상태 
 	__set_current_state(TASK_RUNNING);
-
+    // lock 을 얻었으므로 실행 재개함. 
+    // 현재 task 상태를 TASK_RUNNING 으로 변경
 	mutex_remove_waiter(lock, &waiter, current);
+    // mutex->wait_list 에서 현재 task_struct 에 해당하는 mutex_waiter 삭제
 	if (likely(list_empty(&lock->wait_list)))
 		__mutex_clear_flag(lock, MUTEX_FLAGS);
-
+        // 삭제 결과 list 가 하나도 안남게 된다면 lock 잡을라고 sleep 하는놈이
+        // 없으므로 다 flag 다 clear
 	debug_mutex_free_waiter(&waiter);
 
 skip_wait:
 	/* got the lock - cleanup and rejoice! */
 	lock_acquired(&lock->dep_map, ip);
-
+    // lock debugging 정보 기록
 	if (use_ww_ctx && ww_ctx)
 		ww_mutex_set_context_slowpath(ww, ww_ctx);
-
+        // FIXME
+        // wait-wound mutex 관련 
 	spin_unlock(&lock->wait_lock);
 	preempt_enable();
 	return 0;
+    // 성공적으로 종료
 
 err:
-	__set_current_state(TASK_RUNNING);
+	__set_current_state(TASK_RUNNING);    
 	mutex_remove_waiter(lock, &waiter, current);
 err_early_backoff:
 	spin_unlock(&lock->wait_lock);
@@ -1016,7 +1130,7 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 	unsigned long owner;
 
 	mutex_release(&lock->dep_map, 1, ip);
-
+    // lock debugging 관련
 	/*
 	 * Release the lock before (potentially) taking the spinlock such that
 	 * other contenders can get on with things ASAP.
@@ -1035,12 +1149,16 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 
 		if (owner & MUTEX_FLAG_HANDOFF)
 			break;
-
+        // MUTEX_FLAG_HANDOFF 가 설정되어 있다면, 단순 owner 에 대한 clear 가 
+        // 아니라 direct 로 handoff 해주어야 하므로 break
 		old = atomic_long_cmpxchg_release(&lock->owner, owner,
 						  __owner_flags(owner));
+        // lock->owner 에 flag 만 남기고 다 clear
 		if (old == owner) {
 			if (owner & MUTEX_FLAG_WAITERS)
 				break;
+                // MUTEX_FLAG_WAITERS 가 설정되어 있다면 
+                // wakeup 해주어야 하므로 break
 
 			return;
 		}
@@ -1051,10 +1169,12 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 	spin_lock(&lock->wait_lock);
 	debug_mutex_unlock(lock);
 	if (!list_empty(&lock->wait_list)) {
+        // list 가 비어있지 않은 경우 wait_list 에서
+        // 첫번째 놈 가져와 바로 깨울 list에 추가
 		/* get the first entry from the wait-list: */
 		struct mutex_waiter *waiter =
 			list_first_entry(&lock->wait_list,
-					 struct mutex_waiter, list);
+					 struct mutex_waiter, list);        
 
 		next = waiter->task;
 
@@ -1064,10 +1184,14 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 
 	if (owner & MUTEX_FLAG_HANDOFF)
 		__mutex_handoff(lock, next);
+        // MUTEX_FLAG_HANDOFF 설정 시 아직 lock 을 잡지 못하고
+        // 여러번 잠든 놈이 있는 경우이므로 fairness 를 위해 
+        // wait_list 의 첫번째 놈에게 lock 직접전달
 
 	spin_unlock(&lock->wait_lock);
 
 	wake_up_q(&wake_q);
+    // 깨움
 }
 
 #ifndef CONFIG_DEBUG_LOCK_ALLOC

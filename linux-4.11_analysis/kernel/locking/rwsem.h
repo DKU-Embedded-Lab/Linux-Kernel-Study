@@ -47,6 +47,7 @@ static inline void rwsem_set_reader_owned(struct rw_semaphore *sem)
 static inline bool rwsem_owner_is_writer(struct task_struct *owner)
 {
 	return owner && owner != RWSEM_READER_OWNED;
+    // owner 가 writer 이어서 task_struct 가 담긴 상태면 true
 }
 
 static inline bool rwsem_owner_is_reader(struct task_struct *owner)

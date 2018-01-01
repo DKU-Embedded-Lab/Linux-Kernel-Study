@@ -64,13 +64,19 @@ static inline void __down_read(struct rw_semaphore *sem)
 {
 	asm volatile("# beginning down_read\n\t"
 		     LOCK_PREFIX _ASM_INC "(%1)\n\t"
-		     /* adds 0x00000001 */
-		     "  jns        1f\n"
+		     /* adds 0x00000001 */ 
+             /* sem->count 에 1 증가  */
+		     "  jns        1f\n" 
+             /* 덧셈 결과가 양수면 jmp  */
+             /* RWSEM_ACTIVE_WRITE_BIAS 설정되어 있으면 어차피 음수  */
 		     "  call call_rwsem_down_read_failed\n"
 		     "1:\n\t"
+             /* 양수면 read lock 얻고 종료  */
 		     "# ending down_read\n\t"
-		     : "+m" (sem->count)
+		     : "+m" (sem->count) 
+             /* 출력: rw 용도로 sem->count memory 위치에 바로 저장  */            
 		     : "a" (sem)
+             /* 입력: sem 을 %eax 에 저장  */
 		     : "memory", "cc");
 }
 
@@ -107,16 +113,28 @@ static inline bool __down_read_trylock(struct rw_semaphore *sem)
 							\
 	asm volatile("# beginning down_write\n\t"	\
 		     LOCK_PREFIX "  xadd      %1,(%4)\n\t"	\
+             /* RWSEM_ACTIVE_WRITE_BIAS 를 sem->count 에 더하고 그전값 반환 */ \
 		     /* adds 0xffff0001, returns the old value */ \
 		     "  test " __ASM_SEL(%w1,%k1) "," __ASM_SEL(%w1,%k1) "\n\t" \
+             /* AND 연산 수행 */ \
 		     /* was the active mask 0 before? */\
 		     "  jz        1f\n"			\
-		     "  call " slow_path "\n"		\
+             /* ZF 가 0 이라면 1f 로 jmp */ \
+		     "  call " slow_path "\n"		\ 
+             /* ZF 가 0 이 아니라면 slow_path 함수 호출(call_rwsem_down_write_failed)  */ \
 		     "1:\n"				\
+             /* 그전에 writer 가 없었던 것이므로 lock 획득  */ \
 		     "# ending down_write"		\
-		     : "+m" (sem->count), "=d" (tmp), "=a" (ret), "+r" (__sp) \
+		     : "+m" (sem->count), "=d" (tmp), "=a" (ret), "+r" (__sp) \ 
+             /* 출력 : rw 용도로 sem->count memory 위치 바로 저장 */ \ 
+             /*        r  용도로 %edx 를 tmp 에 저장 */ \ 
+             /*        r  용도로 %eax 를 ret 에 저장 */ \ 
+             /*        rw 용도로 __sp 를 범용 register 에 저장*/ \
 		     : "a" (sem), "1" (RWSEM_ACTIVE_WRITE_BIAS) \
+             /* 입력 : sem 을 %eax 에 저장 */ \
+             /*        RWSEM_ACTIVE_WRITE_BIAS 을 %edx 에 저장 */ \
 		     : "memory", "cc");			\
+             /* clobbered register  */ \
 	ret;						\
 })
 
@@ -170,11 +188,16 @@ static inline void __up_read(struct rw_semaphore *sem)
 		     LOCK_PREFIX "  xadd      %1,(%2)\n\t"
 		     /* subtracts 1, returns the old value */
 		     "  jns        1f\n\t"
+             /* 덧셈 결과가 양수면 jmp  */
 		     "  call call_rwsem_wake\n" /* expects old value in %edx */
 		     "1:\n"
 		     "# ending __up_read\n"
 		     : "+m" (sem->count), "=d" (tmp)
-		     : "a" (sem), "1" (-RWSEM_ACTIVE_READ_BIAS)
+             /* 출력 : rw 용도로 sem->count memory 위치 바로 저장 */ 
+             /*        r  용도로 %edx 를 tmp 에 저장 */ 
+		     : "a" (sem), "1" (-RWSEM_ACTIVE_READ_BIAS) 
+             /* 입력 : sem 을 %eax 에 저장 */ \
+             /*        -RWSEM_ACTIVE_READ_BIAS 을 %edx 에 저장 */ \
 		     : "memory", "cc");
 }
 
@@ -186,13 +209,19 @@ static inline void __up_write(struct rw_semaphore *sem)
 	long tmp;
 	asm volatile("# beginning __up_write\n\t"
 		     LOCK_PREFIX "  xadd      %1,(%2)\n\t"
-		     /* subtracts 0xffff0001, returns the old value */
-		     "  jns        1f\n\t"
+		     /* subtracts 0xffff0001, returns the old value */ 
+             /* sem->count 에 -RWSEM_ACTIVE_WRITE_BIAS 더함 */
+		     "  jns        1f\n\t" 
+             /* 덧셈 결과가 양수면 jmp  */
 		     "  call call_rwsem_wake\n" /* expects old value in %edx */
 		     "1:\n\t"
 		     "# ending __up_write\n"
 		     : "+m" (sem->count), "=d" (tmp)
+             /* 출력 : rw 용도로 sem->count memory 위치 바로 저장 */ 
+             /*        r  용도로 %edx 를 tmp 에 저장 */ 
 		     : "a" (sem), "1" (-RWSEM_ACTIVE_WRITE_BIAS)
+             /* 입력 : sem 을 %eax 에 저장 */ \
+             /*        -RWSEM_ACTIVE_WRITE_BIAS 을 %edx 에 저장 */ \
 		     : "memory", "cc");
 }
 

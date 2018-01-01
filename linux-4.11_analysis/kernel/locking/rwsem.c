@@ -20,10 +20,12 @@
 void __sched down_read(struct rw_semaphore *sem)
 {
 	might_sleep();
+    // atomic context 에서 호출시, 그냥 stack trace 만 출력
 	rwsem_acquire_read(&sem->dep_map, 0, 0, _RET_IP_);
-
+    // lock validator 관련
 	LOCK_CONTENDED(sem, __down_read_trylock, __down_read);
 	rwsem_set_reader_owned(sem);
+    //현재 rwsem 의 owner 를 현재 1 로 설정
 }
 
 EXPORT_SYMBOL(down_read);
@@ -50,10 +52,12 @@ EXPORT_SYMBOL(down_read_trylock);
 void __sched down_write(struct rw_semaphore *sem)
 {
 	might_sleep();
+    // atomic context 에서 호출시, 그냥 stack trace 만 출력
 	rwsem_acquire(&sem->dep_map, 0, 0, _RET_IP_);
-
+    // lock validator 관련
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
 	rwsem_set_owner(sem);
+    // 현재 rwsem 의 owner 를 현재 task_struct 로 설정
 }
 
 EXPORT_SYMBOL(down_write);
@@ -100,7 +104,7 @@ EXPORT_SYMBOL(down_write_trylock);
 void up_read(struct rw_semaphore *sem)
 {
 	rwsem_release(&sem->dep_map, 1, _RET_IP_);
-
+    // lock validator 관련
 	__up_read(sem);
 }
 
@@ -112,8 +116,9 @@ EXPORT_SYMBOL(up_read);
 void up_write(struct rw_semaphore *sem)
 {
 	rwsem_release(&sem->dep_map, 1, _RET_IP_);
-
+    // lock validator 관련
 	rwsem_clear_owner(sem);
+    // owner 에서 task_structure 삭제
 	__up_write(sem);
 }
 

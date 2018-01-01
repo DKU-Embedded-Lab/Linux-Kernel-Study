@@ -402,7 +402,8 @@
 /* atomic_cmpxchg_relaxed */
 #ifndef atomic_cmpxchg_relaxed
 #define  atomic_cmpxchg_relaxed		atomic_cmpxchg
-#define  atomic_cmpxchg_acquire		atomic_cmpxchg
+#define  atomic_cmpxchg_acquire		atomic_cmpxchg 
+// architecture specific 한 cmpxchg function 호출
 #define  atomic_cmpxchg_release		atomic_cmpxchg
 
 #else /* atomic_cmpxchg_relaxed */

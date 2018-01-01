@@ -50,24 +50,60 @@ struct ww_acquire_ctx;
  * - detects multi-task circular deadlocks and prints out all affected
  *   locks and tasks (and only those tasks)
  */
+// wait-wound mutex 사용의 경우, mutex 가 ww_mutex 에 포함되어 있음
 struct mutex {
-	atomic_long_t		owner;
+	atomic_long_t		owner; 
+    // lock 을 잡은 task_struct 의 주소
+    // owner 이 0 이면 즉 NULL 이면 lock 을 소유한 
+    // task_struct 가 없으므로 lock 이 free 상태 
+    //
+    // 또한 address 가 L1_CACHE_BYTES align 되어 있으므로(64 byte)
+    // 0,1,2 bit 로 lock 의 상태정보를 나타냄 
+    //
+    // 0 BIT 설정           - lock 잠김 mutex 를 얻으려 기다리는 동안 잠들어야 될때 설정 
+    // (MUTEX_FLAG_WAITERS) - lock 잡고있던 thread 는 lock release 시 이 bit 가 설정되어 
+    //                        있다면 waiter 를 wakeup 해주어야 함을 알수 있음
+    //                      => 불필요한 연산 방지
+    //                      => slowpath 들어간 thread 가 있을때 설정됨
+    //
+    // 1 BIT 설정           - 이미 lock 잡으려다 fail 후, 일정시간 sleep 했던 thread 가 
+    // (MUTEX_FLAG_HANDOFF)   깨어나 다시 lock 잡으려 시도할때 실패하게 되면 
+    //                        다시 또 sleep 들어가기 전에 이 bit 설정 
+    //                      - lock 잡고있던 thread 는 lock release 시 이 bit 가 설정되어 
+    //                        있다면 다른 새로 lock 을 잡으려는 thread 또는 Optimistic 
+    //                        spinning 중인 thread 가 lock 을 먼저 잡기 전지 않도록 하기 
+    //                        위해 단순히 owner 를 0 으로 clear 하는 것이 아니라, sleep 
+    //                        들어간 thread 를 깨우고, direct 로 wait_list 의 첫번재 
+    //                        thread 에게 소유권을 넘겨줌
+    //                      => unfairness 방지  
+    //
+    // 2 BIT 설정          - 1bit 설정 으로 lock 잡은 thread 가 lock 을 handoff 
+    // (MUTEX_FLAG_PICKUP)   하게될 때, 즉 건네 주게 될 때1 BIT clear 하고, 
+    //                       pickup bit 를 새 owner 와 함께 설정함 
+    //                     => 같은 owner 가 같은 lock 에 또접근시 오류 막기 위해
+    //
 	spinlock_t		wait_lock;
+    // wait_list 에 대한 lock (slow path 용)
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
-	struct optimistic_spin_queue osq; /* Spinner MCS lock */
+	struct optimistic_spin_queue osq; /* Spinner MCS lock */ 
+    // midpath 를 위한 MCS lock 알고리즘으로 동작하는 OSQ lock     
 #endif
 	struct list_head	wait_list;
+    // lock 잡기를 대기하는 process wait queue (mid path 용도)
 #ifdef CONFIG_DEBUG_MUTEXES
 	void			*magic;
+    // mutex 관련 debugging 정보
 #endif
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
+    // lock validator
 #endif
 };
 
 static inline struct task_struct *__mutex_owner(struct mutex *lock)
 {
-	return (struct task_struct *)(atomic_long_read(&lock->owner) & ~0x07);
+	return (struct task_struct *)(atomic_long_read(&lock->owner) & ~0x07); 
+    // ... 1111 1000 => 즉 lock->owner 에서 task_struct 뽑아냄
 }
 
 /*
@@ -76,10 +112,15 @@ static inline struct task_struct *__mutex_owner(struct mutex *lock)
  */
 struct mutex_waiter {
 	struct list_head	list;
-	struct task_struct	*task;
-	struct ww_acquire_ctx	*ww_ctx;
+    // 다음 대기 mutex_waiter node 와 연결
+	struct task_struct	*task; 
+    // 대기하는 thread 의 task_struct
+	struct ww_acquire_ctx	*ww_ctx; 
+    // FIXME
+    // wait-wound mutex 관련    
 #ifdef CONFIG_DEBUG_MUTEXES
-	void			*magic;
+	void			*magic; 
+    // mutex 관련 debug 정보
 #endif
 };
 

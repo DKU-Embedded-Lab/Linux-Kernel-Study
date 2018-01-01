@@ -538,10 +538,13 @@ struct task_struct {
 
 #ifdef CONFIG_SMP
 	struct llist_node		wake_entry;
-	int				on_cpu;
+	int				on_cpu;     
+    // 0 이면.. task not running,   process 가 다른 cpu 로 이동 가능 
+    // 1 이면.. task running,       process 가 다른 cpu 로 이동 불가능
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/* Current CPU: */
 	unsigned int			cpu;
+    // process 가 실행되고 있는 CPU 번호 
 #endif
 	unsigned int			wakee_flips;
 	unsigned long			wakee_flip_decay_ts;

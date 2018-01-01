@@ -139,8 +139,12 @@ static inline void __raw_spin_lock_bh(raw_spinlock_t *lock)
 static inline void __raw_spin_lock(raw_spinlock_t *lock)
 {
 	preempt_disable();
+    // 선점 비활성화, unlock 시 lock release 하고 재 활성화 됨
 	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
+    // interrupt state 저장 및 비활성화 후, lock 잡기 전에 
+    // runtime lock validator 수행
 	LOCK_CONTENDED(lock, do_raw_spin_trylock, do_raw_spin_lock);
+    // 진짜로 spinlock 을 얻는 함수
 }
 
 #endif /* !CONFIG_GENERIC_LOCKBREAK || CONFIG_DEBUG_LOCK_ALLOC */

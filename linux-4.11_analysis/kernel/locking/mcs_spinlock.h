@@ -15,9 +15,19 @@
 #include <asm/mcs_spinlock.h>
 
 struct mcs_spinlock {
-	struct mcs_spinlock *next;
-	int locked; /* 1 if lock acquired */
-	int count;  /* nesting count, see qspinlock.c */
+	struct mcs_spinlock *next; 
+    // queue 에서 lock 을 기다리는 next thread 의 
+    // mcs_spinlock 을 가리킴
+	int locked; /* 1 if lock acquired */ 
+    // 현재thread 의 lock 에 대한 상태
+    //  1 이면 : thread 가 lock 잡음
+    //  0 이면 : 잡으려고 대기중
+	int count;  /* nesting count, see qspinlock.c */ 
+    // nested lock 
+    //  - normal task context 
+    //  - hardware interrupt context
+    //  - software interrupt context
+    //  - non-maskable interrupt context 
 };
 
 #ifndef arch_mcs_spin_lock_contended

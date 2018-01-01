@@ -84,8 +84,11 @@ u64 get_jiffies_64(void)
 
 	do {
 		seq = read_seqbegin(&jiffies_lock);
+        // jiffies_lock 의 sequence number 읽어옴
 		ret = jiffies_64;
-	} while (read_seqretry(&jiffies_lock, seq));
+        // system 전역변수 jiffies_64 를 읽어들임
+	} while (read_seqretry(&jiffies_lock, seq)); 
+    // writer 에 의해 read 수행시 consistency 깨졌나 확인
 	return ret;
 }
 EXPORT_SYMBOL(get_jiffies_64);

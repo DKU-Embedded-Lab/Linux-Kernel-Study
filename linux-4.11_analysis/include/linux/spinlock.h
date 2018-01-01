@@ -145,6 +145,7 @@ do {								\
 static inline void do_raw_spin_lock(raw_spinlock_t *lock) __acquires(lock)
 {
 	__acquire(lock);
+    // sparse 라는 정적 code 분석 도구 관련
 	arch_spin_lock(&lock->raw_lock);
 }
 

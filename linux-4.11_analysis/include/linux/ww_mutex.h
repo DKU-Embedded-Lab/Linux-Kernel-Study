@@ -41,7 +41,8 @@ struct ww_acquire_ctx {
 	unsigned deadlock_inject_countdown;
 #endif
 };
-
+// deadlock 을 피해 mutex 를 얻기 위한 
+// mutex 의 확장 버전
 struct ww_mutex {
 	struct mutex base;
 	struct ww_acquire_ctx *ctx;

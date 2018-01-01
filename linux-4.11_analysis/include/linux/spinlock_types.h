@@ -19,8 +19,14 @@
 
 typedef struct raw_spinlock {
 	arch_spinlock_t raw_lock;
+    // arcitecture-specific spinlock
 #ifdef CONFIG_GENERIC_LOCKBREAK
-	unsigned int break_lock;
+	unsigned int break_lock; 
+    // 특정 processor 가 lock 을 
+    // 잡고 있는 상태에서 다른 
+    // processor 가 lock 을 대기중일 
+    // 경우 1로 설정됨
+    // (long time locking 방지용도)
 #endif
 #ifdef CONFIG_DEBUG_SPINLOCK
 	unsigned int magic, owner_cpu;
@@ -64,7 +70,7 @@ typedef struct raw_spinlock {
 typedef struct spinlock {
 	union {
 		struct raw_spinlock rlock;
-
+        // normal spin lock
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 # define LOCK_PADSIZE (offsetof(struct raw_spinlock, dep_map))
 		struct {
