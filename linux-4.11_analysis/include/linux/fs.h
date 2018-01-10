@@ -2446,7 +2446,10 @@ static inline void bd_unlink_disk_holder(struct block_device *bdev,
 /* fs/char_dev.c */
 #define CHRDEV_MAJOR_HASH_SIZE	255
 /* Marks the bottom of the first segment of free char majors */
-#define CHRDEV_MAJOR_DYN_END 234
+#define CHRDEV_MAJOR_DYN_END 234 
+// 
+// 전체 255 개의 주번호 중에, 234 번 까지는 지정된 static 주번호임
+//
 extern int alloc_chrdev_region(dev_t *, unsigned, unsigned, const char *);
 extern int register_chrdev_region(dev_t, unsigned, const char *);
 extern int __register_chrdev(unsigned int major, unsigned int baseminor,

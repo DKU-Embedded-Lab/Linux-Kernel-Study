@@ -223,7 +223,8 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 		sched_rt_avg_update(rq, irq_delta + steal);
 #endif
 }
-
+// timer interrupt 가 발생시 마다 per-CPU queue 인 struct rq 의 
+// clock_task 를 update 수행
 void update_rq_clock(struct rq *rq)
 {
 	s64 delta;
@@ -7309,7 +7310,10 @@ void dump_cpu_task(int cpu)
  */ 
 // -20 ~ +19 의 nice 에 상응하는 0 ~ 39 까지의 index 에 해당하는 값 
 // nive level +1 : 10% CPU time 덜 받음
-//            -1 : 10% CPU time 더 받음
+//            -1 : 10% CPU time 더 받음 
+//
+// vruntime 이 update 될 때, 
+//
 const int sched_prio_to_weight[40] = {
  /* -20 */     88761,     71755,     56483,     46273,     36291,
  /* -15 */     29154,     23254,     18705,     14949,     11916,

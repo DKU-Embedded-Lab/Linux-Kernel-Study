@@ -394,25 +394,41 @@ struct cfs_bandwidth { };
 #endif	/* CONFIG_CGROUP_SCHED */
 
 /* CFS-related fields in a runqueue */
+// per-CPU runqueue 구조에 
 struct cfs_rq {
 	struct load_weight load;
+    // runnable process 의 load value 합친 값
 	unsigned int nr_running, h_nr_running;
-
+    // nr_running : queue 에 존재하는 runnable process 의 수
 	u64 exec_clock;
 	u64 min_vruntime;
+    // queue 에 있는 모든 process 들의  virtual runtime  들 중 최소값
+    // virtual runtime : process 가 얼마나 돌 수 있나 
+    // 
+    // CPU time 을제일 조금 받은 즉 제일 조금 돈 process 의 time. 
+    // 
+    // task의 vruntime - min_vruntime 결과값이 
+    //  - 크면...   -> 그 task 는 cpu 많이 받았던것.
+    //  - 작으면... -> 그 task 는 cpu 많이 못받았었으므로, 곧 
+    //                 scheduling 될 가능성이 높음
 #ifndef CONFIG_64BIT
 	u64 min_vruntime_copy;
 #endif
 
 	struct rb_root tasks_timeline;
+    // virtual time 을 key 값으로 한 rbtree 의 root node
+    // 즉 CFQ 에서 runnable task 
 	struct rb_node *rb_leftmost;
+    // tasks_timeline 이 나타내는 rbtree 에서 virtual time 이 가장 적은 node 
+    // 즉 다음에 수행될 process
 
 	/*
 	 * 'curr' points to currently running entity on this cfs_rq.
 	 * It is set to NULL otherwise (i.e when none are currently running).
 	 */
 	struct sched_entity *curr, *next, *last, *skip;
-
+    // curr : 현재 수행중인 task 의 scheduling 관련 
+    // 정보를 나타내는sched_entity 
 #ifdef	CONFIG_SCHED_DEBUG
 	unsigned int nr_spread_over;
 #endif
@@ -448,7 +464,7 @@ struct cfs_rq {
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	struct rq *rq;	/* cpu runqueue to which this cfs_rq is attached */
-
+    // cfs_rq 가 속한 per-CPU queue
 	/*
 	 * leaf cfs_rqs are those that hold tasks (lowest schedulable entity in
 	 * a hierarchy). Non-leaf lrqs hold other higher schedulable entities
@@ -622,6 +638,8 @@ extern void rq_attach_root(struct rq *rq, struct root_domain *rd);
  * (such as the load balancing or the thread migration code), lock
  * acquire operations must be ordered by ascending &runqueue.
  */ 
+// 
+// per-CPU runqueue
 // 각 core 마다 runqueue 가 있으며, task 는 core 마다의 runqueue 중 
 // 하나에 추가됨. runnable state 의 process 를 담는 곳
 // load balancer 에 의해 특정 core 의 runqueue 에서 다른 runqueue 
@@ -660,9 +678,9 @@ struct rq {
 	u64 nr_switches;
 
 	struct cfs_rq cfs;
-    // cfs scheduler runqueue
+    // cfs scheduler 의 runqueue
 	struct rt_rq rt;
-    // rt scheduler runqueue
+    // rt scheduler 의 runqueue
 	struct dl_rq dl;    
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -691,7 +709,8 @@ struct rq {
     // per-run queue clock
     // scheduler 가 호출시마다 clock 이 변경됨 
 	u64 clock_task;
-
+    // update_rq_clock 함수를 통해 timer interrupt 가 발생하여 각 per-CPU 
+    // queue 의 clock 정보가 갱신 될 때, update 됨
 	atomic_t nr_iowait;
 
 #ifdef CONFIG_SMP
@@ -856,6 +875,7 @@ static inline u64 rq_clock(struct rq *rq)
 	return rq->clock;
 }
 
+// runqueue 에서 timer interrupt 로 주기적 update 되는 값인 clock 정보를 가져옴 
 static inline u64 rq_clock_task(struct rq *rq)
 {
 	lockdep_assert_held(&rq->lock);
@@ -1361,6 +1381,7 @@ extern const u32 sched_prio_to_wmult[40];
 
 #define RETRY_TASK		((void *)-1UL)
 
+// 각각의 scheduling class 와 맟물려 해당되는 함수가 호출됨
 struct sched_class {
 	const struct sched_class *next;
     // 다음 scheduling class 
@@ -1431,7 +1452,7 @@ struct sched_class {
 					 struct task_struct *task);
 
 	void (*update_curr) (struct rq *rq);
-
+    // CFS 의 경우 process 의 virtual clock 을 update
 #define TASK_SET_GROUP  0
 #define TASK_MOVE_GROUP	1
 

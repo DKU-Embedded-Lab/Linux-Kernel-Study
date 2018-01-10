@@ -60,11 +60,17 @@ enum kobject_action {
 	KOBJ_MAX
 };
 
+/*
+ * kernel 영역의 device 들을 객체로 추상화하여 그 정보를 가지고 있는놈.
+ *
+ */ 
 struct kobject {
-	const char		*name;
+	const char		*name; 
+    // 객체 이름
 	struct list_head	entry;
 	struct kobject		*parent;
-	struct kset		*kset;
+	struct kset		*kset; 
+    // kobject 그룹 
 	struct kobj_type	*ktype;
 	struct kernfs_node	*sd; /* sysfs directory entry */
 	struct kref		kref;

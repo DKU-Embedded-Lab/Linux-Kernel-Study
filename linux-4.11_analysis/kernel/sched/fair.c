@@ -197,23 +197,31 @@ void sched_init_granularity(void)
 }
 
 #define WMULT_CONST	(~0U)
+// 0x 0000 0000 ffff ffff 
 #define WMULT_SHIFT	32
 
+// vtime update 과정에서 weight 로 나누는 연산 수행을 위한 weight 반전값 설정
 static void __update_inv_weight(struct load_weight *lw)
 {
 	unsigned long w;
 
 	if (likely(lw->inv_weight))
 		return;
-
+    // weight 반전값이 이미 설정된 경우 종료 
 	w = scale_load_down(lw->weight);
-
+    // 32 bit 는 그대로, 64 bit 는 weight >> 10
 	if (BITS_PER_LONG > 32 && unlikely(w >= WMULT_CONST))
 		lw->inv_weight = 1;
+    // 64 bit 이고, load down 수행 결과 w 가 0x0000 0000 ffff ffff 보다 크다면 
+    // 1 로 설정
 	else if (unlikely(!w))
-		lw->inv_weight = WMULT_CONST;
+		lw->inv_weight = WMULT_CONST; 
+    // 32bit 는 weight 값 그대로 사용하니 0이될리 없을테고, 64 bit 에서 
+    // load down 결과 0 이된다면 0x0000 0000 ffff ffff 로 설정
 	else
-		lw->inv_weight = WMULT_CONST / w;
+		lw->inv_weight = WMULT_CONST / w; 
+    // 그냥 일반적인 경우라면 
+    // 0x0000 0000 ffff ffff / w
 }
 
 /*
@@ -228,13 +236,26 @@ static void __update_inv_weight(struct load_weight *lw)
  * Or, weight =< lw.weight (because lw.weight is the runqueue weight), thus
  * weight/lw.weight <= 1, and therefore our shift will also be positive.
  */
+// vtime 을 update 하기 위해 그전 vtime 수정하기 까지 현재 task 가 수행된 
+// 값인 delta_exec 를 기반으로 계산하여 update 값 반환 
+//
+// mul_u64_u32_shr 를 통해 계산되는 vtime 추가 값은 아래와 같음
+//
+// return = (delta_exec * weight * lw.inv_weight ) >> 32
+//                        
 static u64 __calc_delta(u64 delta_exec, unsigned long weight, struct load_weight *lw)
 {
 	u64 fact = scale_load_down(weight);
+    // 32 bit 일 때. 
+    //  => fact 는 weight 그대로 반환
+    // 64 bit 일 때.
+    //  => fact 는 load down 하여 weight >> 10 
+    //
 	int shift = WMULT_SHIFT;
-
+    // shift 는 32
 	__update_inv_weight(lw);
-
+    // lw->inv_weight 를 0x0000 0000 ffff ffff / weight 로 설정
+    // (weigt 는 64 bit 일 경우 load down 된 값임)
 	if (unlikely(fact >> 32)) {
 		while (fact >> 32) {
 			fact >>= 1;
@@ -654,8 +675,20 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
 /*
  * delta /= w
  */
+// vtime 을 update 하기 위해 그전 vtime 수정하기 까지 현재 task 가 수행된 
+// 값인 delta 를 기반으로 계산하여 update 값 반환 
 static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
 {
+    // nice level 0 일 경우 즉 user level 의 priority 값인 -20 ~ 19 범위에서
+    // 0일경우(priority 100~139 에서 120 인 경우) 는 virtual time, physical 
+    // clock time 을 같다고 간주하고 추가적 계산 없이 바로 return 
+    //
+    // NICE_0_LOAD 는 
+    //   - 32 bit 의 경우 
+    //     sched_prio_to_weight 에서 nice 0 에 해당한는 값인 1024
+    //   - 64 bit 의 경우
+    //     sched_prio_to_weight 에서 nice 0 에 해당하는 값인 1024 에 1024 를 
+    //     곱한 1048576 이 해당
 	if (unlikely(se->load.weight != NICE_0_LOAD))
 		delta = __calc_delta(delta, NICE_0_LOAD, &se->load);
 
@@ -840,30 +873,37 @@ static void update_tg_load_avg(struct cfs_rq *cfs_rq, int force)
 
 /*
  * Update the current task's runtime statistics.
- */
+ */ 
+// cfq 관련되어 현재 돌고있는 task 의 virtual time 을 갱신
 static void update_curr(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *curr = cfs_rq->curr;
 	u64 now = rq_clock_task(rq_of(cfs_rq));
+    // per-CPU queue 에서 즉 struct rq 에서 clock 정보를 가져옴
 	u64 delta_exec;
 
 	if (unlikely(!curr))
 		return;
-
+    // 현재 돌고 있는 task 가 없으면 할 일 없음. 종료.
 	delta_exec = now - curr->exec_start;
+    // 현재 돌던 task 가 timer interrupt 로 virtual time 이 수정되고
+    // 얼마나 지났는지 를 의미
 	if (unlikely((s64)delta_exec <= 0))
 		return;
 
 	curr->exec_start = now;
-
+    // 이번에 vtime 수정 할 것이므로 vtime 수정한 시점을 exec_start 에 기록
 	schedstat_set(curr->statistics.exec_max,
 		      max(delta_exec, curr->statistics.exec_max));
 
 	curr->sum_exec_runtime += delta_exec;
+    // update_curr 이 호출될 때마다, 이전에 vtime 수정되기까지의 시간 즉 
+    // 총 돌은 누적시간을 update
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
 	update_min_vruntime(cfs_rq);
+    // cfs runqueue 의 min_vruntime 값을 갱신
 
 	if (entity_is_task(curr)) {
 		struct task_struct *curtask = task_of(curr);
@@ -879,6 +919,10 @@ static void update_curr(struct cfs_rq *cfs_rq)
 static void update_curr_fair(struct rq *rq)
 {
 	update_curr(cfs_rq_of(&rq->curr->se));
+    // runqueue 에서 현재 돌고 있는 task 의 task_struct 의 scheduling 관련
+    // 정보인 sched_entity 를 통해 현재 task 가속한 cfs scheduler runqueue 를 
+    // 넘김
+    
 }
 
 static inline void
@@ -9441,7 +9485,7 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
 
 /*
  * All the scheduling class methods:
- */
+ */ 
 const struct sched_class fair_sched_class = {
 	.next			= &idle_sched_class,
 	.enqueue_task		= enqueue_task_fair,
@@ -9476,6 +9520,7 @@ const struct sched_class fair_sched_class = {
 	.get_rr_interval	= get_rr_interval_fair,
 
 	.update_curr		= update_curr_fair,
+    // process 의 virtual update
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	.task_change_group	= task_change_group_fair,

@@ -254,9 +254,14 @@ struct sched_info {
 # define SCHED_FIXEDPOINT_SHIFT		10
 # define SCHED_FIXEDPOINT_SCALE		(1L << SCHED_FIXEDPOINT_SHIFT)
 
+// 
+// sched_prio_to_weight 배열에 미리 초기화된 weight 값을 기반으로 한 
+// 현재 task 의 weight    
 struct load_weight {
 	unsigned long			weight;
-	u32				inv_weight;
+    // sched_prio_to_weight 배열의 nice 값에 해당하는 weight 정보 
+	u32				inv_weight; 
+    //vtime 계산 시,  위의 weight 값으로 나누는 연산을 위한 weight 의 반전값
 };
 
 /*
@@ -364,15 +369,18 @@ struct sched_entity {
     // 이 값을 기반으로 virtual clock 의 speed 결정
 	struct rb_node			run_node;
     // scheduling entity 가 sort 된 
-    // red black tree node 즉 runqueue
+    // red black tree node 즉 runqueue 에서 
+    // 현재 process 에 해당하는 node
 	struct list_head		group_node;
 	unsigned int			on_rq;
     // runqueue 에 올라가 있으면 1 아니면 0
 
 	u64				exec_start;
-    // process 가 running 시작할 때의 timestamp
+    // process 가 돌고있을 때, timer interrupt 에 의해 vtime 이 수정된 
+    // 가장 최근의 clock_task 값 즉 얼마나 더 돌았나
 	u64				sum_exec_runtime;
-    // process 가 총 running 한 time
+    // process 가 총 running 한 time 으로 update_curr 함수를 통해 
+    // 현재 rq 의 clock_task - exec_start 값을 sum_exec_runtime 에 누적함
 	u64				vruntime;
     // virtual clock 기반 이 entity 가 얼마나 돌았나
 	u64				prev_sum_exec_runtime;
@@ -588,7 +596,8 @@ struct task_struct {
 	const struct sched_class	*sched_class; 
     // 현재 task_struct 가 속한 scheduling class
 	struct sched_entity		se; 
-    // cfs 의 group scheduling 관련 현재 task_struct 가 속한 scheduling entity(scheduling group)
+    // cfs 의 group scheduling 관련 현재 task_struct 가 속한 scheduling entity(scheduling group) 
+    // 현재 process 의 scheduling 관련 정보
 	struct sched_rt_entity		rt; 
     // real time scheduler 의 group scheduling 관련 scheduling entiry 
 #ifdef CONFIG_CGROUP_SCHED

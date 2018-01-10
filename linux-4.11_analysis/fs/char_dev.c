@@ -24,18 +24,37 @@
 
 #include "internal.h"
 
+// device major number 를 hash key 로 하는
+// character debice driver hash table
 static struct kobj_map *cdev_map;
 
 static DEFINE_MUTEX(chrdevs_lock);
 
 static struct char_device_struct {
 	struct char_device_struct *next;
-	unsigned int major;
+    // same hash list
+	unsigned int major; 
+    // major number
 	unsigned int baseminor;
+    // smallest minor number in a consecutive range or minorct minor number 
+    // 부번호 여러개가 이 device 에 할당되어 있을 경우, 첫번째 부번호
 	int minorct;
+    // 이 device 에 부번호가 몇개 할당되어 있는지.
+    // e.g. 
+    //  major - 10
+    //  minor - 0,1,2
+    //  인 상황이라면...
+    //
+    //  baseminor -> 0
+    //  minorct   -> 3
 	char name[64];
 	struct cdev *cdev;		/* will die */
-} *chrdevs[CHRDEV_MAJOR_HASH_SIZE];
+} *chrdevs[CHRDEV_MAJOR_HASH_SIZE]; 
+// chrdevs 라는 이름의 크기가 CHRDEV_MAJOR_HASH_SIZE 인 
+// char_device_struct 를 가리키는 포인터의 배열 
+//
+// 총 255 개의 주번호 중에 234 개까지는 예약된 static 번호이며 234~255 까지가
+// 동적으로 할당 가능한 번호임 
 
 /* index in the above */
 static inline int major_to_index(unsigned major)
@@ -86,27 +105,36 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 
 	/* temporary */
 	if (major == 0) {
+        // 주번호가 0 으로 설정되어 넘어오면 비어있는 
+        // 주번호 중에 하나를 찾아야 함
 		for (i = ARRAY_SIZE(chrdevs)-1; i > 0; i--) {
+            // 주번호 끝번호인 255번 부터 하나씩 감소시키며 
+            //
 			if (chrdevs[i] == NULL)
-				break;
+				break; 
+            // chrdevs 는 char_device_struct 를 가리키는 
+            // 포인터 배열이며 크기가 주번호 MAX 값임
+            // chrdevs 가 NULL 이면 비어있는 주번호 찾은 것이므로 반복 끝
 		}
 
 		if (i < CHRDEV_MAJOR_DYN_END)
 			pr_warn("CHRDEV \"%s\" major number %d goes below the dynamic allocation range\n",
-				name, i);
-
+				name, i); 
+        // dynamic 할당 가능한 주번호 및으로 내려간다면 경고
 		if (i == 0) {
 			ret = -EBUSY;
 			goto out;
+            // 결국에 할당 가능한 주번호가 없을 경우 종료
 		}
 		major = i;
+        // 비어있는 주번호를 찾은 경우 설정해줌
 	}
 
 	cd->major = major;
 	cd->baseminor = baseminor;
 	cd->minorct = minorct;
 	strlcpy(cd->name, name, sizeof(cd->name));
-
+    // char_device_struct 에 주번호, 부번호 제일작은놈, 부번호 할당 개수 설정
 	i = major_to_index(major);
 
 	for (cp = &chrdevs[i]; *cp; cp = &(*cp)->next)
@@ -115,6 +143,8 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 		     (((*cp)->baseminor >= baseminor) ||
 		      ((*cp)->baseminor + (*cp)->minorct > baseminor))))
 			break;
+    // 이미 예약된 주번호 list 중에 현재 주번호와 같고, 
+    // 할당하려는 주번호가 안겹칠 수 있는놈을 찾아 cp 에 설정
 
 	/* Check for overlapping minor ranges.  */
 	if (*cp && (*cp)->major == major) {
@@ -134,6 +164,7 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 			ret = -EBUSY;
 			goto out;
 		}
+        // 주번호가 겹친다면 out
 	}
 
 	cd->next = *cp;
@@ -174,7 +205,12 @@ __unregister_chrdev_region(unsigned major, unsigned baseminor, int minorct)
  * @name: the name of the device or driver.
  *
  * Return value is zero on success, a negative error code on failure.
- */
+ */ 
+// 원한느 device number 를 device database 에 등록 
+// from 의 major number 와 minor  number 를 기준으로 count 만큼 
+// major, minor 번호를 device database 에 예약
+// 
+// 예약 후, 등록을 하려면 chdev_init, chdev_add 호출 필요
 int register_chrdev_region(dev_t from, unsigned count, const char *name)
 {
 	struct char_device_struct *cd;
@@ -210,15 +246,22 @@ fail:
  * Allocates a range of char device numbers.  The major number will be
  * chosen dynamically, and returned (along with the first minor number)
  * in @dev.  Returns zero or a negative error code.
- */
+ */ 
+// kernel 에서 가능한 device number 를 선택하여 등록 
+// baseminor 부번호를 기준으로 count 만큼 minor number 를 device database 
+// 에 예약 하며, major 번호는 동적으로 빈곳 찾아 return
+//
+// 예약 후, 등록을 하려면 chdev_init, chdev_add 호출 필요
 int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
 			const char *name)
 {
 	struct char_device_struct *cd;
 	cd = __register_chrdev_region(0, baseminor, count, name);
 	if (IS_ERR(cd))
-		return PTR_ERR(cd);
+		return PTR_ERR(cd); 
+    // __register_chrdev_region 의 주번호에 0 을 설정하여 주번호 새로 받고
 	*dev = MKDEV(cd->major, cd->baseminor);
+    // 새로받은 주번호를 dev 에 설정
 	return 0;
 }
 

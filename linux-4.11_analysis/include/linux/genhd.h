@@ -168,12 +168,15 @@ struct blk_integrity {
 
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
 
+// device database 에서 blk device driver 를 나타냄
 struct gendisk {
 	/* major, first_minor and minors are input parameters only,
 	 * don't use directly.  Use disk_devt() and disk_max_parts().
 	 */
-	int major;			/* major number of driver */
+	int major;			/* major number of driver */ 
+    // 주번호
 	int first_minor;
+    // 부번호 나눠진 부분 중, 호환성을 위한 첫번째 부분
 	int minors;                     /* maximum number of minors, =1 for
                                          * disks that can't be partitioned. */
 
@@ -404,7 +407,8 @@ static inline void free_part_info(struct hd_struct *part)
 extern void part_round_stats(int cpu, struct hd_struct *part);
 
 /* block/genhd.c */
-extern void device_add_disk(struct device *parent, struct gendisk *disk);
+extern void device_add_disk(struct device *parent, struct gendisk *disk); 
+// block device 등록함수
 static inline void add_disk(struct gendisk *disk)
 {
 	device_add_disk(NULL, disk);

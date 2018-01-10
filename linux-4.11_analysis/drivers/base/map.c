@@ -19,12 +19,21 @@
 struct kobj_map {
 	struct probe {
 		struct probe *next;
+        // hash list 관리 
+        // 즉  같은 major debice number 를 가지는 hash list
 		dev_t dev;
+        // device number (major + minor)
 		unsigned long range;
+        // device number 에서 minor number 의 범위 
 		struct module *owner;
+        // device driver 포함하고 있는 모듈
 		kobj_probe_t *get;
+        // debice 관련 kobject 를 반환한는 함수 포인터
 		int (*lock)(dev_t, void *);
 		void *data;
+        // 이게 뭐냐에 따라 character device 또는 blk debice 인지 결정 
+        // character device 라면 cdev 를...
+        // blk debice 라면 gendisk 를 가리킴
 	} *probes[255];
 	struct mutex *lock;
 };

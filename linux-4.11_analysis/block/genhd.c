@@ -362,6 +362,8 @@ void unregister_blkdev(unsigned int major, const char *name)
 
 EXPORT_SYMBOL(unregister_blkdev);
 
+// device major number 를 hash key 로 하는
+// block debice driver hash table
 static struct kobj_map *bdev_map;
 
 /**
