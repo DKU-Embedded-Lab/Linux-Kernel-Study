@@ -260,8 +260,11 @@ struct sched_info {
 struct load_weight {
 	unsigned long			weight;
     // sched_prio_to_weight 배열의 nice 값에 해당하는 weight 정보 
+    //  e.g. nice 0 => priority 120 => sched_prio_to_weight[20] => 1024
 	u32				inv_weight; 
-    //vtime 계산 시,  위의 weight 값으로 나누는 연산을 위한 weight 의 반전값
+    //vtime 계산 시,  위의 weight 값으로 나누는 연산을 위한 weight 의 반전값 
+    //즉 1/weight 이라고 볼 수 있으며 
+    //편의를 위해 sched_prio_to_wmult 에 저장된 값인 2^32 / weight 사용
 };
 
 /*
@@ -382,7 +385,12 @@ struct sched_entity {
     // process 가 총 running 한 time 으로 update_curr 함수를 통해 
     // 현재 rq 의 clock_task - exec_start 값을 sum_exec_runtime 에 누적함
 	u64				vruntime;
-    // virtual clock 기반 이 entity 가 얼마나 돌았나
+    // virtual clock 기반 이 entity 가 얼마나 돌았나 
+    // * vruntime 이 작을수록 다시 scheduling 될 확률이 높음. 
+    //  - nice 값이 작을수록 priority 가 높으므로 vruntime 작음
+    //  - real run time by clock 이 작을수록 조금만 돌았으므로 vruntime 작음
+    // * cpu 잡고 면서 vruntime 은 증가
+    //
 	u64				prev_sum_exec_runtime;
     // 이 entity 가 그 전에 얼마나 돌았나
 	u64				nr_migrations;
@@ -413,7 +421,8 @@ struct sched_rt_entity {
 	struct list_head		run_list;
 	unsigned long			timeout;
 	unsigned long			watchdog_stamp;
-	unsigned int			time_slice;
+	unsigned int			time_slice; 
+    // real time task 의 time slice 로 소진될 때 까지 수행
 	unsigned short			on_rq; 
     // runqueue 에 올라가 있으면 1 아니면 0
 	unsigned short			on_list;
@@ -547,8 +556,10 @@ struct task_struct {
 #ifdef CONFIG_SMP
 	struct llist_node		wake_entry;
 	int				on_cpu;     
-    // 0 이면.. task not running,   process 가 다른 cpu 로 이동 가능 
-    // 1 이면.. task running,       process 가 다른 cpu 로 이동 불가능
+    // 0 이면.. task not running(CPU 점유하지 않은 상태),   
+    //          process 가 다른 cpu 로 이동 가능 
+    // 1 이면.. task running(CPU 점유 상태),       
+    //          process 가 다른 cpu 로 이동 불가능
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/* Current CPU: */
 	unsigned int			cpu;
@@ -561,7 +572,12 @@ struct task_struct {
 	int				wake_cpu;
 #endif
 	int				on_rq;
-    // 
+    // 현재 task 가 runqueue 에 있는지.. 
+    // enqueue_entity 에서 1로 설정, dequeue_entity 에서 0 으로 설정
+	int				prio;
+	int				static_prio;
+	int				normal_prio;
+	unsigned int			rt_priority; 
     // cfs scheduler priority : static_prio, normal_prio, prio 
     // rt scheduler priority : rt_priority
     //
@@ -589,10 +605,6 @@ struct task_struct {
     // rt_priority : 
     //      rreal-time process 의 priority 로 0 ~ 99 까지 존재하며 높을수록 우선순위 높음(nice 랑 다른것)
     //
-	int				prio;
-	int				static_prio;
-	int				normal_prio;
-	unsigned int			rt_priority;
 	const struct sched_class	*sched_class; 
     // 현재 task_struct 가 속한 scheduling class
 	struct sched_entity		se; 

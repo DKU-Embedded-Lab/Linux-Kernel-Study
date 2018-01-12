@@ -167,9 +167,13 @@ dl_entity_preempt(struct sched_dl_entity *a, struct sched_dl_entity *b)
 /*
  * This is the priority-queue data structure of the RT scheduling class:
  */
+// real time task 의 runqueue
 struct rt_prio_array {
-	DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1); /* include 1 bit for delimiter */
+	DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1); /* include 1 bit for delimiter */ 
+    // priority 별 list 들에 현재 task 가 있을 경우, bitmap 의 해당 
+    // priority 위치의 bit 가 1 로 설정
 	struct list_head queue[MAX_RT_PRIO];
+    // 총 100 개의 rt priority 에 대한 각각의 queue
 };
 
 struct rt_bandwidth {
@@ -394,12 +398,13 @@ struct cfs_bandwidth { };
 #endif	/* CONFIG_CGROUP_SCHED */
 
 /* CFS-related fields in a runqueue */
-// per-CPU runqueue 구조에 
+// cfs per-CPU runqueue 
 struct cfs_rq {
 	struct load_weight load;
-    // runnable process 의 load value 합친 값
+    // runnable process 의 load weight value 합친 값
 	unsigned int nr_running, h_nr_running;
-    // nr_running : queue 에 존재하는 runnable process 의 수
+    // nr_running : queue 에 존재하는 runnable process 의 수 
+    // h_nr_running : 
 	u64 exec_clock;
 	u64 min_vruntime;
     // queue 에 있는 모든 process 들의  virtual runtime  들 중 최소값
@@ -416,11 +421,13 @@ struct cfs_rq {
 #endif
 
 	struct rb_root tasks_timeline;
-    // virtual time 을 key 값으로 한 rbtree 의 root node
+    // 현재 task_struct->se->vruntime - 현재 runqueue 의 rq->cfs->min_vruntime  
+    // 을 key 값으로 한 rbtree 의 root node
     // 즉 CFQ 에서 runnable task 
 	struct rb_node *rb_leftmost;
     // tasks_timeline 이 나타내는 rbtree 에서 virtual time 이 가장 적은 node 
-    // 즉 다음에 수행될 process
+    // 즉 다음에 수행될 process 
+    // vruntime 이 작을 수록 다시 scheduling 확률이 높음
 
 	/*
 	 * 'curr' points to currently running entity on this cfs_rq.
@@ -501,15 +508,19 @@ static inline int rt_bandwidth_enabled(void)
 #endif
 
 /* Real-Time classes' related field in a runqueue: */
+// rt scheduler per-CPU runqueue
 struct rt_rq {
 	struct rt_prio_array active;
 	unsigned int rt_nr_running;
+    // 현재 cpu 에서 동작하는 rt task 의 수
 	unsigned int rr_nr_running;
 #if defined CONFIG_SMP || defined CONFIG_RT_GROUP_SCHED
 	struct {
-		int curr; /* highest queued rt task prio */
+		int curr; /* highest queued rt task prio */ 
+        // 현재 rt runqueue 에서 동작중인 task 의 priority
 #ifdef CONFIG_SMP
-		int next; /* next highest */
+		int next; /* next highest */ 
+        // rt runqueue 에서 다음 동작할 task 의 priority
 #endif
 	} highest_prio;
 #endif
@@ -713,7 +724,8 @@ struct rq {
     // queue 의 clock 정보가 갱신 될 때, update 됨
 	atomic_t nr_iowait;
 
-#ifdef CONFIG_SMP
+#ifdef CONFIG_SMP 
+    // SMP 의 경우, load balancing 있는 부분
 	struct root_domain *rd;
 	struct sched_domain *sd;
 
@@ -728,7 +740,8 @@ struct rq {
 	int push_cpu;
 	struct cpu_stop_work active_balance_work;
 	/* cpu of this runqueue: */
-	int cpu;
+	int cpu; 
+    // 현재 run queue 가 속한 processor
 	int online;
 
 	struct list_head cfs_tasks;

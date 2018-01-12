@@ -51,6 +51,8 @@
  * (default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
  */
 unsigned int sysctl_sched_latency			= 6000000ULL;
+// runnable task 의 최소 schedule period 즉 이 period 동안에 
+// 최소 한번이상은 돌아야 한다.
 unsigned int normalized_sysctl_sched_latency		= 6000000ULL;
 
 /*
@@ -72,12 +74,14 @@ enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_L
  * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
 unsigned int sysctl_sched_min_granularity		= 750000ULL;
+// 
 unsigned int normalized_sysctl_sched_min_granularity	= 750000ULL;
 
 /*
  * This value is kept at sysctl_sched_latency/sysctl_sched_min_granularity
  */
 static unsigned int sched_nr_latency = 8;
+// latency period 동안의 active process 수 
 
 /*
  * After fork, child runs first. If set to 0 (default) then
@@ -241,7 +245,8 @@ static void __update_inv_weight(struct load_weight *lw)
 //
 // mul_u64_u32_shr 를 통해 계산되는 vtime 추가 값은 아래와 같음
 //
-// return = (delta_exec * weight * lw.inv_weight ) >> 32
+// return = (delta_exec * weight * lw.inv_weight ) >> 32 
+// 즉 scheduling 시간을 산출하여 반환
 //                        
 static u64 __calc_delta(u64 delta_exec, unsigned long weight, struct load_weight *lw)
 {
@@ -535,27 +540,39 @@ static void update_min_vruntime(struct cfs_rq *cfs_rq)
 	struct sched_entity *curr = cfs_rq->curr;
 
 	u64 vruntime = cfs_rq->min_vruntime;
-
-	if (curr) {
+    // cfs 의 runqueue 의 min_vruntime 가져옴 
+	if (curr) { 
+        // 현재 수행중인 task 가 있을 경우
 		if (curr->on_rq)
 			vruntime = curr->vruntime;
+        // 그 task 의 sched_entity 의 vruntime 가져옴
 		else
 			curr = NULL;
 	}
-
+    // cfq runqueue 에서 현재 돌고있는 task 에 해당하는 vruntime 가져옴
 	if (cfs_rq->rb_leftmost) {
+        // run queue 에서 다음에 수행될 task 즉 rb_leftmost 가 있을 경우, 
 		struct sched_entity *se = rb_entry(cfs_rq->rb_leftmost,
 						   struct sched_entity,
 						   run_node);
 
 		if (!curr)
 			vruntime = se->vruntime;
+        // 현재 돌고있는 놈이 없으면 그놈이 돌아도 되는지 검사하기 위해 
+        // run queue 에서 다음에 돌 놈의 scheduling entity 의 vruntime 가져옴  
 		else
-			vruntime = min_vruntime(vruntime, se->vruntime);
-	}
+			vruntime = min_vruntime(vruntime, se->vruntime); 
+        // 현재 돌고있는 놈도 있고, 다음에 선택될 놈도 있으면 둘의 
+        // vruntime 들중 더 작은놈을 가져옴 즉 다음에 수행되어야될 더 
+        // 적합한놈 선택
+	} 
+    // 다음 수행될 task 의 vruntime 값과 현재 수행중인 task 의 vruntime 을 
+    // 비교하여 더 작은 값을 vruntime 에 설정
 
 	/* ensure we never gain time by being placed backwards. */
-	cfs_rq->min_vruntime = max_vruntime(cfs_rq->min_vruntime, vruntime);
+	cfs_rq->min_vruntime = max_vruntime(cfs_rq->min_vruntime, vruntime); 
+    // cfs runqueue 의 min_vruntime  보다 vruntime 이 크다면 cfq runqueue 의
+    // min_vruntime 을 갱신
 #ifndef CONFIG_64BIT
 	smp_wmb();
 	cfs_rq->min_vruntime_copy = cfs_rq->min_vruntime;
@@ -622,7 +639,7 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
 
 	return rb_entry(left, struct sched_entity, run_node);
 }
-
+// cfs runqueue 인 rbtree 에서 leftmost 즉 다음수행될 놈 반환 
 static struct sched_entity *__pick_next_entity(struct sched_entity *se)
 {
 	struct rb_node *next = rb_next(&se->run_node);
@@ -702,11 +719,16 @@ static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
  * this period because otherwise the slices get too small.
  *
  * p = (nr <= nl) ? l : l*nr/nl
- */
+ */ 
+// latency period 를 계산하는 함수 즉, task 들이 가 다시 scheduling 
+// 되어야 하는 최소시간 결정
 static u64 __sched_period(unsigned long nr_running)
 {
 	if (unlikely(nr_running > sched_nr_latency))
 		return nr_running * sysctl_sched_min_granularity;
+    // 일정 threshold 값(latency period 내에 active 할 수 있는 process 의 수)
+    // 보다 runqueue 의 task 개수가 크다면 latency period 를 더 늘려야 함
+    // 즉 
 	else
 		return sysctl_sched_latency;
 }
@@ -716,11 +738,15 @@ static u64 __sched_period(unsigned long nr_running)
  * proportional to the weight.
  *
  * s = p*P[w/rw]
- */
+ */ 
+// 특정 process 에게 주어지는 time slice 결정 
 static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	u64 slice = __sched_period(cfs_rq->nr_running + !se->on_rq);
-
+    // scheduler 로부터 일단 최소 scheduling 되어야 하는 latency period 받아옴 
+    // - scheduler 의 기본 latency period 가 조정되어야 할 경우 조정 수행을
+    //    e.g. runqueue 의 task 가 많아지면 더 기다렸다가 schedule 되어도 
+    //         되도록 조정 
 	for_each_sched_entity(se) {
 		struct load_weight *load;
 		struct load_weight lw;
@@ -743,7 +769,8 @@ static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * We calculate the vruntime slice of a to-be-inserted task.
  *
  * vs = s/w
- */
+ */ 
+// time slice 값을 산출하여 vruntime 을 구함
 static u64 sched_vslice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	return calc_delta_fair(sched_slice(cfs_rq, se), se);
@@ -874,7 +901,8 @@ static void update_tg_load_avg(struct cfs_rq *cfs_rq, int force)
 /*
  * Update the current task's runtime statistics.
  */ 
-// cfq 관련되어 현재 돌고있는 task 의 virtual time 을 갱신
+// cfq 관련되어 현재 돌고있는 task 의 virtual time 을 갱신 
+// scheduler tick 마다 호출됨
 static void update_curr(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *curr = cfs_rq->curr;
@@ -902,6 +930,8 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
+    // delta 기간에 현재 scheduling entity 의 load weight 비율만큼 
+    // vruntime 을 갱신
 	update_min_vruntime(cfs_rq);
     // cfs runqueue 의 min_vruntime 값을 갱신
 
@@ -3535,7 +3565,7 @@ static void check_spread(struct cfs_rq *cfs_rq, struct sched_entity *se)
 		schedstat_inc(cfs_rq->nr_spread_over);
 #endif
 }
-
+// scheduling entity 의 vruntime 값 갱신
 static void
 place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 {
@@ -3552,6 +3582,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 
 	/* sleeps up to a single latency don't count. */
 	if (!initial) {
+        // sleep 되었다가 깨어난 거면 vruntime 을 줄여 scheduling 가능성 높임 
 		unsigned long thresh = sysctl_sched_latency;
 
 		/*
@@ -3775,7 +3806,9 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 /*
  * Preempt the current task with a newly woken task if needed:
- */
+ */ 
+// time slice 가 다 소모된거나 runqueue 의 다음 task 가 더 높은 우선순위를
+// 가지는 경우, reschedule 설정
 static void
 check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
@@ -3812,7 +3845,7 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 	if (delta > ideal_runtime)
 		resched_curr(rq_of(cfs_rq));
 }
-
+// 다음 스케줄 task 선택 후, 필요한 설정 해줌 
 static void
 set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
@@ -3854,7 +3887,8 @@ wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se);
  * 2) pick the "next" process, since someone really wants that to run
  * 3) pick the "last" process, for cache locality
  * 4) do not run the "skip" process, if something else is available
- */
+ */ 
+// cfq runqueue 에서 다음 수행될 놈 선택해 반환
 static struct sched_entity *
 pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
@@ -4799,7 +4833,8 @@ static inline void hrtick_update(struct rq *rq)
  * The enqueue_task method is called before nr_running is
  * increased. Here we update the fair scheduling stats and
  * then put the task into the rbtree:
- */
+ */ 
+// task 를 runqueue 에 추가
 static void
 enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 {
@@ -4817,9 +4852,10 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	for_each_sched_entity(se) {
 		if (se->on_rq)
 			break;
-		cfs_rq = cfs_rq_of(se);
+		cfs_rq = cfs_rq_of(se); 
+        // 이미 runqueue 에 있다면 종료
 		enqueue_entity(cfs_rq, se, flags);
-
+        // cfs runqueue 에 추가
 		/*
 		 * end evaluation on encountering a throttled cfs_rq
 		 *
@@ -6291,7 +6327,7 @@ preempt:
 	if (sched_feat(LAST_BUDDY) && scale && entity_is_task(se))
 		set_last_buddy(se);
 }
-
+// 다음 수행될 task 를 구함
 static struct task_struct *
 pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
@@ -9007,7 +9043,10 @@ static void rq_offline_fair(struct rq *rq)
 
 /*
  * scheduler tick hitting a task of our scheduling class:
- */
+ */ 
+// cfs scheduler tick 수행 함수 
+//  - preemption 필요한지 검사하여 수행되도록함
+//  - 실행시간, load 등의 정보 갱신
 static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 {
 	struct cfs_rq *cfs_rq;

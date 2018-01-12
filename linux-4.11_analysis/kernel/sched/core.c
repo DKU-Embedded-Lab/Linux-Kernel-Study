@@ -7312,7 +7312,7 @@ void dump_cpu_task(int cpu)
 // nive level +1 : 10% CPU time 덜 받음
 //            -1 : 10% CPU time 더 받음 
 //
-// vruntime 이 update 될 때, 
+// vruntime 이 sched_entity -> weight 의 weight 변수에 저장
 //
 const int sched_prio_to_weight[40] = {
  /* -20 */     88761,     71755,     56483,     46273,     36291,
@@ -7330,7 +7330,10 @@ const int sched_prio_to_weight[40] = {
  *
  * In cases where the weight does not change often, we can use the
  * precalculated inverse to speed up arithmetics by turning divisions
- * into multiplications:
+ * into multiplications: 
+ *
+ * weight 의 역수로 계산의 편의를 위해 미리 정해준 2^32 에 나눗셈을 
+ * 미리 계산해 둔 값 
  */
 const u32 sched_prio_to_wmult[40] = {
  /* -20 */     48388,     59856,     76040,     92818,    118348,

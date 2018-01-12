@@ -1504,7 +1504,7 @@ static struct sched_rt_entity *pick_next_rt_entity(struct rq *rq,
 
 	return next;
 }
-
+// 다음에 schedule 될 rt task 를 구함
 static struct task_struct *_pick_next_task_rt(struct rq *rq)
 {
 	struct sched_rt_entity *rt_se;
@@ -1522,7 +1522,7 @@ static struct task_struct *_pick_next_task_rt(struct rq *rq)
 
 	return p;
 }
-
+// 다음에 schedule 될 rt task 를 구함
 static struct task_struct *
 pick_next_task_rt(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
@@ -2270,7 +2270,7 @@ static void watchdog(struct rq *rq, struct task_struct *p)
 #else
 static inline void watchdog(struct rq *rq, struct task_struct *p) { }
 #endif
-
+// rt scheduler time tick 함수
 static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
@@ -2290,15 +2290,17 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 		return;
 
 	p->rt.time_slice = sched_rr_timeslice;
-
+    // time slice 초기화
 	/*
 	 * Requeue to the end of queue if we (and all of our ancestors) are not
 	 * the only element on the queue
 	 */
 	for_each_sched_rt_entity(rt_se) {
 		if (rt_se->run_list.prev != rt_se->run_list.next) {
-			requeue_task_rt(rq, p, 0);
+			requeue_task_rt(rq, p, 0); 
+            // runqueue 의 끝에 다시 enqueue 하고 
 			resched_curr(rq);
+            // reschedule 요청 flag 설정 
 			return;
 		}
 	}
