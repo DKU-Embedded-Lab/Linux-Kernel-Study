@@ -10,7 +10,14 @@
 
 typedef struct qrwlock {
 	atomic_t		cnts;
-	arch_spinlock_t		wait_lock;
+    // reader counter, writer 여부 
+    // 0000 0000 0000 0000 0000 0000 0000 0000 
+    // <------->
+    // writer 여부
+    //           <--------------------------->
+    //                   reder 개수
+	arch_spinlock_t		wait_lock; 
+    // cnts 조작을 보호하기 위한 lock
 } arch_rwlock_t;
 
 #define	__ARCH_RW_LOCK_UNLOCKED {		\

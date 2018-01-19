@@ -116,6 +116,9 @@ static inline void queued_read_lock(struct qrwlock *lock)
 	cnts = atomic_add_return_acquire(_QR_BIAS, &lock->cnts);
 	if (likely(!(cnts & _QW_WMASK)))
 		return;
+    // _QR_BIAS 만큼 증가 즉 reader counter 위치 1 증가
+    // _QW_WMASK 즉 writer 가 없고, _QW_WAITING 즉 writer waiter 
+    //  없다면 바로 lock 획득
 
 	/* The slowpath will decrement the reader count, if necessary. */
 	queued_read_lock_slowpath(lock, cnts);
@@ -130,7 +133,8 @@ static inline void queued_write_lock(struct qrwlock *lock)
 	/* Optimize for the unfair lock case where the fair flag is 0. */
 	if (atomic_cmpxchg_acquire(&lock->cnts, 0, _QW_LOCKED) == 0)
 		return;
-
+    // 0 일 경우, writer index 도 비어있고, reader 도 없으므로
+    // reader ,writer 가 없을 경우, writer 가 lock 바로 획득 가능
 	queued_write_lock_slowpath(lock);
 }
 

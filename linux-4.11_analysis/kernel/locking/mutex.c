@@ -569,12 +569,13 @@ mutex_optimistic_spin(struct mutex *lock, struct ww_acquire_ctx *ww_ctx,
 		 */
 		if (!osq_lock(&lock->osq))
 			goto fail;
-        // mutex 의 osq lock 변수인 lock->osq 를 통해 mispath 수행  
+        // mutex 의 osq lock 변수인 lock->osq 를 통해 midpath 수행  
         //
         // midpath 에서 lock 잡은 경우 !true => 계속 실행
         // midpath 에서 slowpath 로 넘어가야 하는 경우 !false => fail 로 이동
 	}
-    // 
+
+    // <midpath 성공한 경우!!>
     // case 1. waiter 가 NULL 이 아니거나 즉 wait-wound mutex 사용하는 경우 
     //         FIXME
     // case 2. waiter 가 NULL 이며, osq 의 선두에 있는 놈이 
@@ -907,11 +908,7 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		if (__mutex_trylock(lock))
 			goto acquired;
         // mutex 얻을 수 있는지 확인
-		/*
-		 * Check for signals and wound conditions while holding
-		 * wait_lock. This ensures the lock cancellation is ordered
-		 * against mutex_unlock() and wake-ups do not go missing.
-		 */
+
 		if (unlikely(signal_pending_state(state, current))) {
             // mutex_lock 으로 호출시, state 가 TASK_UNINTERRUPTIBLE 이므로 
             // 관련 없지만. 

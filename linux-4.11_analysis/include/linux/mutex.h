@@ -57,7 +57,7 @@ struct mutex {
     // owner 이 0 이면 즉 NULL 이면 lock 을 소유한 
     // task_struct 가 없으므로 lock 이 free 상태 
     //
-    // 또한 address 가 L1_CACHE_BYTES align 되어 있으므로(64 byte)
+    // 또한 address 가 L1_CACHE_BYTES align 되어 있으므로(6 bit)
     // 0,1,2 bit 로 lock 의 상태정보를 나타냄 
     //
     // 0 BIT 설정           - lock 잠김 mutex 를 얻으려 기다리는 동안 잠들어야 될때 설정 

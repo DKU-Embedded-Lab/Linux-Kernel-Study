@@ -450,20 +450,29 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 		if (val & ~_Q_LOCKED_MASK)
 			goto queue; 
         // val 이 locked 되고, pending state 인지 검사 
+        // 즉 현재 요청이 두번째 waiting CPU 라면 바로 
+        // queue building 해야 하므로 queue 로이동
+        // 아니라면 optimize 가능
 
 		new = _Q_LOCKED_VAL;
 		if (val == new)
 			new |= _Q_PENDING_VAL;
-        // 현재 lock 이 이미 잡힌 상태이고, pending 등 뭐다른거 설정되어 
-        // 있지 않다면 new lock 에 pending state 추가 
-        //  e.g. 첫 thread 가 lock 잡고 종료되고, 두번째 thread 가 lock 잡으려 
-        //       시도하는 경우에 해당
+        // pending optimization 수행
+        // _Q_LOCKED_VAL 에 _Q_PENDING_VAL 추가하여 new 생성
+        // 하나 thread 가 lock 을 잡은 상태에서 lock 요청이 왔다면
+        // 즉, 첫번째 waiter 라면 queue building 하지 않고, 
+        // global lock 변수에 대해 spinning 하며 wait
+        // (두개가 경쟁하는 상황이면 굳이 queue building 하여 나중에 
+        //  lock 풀릴 때, 1 cacheline miss 발생 추가할 필요가 없음) 
+        //
+        //  for 문 spinning 하다가 lock 풀려서 pending bit clear 되고
+        //  val 이 _Q_LOCKED_VAL 이 clear 된다면 lock 잡을수 있게됨
 
 		/*
 		 * Acquire semantic is required here as the function may
 		 * return immediately if the lock was free.
 		 */
-		old = atomic_cmpxchg_acquire(&lock->val, val, new);
+		old = atomic_cmpxchg_acquire(&lock->val, val, new);        
 		if (old == val)
 			break;
         // lock->val 이 아직 val 과 같다면 즉 lock 된 상태라면 lock 변수에 
@@ -476,7 +485,7 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 */
 	if (new == _Q_LOCKED_VAL)
 		return;
-
+    // 위에 pending bit spinning 하다가 lock 잡은 상태임
 	/*
 	 * we're pending, wait for the owner to go away.
 	 *
@@ -488,7 +497,6 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * implementations imply full barriers.
 	 */
 	smp_cond_load_acquire(&lock->val.counter, !(VAL & _Q_LOCKED_MASK));
-
 	/*
 	 * take ownership and clear the pending bit.
 	 *
@@ -511,22 +519,6 @@ queue:
 	idx = node->count++;
 	tail = encode_tail(smp_processor_id(), idx);
     // lock variable 의 16-32 bit 에 설정될 정보 구성
-    /*
-     * Bitfields in the atomic value:
-     *
-     * When NR_CPUS < 16K
-     *  0- 7: locked byte
-     *     8: pending
-     *  9-15: not used
-     * 16-17: tail index
-     * 18-31: tail cpu (+1)
-     *
-     * When NR_CPUS >= 16K
-     *  0- 7: locked byte
-     *     8: pending
-     *  9-10: tail index
-     * 11-31: tail cpu (+1)
-     */
 
 	node += idx;
 	node->locked = 0;
@@ -574,8 +566,8 @@ queue:
         // variable 의 next 에 연결
 
 		pv_wait_node(node, prev);
-		arch_mcs_spin_lock_contended(&node->locked);
-
+		arch_mcs_spin_lock_contended(&node->locked); 
+        // local 변수 보고 spinning 하며 대기
 		/*
 		 * While waiting for the MCS lock, the next pointer may have
 		 * been set by another lock waiter. We optimistically load
