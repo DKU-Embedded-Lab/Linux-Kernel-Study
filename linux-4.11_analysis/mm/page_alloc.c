@@ -1818,7 +1818,9 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 /*
  * This array describes the order lists are fallen back to when
  * the free lists for the desirable migrate type are depleted
- */
+ */ 
+// 각 MIGRATETYPE 별 해당 free list 에서 page 를 얻을 수 없을 시, 
+// 다른 MIGRATETYPE 에서 받아오게 되는 순서(fallback list)
 static int fallbacks[MIGRATE_TYPES][4] = {
 	[MIGRATE_UNMOVABLE]   = { MIGRATE_RECLAIMABLE, MIGRATE_MOVABLE,   MIGRATE_TYPES },
 	[MIGRATE_RECLAIMABLE] = { MIGRATE_UNMOVABLE,   MIGRATE_MOVABLE,   MIGRATE_TYPES },

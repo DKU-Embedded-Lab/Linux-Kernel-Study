@@ -270,6 +270,7 @@ struct vm_area_struct;
 #define GFP_MOVABLE_MASK (__GFP_RECLAIMABLE|__GFP_MOVABLE)
 #define GFP_MOVABLE_SHIFT 3
 
+// memory 할당 요청이 어느 migration type 에 해당되어야 하는지 확인
 static inline int gfpflags_to_migratetype(const gfp_t gfp_flags)
 {
 	VM_WARN_ON((gfp_flags & GFP_MOVABLE_MASK) == GFP_MOVABLE_MASK);
@@ -278,9 +279,11 @@ static inline int gfpflags_to_migratetype(const gfp_t gfp_flags)
 
 	if (unlikely(page_group_by_mobility_disabled))
 		return MIGRATE_UNMOVABLE;
-
+    // mobility grouping 을 지원안할 시, 모든 free page 들을 MIGRATE_UNMOVABLE 의 
+    // free list 를 통해 하나로 관리되기 때문에 MIGRATE_UNMOVABLE 반환
 	/* Group based on mobility */
 	return (gfp_flags & GFP_MOVABLE_MASK) >> GFP_MOVABLE_SHIFT;
+    // MOVABLE 또는 RECLAIMABLE 인지 검사
 }
 #undef GFP_MOVABLE_MASK
 #undef GFP_MOVABLE_SHIFT

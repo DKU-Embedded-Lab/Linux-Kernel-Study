@@ -21,7 +21,8 @@
 
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
-#define MAX_ORDER 11
+#define MAX_ORDER 11 
+// FORCE_MAX_ZONEORDER 조정을 통해 MAX_ORDER 수정 가능(e.g. arch/arm/Kconfig )
 #else
 #define MAX_ORDER CONFIG_FORCE_MAX_ZONEORDER
 #endif
@@ -36,11 +37,19 @@
 #define PAGE_ALLOC_COSTLY_ORDER 3
 
 enum {
-	MIGRATE_UNMOVABLE,
+	MIGRATE_UNMOVABLE, 
+    // memory 내에서 위치가 변경될 수 없고, 회수도 불가능한 page block
+    // kernel domain page 들 중 core 부분의 page 에 속함. 
 	MIGRATE_MOVABLE,
+    // memory 내에서 위치 변경 가능 및 회수 가능한 page
+    // user application 에 의해 할당된 page table 을 통해 mapping 되는 page block
+    // page table 내의 mapping 정보 변경을 통해 위치가 변경 될 수 있음
 	MIGRATE_RECLAIMABLE,
+    // memory 내에서 이동이 불가능하지만, kswapd 등에 의해 page 회수가 가능한 page block
 	MIGRATE_PCPTYPES,	/* the number of types on the pcp lists */
 	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
+    // MIGRATE_RESERVE 가 삭제되고 추가된 것으로 high-order atomic allocation 을 위한 
+    // page 들을 예약해둠(최대 전체 zone 의 1%)
 #ifdef CONFIG_CMA
 	/*
 	 * MIGRATE_CMA migration type is designed to mimic the way
@@ -56,9 +65,12 @@ enum {
 	 * a single pageblock.
 	 */
 	MIGRATE_CMA,
+    // 연속적 물리 memory 를 할당하는 CMA allocator 에 의해 관리되는 page block
 #endif
 #ifdef CONFIG_MEMORY_ISOLATION
 	MIGRATE_ISOLATE,	/* can't allocate from here */
+    // memory 회수 등의 작업이 진행되는 동안  기존 page list 에서 일단 
+    // 분리시켜 놓기 위한 virtual page type
 #endif
 	MIGRATE_TYPES
 };
@@ -89,7 +101,15 @@ extern int page_group_by_mobility_disabled;
 
 struct free_area {
 	struct list_head	free_list[MIGRATE_TYPES];
+    // free page 를 page block type 별로 묶기 위해 
+    // migrate type 별로 free page block 을 연결한 것 
+    // migrate type 단위 page block 관리를 통해 MOVABLE, NON_MOVABLE 을
+    // 분리하여 user domain 의 page 와 kernel domain 의 page 를 따로 관리하기 위함
+    // 하지만 각 domain 의 page block 부족시 다른 domain 으로 fall back 가능
+    // fall back order : MIGRATE_UNMOVABLE -> MIGRATE_RECLAIMABLE -> MIGRATE_MOVABLE -> MIGRATE_RESERVE
+    //                   MIGRATE_MOVABLE -> MIGRATE_RECLAIMABLE -> MIGRATE_UNMOVABLE -> MIGRATE_RESERVE       
 	unsigned long		nr_free;
+    // 현재 order 의 모든 page type 들의 free page 의 수
 };
 
 struct pglist_data;
@@ -468,7 +488,9 @@ struct zone {
 	 * Flags for a pageblock_nr_pages block. See pageblock-flags.h.
 	 * In SPARSEMEM, this map is stored in struct mem_section
 	 */
-	unsigned long		*pageblock_flags;
+	unsigned long		*pageblock_flags; 
+    // zone 내부의 page block 들이 어떤 migrate type 에 속하는지 관리 
+    //
 #endif /* CONFIG_SPARSEMEM */
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
@@ -812,13 +834,9 @@ typedef struct pglist_data {
     // 1. fallback 상황을 위해 다른 node 에 할당하기 위한 zonelist 
     //    현재 zone 에 memory 가 할당 불가능 할 때, 다른 node 에 memory 를 할당하기 위한
     //    우선순위 node list 이며 그 각 node 에 해당하는 zone 정보도 가지고 있음(fallback order) 
-    // 2. fallback 이 없는 zonelist 
+    // 2. fallback 이 없는 zonelist  
+    //    현재 node 내에서의 zone type 별 fallback list
     //
-    // fallback 이냐 아니냐에 따라 위 두 배열의 zoneref 배열이 다른가?
-    // FIXME 
-    // 질문
-    // 어느 zonelist 에는 gfp_zonelist 를 통해 지금 fallback 인지 아닌지 판단 
-    // 해서 둘중 하나에 접근함
     //
 	int nr_zones;
     // 현재 node 가 가진 zone 의 수

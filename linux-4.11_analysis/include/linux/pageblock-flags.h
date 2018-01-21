@@ -50,14 +50,14 @@ extern unsigned int pageblock_order;
 
 /* Huge pages are a constant size */
 #define pageblock_order		HUGETLB_PAGE_ORDER
-
+// page block order
 #endif /* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE */
 
 #else /* CONFIG_HUGETLB_PAGE */
 
 /* If huge pages are not used, group by MAX_ORDER_NR_PAGES */
 #define pageblock_order		(MAX_ORDER-1)
-
+// page block order
 #endif /* CONFIG_HUGETLB_PAGE */
 
 #define pageblock_nr_pages	(1UL << pageblock_order)
