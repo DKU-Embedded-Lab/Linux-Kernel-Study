@@ -56,7 +56,9 @@
 #define _PAGE_PCD	(_AT(pteval_t, 1) << _PAGE_BIT_PCD)
 #define _PAGE_ACCESSED	(_AT(pteval_t, 1) << _PAGE_BIT_ACCESSED)
 #define _PAGE_DIRTY	(_AT(pteval_t, 1) << _PAGE_BIT_DIRTY)
-#define _PAGE_PSE	(_AT(pteval_t, 1) << _PAGE_BIT_PSE)
+#define _PAGE_PSE	(_AT(pteval_t, 1) << _PAGE_BIT_PSE) 
+// page 크기가 4KB 인지, 2MB 인지 나타내는 bit. 
+//  - 1 로 set 되어 있다면 page 크기가 2MB 인 것.
 #define _PAGE_GLOBAL	(_AT(pteval_t, 1) << _PAGE_BIT_GLOBAL)
 #define _PAGE_SOFTW1	(_AT(pteval_t, 1) << _PAGE_BIT_SOFTW1)
 #define _PAGE_SOFTW2	(_AT(pteval_t, 1) << _PAGE_BIT_SOFTW2)

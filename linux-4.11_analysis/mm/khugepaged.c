@@ -424,7 +424,10 @@ int __khugepaged_enter(struct mm_struct *mm)
 
 	mmgrab(mm);
 	if (wakeup)
-		wake_up_interruptible(&khugepaged_wait);
+		wake_up_interruptible(&khugepaged_wait); 
+    // scan 할 mm 이 없어 khugepaged 가 동작중이지 않았을 경우, 
+    // 현재 scan 할 놈 넣어주었으니 깨워줌
+    // khugepaged 를 깨워줌
 
 	return 0;
 }

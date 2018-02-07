@@ -22,31 +22,58 @@ struct vm_area_struct;
 #define ___GFP_DMA32		0x04u 
 // ZONE_DMA32 영역에 할당 요청함
 #define ___GFP_MOVABLE		0x08u 
-// ZONE_MOVABLE 이 이용가능하다면 이 영역에 할당 요청한다
-// page migration 가능하도록 할당 요청
+// MOVABLE page block 의 free_list 에서 할당 요청
 #define ___GFP_RECLAIMABLE	0x10u 
-// 회수 가능한 page 로 할당 요청 
+// RECLAIMABLE page block 의 free_list 에서 할당 요청
 #define ___GFP_HIGH		0x20u
+// 현재 page 요청이 되게 중요함(우선순위 높음)
+// 이거 안되면 system crash 날지도 모름
 #define ___GFP_IO		0x40u
+// page 요청 중, I/O 가능 e.g. swap 가능
 #define ___GFP_FS		0x80u
-#define ___GFP_COLD		0x100u
-#define ___GFP_NOWARN		0x200u
-#define ___GFP_REPEAT		0x400u
+// VFS 연산 가능
+#define ___GFP_COLD		0x100u 
+// CPU cache 에 있지 않은 cold page 가 필요함
+#define ___GFP_NOWARN		0x200u 
+// page 할당 실패해도 warning 띄우지 않음
+#define ___GFP_REPEAT		0x400u 
+// 실패시 몇번 더 할당 시도해보다 말음
 #define ___GFP_NOFAIL		0x800u
-#define ___GFP_NORETRY		0x1000u
-#define ___GFP_MEMALLOC		0x2000u
+// 실패시 성공할 때 까지 계속 시도
+#define ___GFP_NORETRY		0x1000u 
+// 실패시 재시도 안함
+#define ___GFP_MEMALLOC		0x2000u 
+// 비상 예약 영역을 사용하여 할당해도 되도록 허용 
+// 즉 모든 memory 영역 사용 허용
 #define ___GFP_COMP		0x4000u
+// 연속된 compound page 로 할당해야 한다. e.g. THP 
 #define ___GFP_ZERO		0x8000u
+// 0 으로 초기화된 page 필요함
 #define ___GFP_NOMEMALLOC	0x10000u
-#define ___GFP_HARDWALL		0x20000u
+// 비상 예약 영역에서 할당을 못하도록함
+#define ___GFP_HARDWALL		0x20000u 
+// 현재 TASK 에 cpuset memory 할당정책이 설정되어 있다면
+// process 가 assign 된 CPU 에 해당하는 NODE 
+// 에서만 page 할당 가능 
 #define ___GFP_THISNODE		0x40000u 
-// 지정된 node 에서만 할당 허용
-#define ___GFP_ATOMIC		0x80000u
-#define ___GFP_ACCOUNT		0x100000u
-#define ___GFP_NOTRACK		0x200000u
-#define ___GFP_DIRECT_RECLAIM	0x400000u
+// 지정된 node 에서만 할당 허용 즉 fal back 안됨
+#define ___GFP_ATOMIC		0x80000u 
+// page 요청을 page 회수, sleep 등 허용안되고 
+// 높은 우선순위로 처리한다.
+#define ___GFP_ACCOUNT		0x100000u 
+// kmemcg 의 통제 안받고 page 할당되도록 허용
+// (memory control group)
+#define ___GFP_NOTRACK		0x200000u 
+// kmemcheck 를 통한 디버그 트래킹 허용 안함.
+#define ___GFP_DIRECT_RECLAIM	0x400000u 
+// page 요청시 실패할 경우, direct reclaim 하여 
+// 할당 요청시 바로 free page 확보해주고 현재 요청 처리한다. 
+// kcompactd
 #define ___GFP_WRITE		0x800000u
-#define ___GFP_KSWAPD_RECLAIM	0x1000000u
+// dirty page 할당 요청 
+#define ___GFP_KSWAPD_RECLAIM	0x1000000u 
+// page 할당 시, WMARK_LOW 에 접근하는 경우 kswapd 를 깨워 WMARK_HIGH 에 
+// 도달할 때 까지 page 회수하도록 함. 
 /* If the above are modified, __GFP_BITS_SHIFT may need updating */
 
 /*
@@ -246,9 +273,9 @@ struct vm_area_struct;
 #define GFP_ATOMIC	(__GFP_HIGH|__GFP_ATOMIC|__GFP_KSWAPD_RECLAIM) 
 // 메모리가 있으면 할당, 없으면 NULL, 휴면불가능
 #define GFP_KERNEL	(__GFP_RECLAIM | __GFP_IO | __GFP_FS) 
-// 메모리 할당이 항상 성공하도록 요구, 메모리가 충분하지 않을 
-// 경우는 호출한 프로세스를 멈추고 동적 메모리 할당할 수 있는 
-// 상태가 될때까지 대기. 휴면가능.
+// kernel memory 를 위한 page 를 할당한다.
+// page 요청이 실패하게 되면 kswapd 또는 kcompactd 에 의해 page 를 확보하며 
+// page 할당 도중 IO 수행 및 VFS 관련 call 호출이 가능하다.
 #define GFP_KERNEL_ACCOUNT (GFP_KERNEL | __GFP_ACCOUNT)
 #define GFP_NOWAIT	(__GFP_KSWAPD_RECLAIM)
 #define GFP_NOIO	(__GFP_RECLAIM)
@@ -256,16 +283,27 @@ struct vm_area_struct;
 #define GFP_TEMPORARY	(__GFP_RECLAIM | __GFP_IO | __GFP_FS | \
 			 __GFP_RECLAIMABLE)
 #define GFP_USER	(__GFP_RECLAIM | __GFP_IO | __GFP_FS | __GFP_HARDWALL)
-// 유저 메모리를 할당함. 휴면가능 
+// user memory 를 위한 page 를 할당한다. 
+// process 가 assign 된 CPU 에 해당하는 cpuset 정책이 사용될 수 있도록 한다. 
 #define GFP_DMA		__GFP_DMA 
-// 연속된 물리 메모리를 할당 받을 때 사용 
+// ZONE_DMA 영역에서 page 를 할당하낟. 
 #define GFP_DMA32	__GFP_DMA32
+// ZONE_DMA32 에서 page 를 할당한다. 
 #define GFP_HIGHUSER	(GFP_USER | __GFP_HIGHMEM)
-#define GFP_HIGHUSER_MOVABLE	(GFP_HIGHUSER | __GFP_MOVABLE)
+// ZONE_HIGHMEM 영역에서 user memory 를 위한 page 를 할당한다. 
+#define GFP_HIGHUSER_MOVABLE	(GFP_HIGHUSER | __GFP_MOVABLE) 
+// ZONE_HIGHMEM 영역의 MIGRATE_MOVABLE 에서 user memory 를 위한 page 를 할당한다. 
 #define GFP_TRANSHUGE_LIGHT	((GFP_HIGHUSER_MOVABLE | __GFP_COMP | \
 			 __GFP_NOMEMALLOC | __GFP_NOWARN) & ~__GFP_RECLAIM)
-#define GFP_TRANSHUGE	(GFP_TRANSHUGE_LIGHT | __GFP_DIRECT_RECLAIM)
-
+// THP 관련되어 page fault 과정에 설정되는 flag
+// 비상용도로 예약된 영역은 사옹하지 못하도록 하여 ZONE_HIGHMEM 의 
+// ZONE_MOVABLE 에서 compound huge page 를 할당하며, huge page 할당 실패하면 
+// 그냥 base page 할당하면 되기 때문에 할당이 실패해도 경고를 띄우지 않으고 
+// kswapd 또는 kcompactd 에 의한 memory compaction 을 수행하지 않도록 page 할당을 수행한다. 
+#define GFP_TRANSHUGE	(GFP_TRANSHUGE_LIGHT | __GFP_DIRECT_RECLAIM) 
+// khugepaged 에 의해 base page 가 THP 로 promote 될 때 설정되는 flag
+// THP 할당이 실패하게 되면 CPU stall 하고 kcompactd 에 의해 연속적 memory 공간 확보 후, 
+// THP 를 할당을 수행한다.
 /* Convert GFP flags to their corresponding migrate type */
 #define GFP_MOVABLE_MASK (__GFP_RECLAIMABLE|__GFP_MOVABLE)
 #define GFP_MOVABLE_SHIFT 3

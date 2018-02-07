@@ -615,7 +615,8 @@ void __init paging_init(void)
 	if (N_MEMORY != N_NORMAL_MEMORY)
 		node_clear_state(0, N_NORMAL_MEMORY);
 
-	zone_sizes_init();
+	zone_sizes_init(); 
+    // 각 zone 의 page frame 경계설정 및 free page list 구성 등 수행
 }
 
 /*

@@ -346,7 +346,8 @@ static inline pmd_t pmd_mkdevmap(pmd_t pmd)
 {
 	return pmd_set_flags(pmd, _PAGE_DEVMAP);
 }
-
+// 이 pmd 는 huge page를 위한 것으로 page size 가 2MB 임을 
+// 나타내는 _PAGE_PSE 설정 
 static inline pmd_t pmd_mkhuge(pmd_t pmd)
 {
 	return pmd_set_flags(pmd, _PAGE_PSE);

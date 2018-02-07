@@ -600,10 +600,14 @@ static int __do_huge_pmd_anonymous_page(struct vm_fault *vmf, struct page *page,
 		}
 
 		entry = mk_huge_pmd(page, vma->vm_page_prot);
+        // pmd 를 hugepage 용으로 flag 설정
 		entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
+        // writable 로 설정
 		page_add_new_anon_rmap(page, vma, haddr, true);
+        // vma 의 anon_vma 를 page 에 설정
 		mem_cgroup_commit_charge(page, memcg, false, true);
 		lru_cache_add_active_or_unevictable(page, vma);
+        // ACTIVE_ANON lru 에 page 추가
 		pgtable_trans_huge_deposit(vma->vm_mm, vmf->pmd, pgtable);
 		set_pmd_at(vma->vm_mm, haddr, vmf->pmd, entry);
 		add_mm_counter(vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
@@ -664,28 +668,45 @@ int do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 	gfp_t gfp;
 	struct page *page;
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
+    // fault 난 address 를 2MB 단위 내림 하여 haddr 설정
 
 	if (haddr < vma->vm_start || haddr + HPAGE_PMD_SIZE > vma->vm_end)
 		return VM_FAULT_FALLBACK;
+    // fault 난 vma 영역의 범위(vm_start ~ vm_end) 내에 hddr~hddr+2MB 보다 커야 함. 
+    //
+    //                        haddr          haddr+HPAGE_PMD_SIZE
+    //   1 MB                 2 MB                 3 MB                 4 MB
+    //    |                    |    address         |                    |
+    //    |                    |      |             |                    |
+    // ---#---------------*----#------!-------------#---*----------------#---
+    //                    |                             |
+    //                  vm_start                      vm_end
+    //
 	if (unlikely(anon_vma_prepare(vma)))
 		return VM_FAULT_OOM;
 	if (unlikely(khugepaged_enter(vma, vma->vm_flags)))
 		return VM_FAULT_OOM;
+    // khugepage 에 의해 background 로 수행되어야 할 경우 khugepaged 의 scan list 에 넣음
 	if (!(vmf->flags & FAULT_FLAG_WRITE) &&
 			!mm_forbids_zeropage(vma->vm_mm) &&
-			transparent_hugepage_use_zero_page()) {
+			transparent_hugepage_use_zero_page()) { 
+        // read fault 이며, huge page zeroing 해주어야 할 경우
 		pgtable_t pgtable;
 		struct page *zero_page;
 		bool set;
 		int ret;
 		pgtable = pte_alloc_one(vma->vm_mm, haddr);
+        // pmd entry 에 mapping 할page table 을 위한 page 할당
 		if (unlikely(!pgtable))
 			return VM_FAULT_OOM;
 		zero_page = mm_get_huge_zero_page(vma->vm_mm);
+        // huge zero page 설정되어 있다면 미리 zero filled  되어 있는 그냥 가져오고 
+        // 아니라면 get_huge_zero_page 를 통해 물리 page zero filling 된 것 가져옴 
 		if (unlikely(!zero_page)) {
 			pte_free(vma->vm_mm, pgtable);
 			count_vm_event(THP_FAULT_FALLBACK);
 			return VM_FAULT_FALLBACK;
+            // fallback 시 base page 할당 
 		}
 		vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
 		ret = 0;
@@ -707,7 +728,9 @@ int do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 			pte_free(vma->vm_mm, pgtable);
 		return ret;
 	}
+    // write fault 라면
 	gfp = alloc_hugepage_direct_gfpmask(vma);
+    // sys interface 설정값 통해 gfp flag 설정 
 	page = alloc_hugepage_vma(gfp, vma, haddr, HPAGE_PMD_ORDER);
 	if (unlikely(!page)) {
 		count_vm_event(THP_FAULT_FALLBACK);
@@ -715,6 +738,7 @@ int do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 	}
 	prep_transhuge_page(page);
 	return __do_huge_pmd_anonymous_page(vmf, page, gfp);
+    // pmd entry 에 들어갈 page table 할당, page clearing, lru 추가 등 수행
 }
 
 static void insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,

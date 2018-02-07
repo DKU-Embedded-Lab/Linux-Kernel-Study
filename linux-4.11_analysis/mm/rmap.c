@@ -1191,7 +1191,8 @@ void page_move_anon_rmap(struct page *page, struct vm_area_struct *vma)
  * @vma:	VM area to add page to.
  * @address:	User virtual address of the mapping	
  * @exclusive:	the page is exclusively owned by the current process
- */
+ */ 
+// vma 의 anon_vma 를 strut page 와 연결
 static void __page_set_anon_rmap(struct page *page,
 	struct vm_area_struct *vma, unsigned long address, int exclusive)
 {
@@ -1332,7 +1333,8 @@ void do_page_add_anon_rmap(struct page *page,
  * Same as page_add_anon_rmap but must only be called on *new* pages.
  * This means the inc-and-test can be bypassed.
  * Page does not have to be locked.
- */
+ */ 
+// page 를 위한 rmap 구성
 void page_add_new_anon_rmap(struct page *page,
 	struct vm_area_struct *vma, unsigned long address, bool compound)
 {
@@ -1362,7 +1364,7 @@ void page_add_new_anon_rmap(struct page *page,
 	__mod_node_page_state(page_pgdat(page), NR_ANON_MAPPED, nr);
     // pglist_data 의 vm 수 관리 변수에 mapped된 anon 수 증가
 	__page_set_anon_rmap(page, vma, address, 1);
-    // 
+    // vma 의 anon_vma 를 struct page 에 설정
 }
 
 /**

@@ -752,16 +752,21 @@ void __init zone_sizes_init(void)
 
 #ifdef CONFIG_ZONE_DMA
 	max_zone_pfns[ZONE_DMA]		= min(MAX_DMA_PFN, max_low_pfn);
+    // ZONE_DMA 경계 page frame 설정 
+    //  - max_low_pfn 은 setup_arch 에서 초기화된 end-of-memory
 #endif
 #ifdef CONFIG_ZONE_DMA32
 	max_zone_pfns[ZONE_DMA32]	= min(MAX_DMA32_PFN, max_low_pfn);
+    // ZONE_DMA32 경계 page frame 설정
 #endif
 	max_zone_pfns[ZONE_NORMAL]	= max_low_pfn;
+    // ZONE_NORMAL 경계 page frame 설정
 #ifdef CONFIG_HIGHMEM
 	max_zone_pfns[ZONE_HIGHMEM]	= max_pfn;
 #endif
 
 	free_area_init_nodes(max_zone_pfns);
+    // pglist_data, zone 관련 초기화
 }
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate) = {

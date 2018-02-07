@@ -111,10 +111,16 @@ extern pmd_t *mm_find_pmd(struct mm_struct *mm, unsigned long address);
  */
 struct alloc_context {
 	struct zonelist *zonelist;
+    // page 할당 실패시 다음 free_area 를 찾을 fallback list 
 	nodemask_t *nodemask;
-	struct zoneref *preferred_zoneref;
+    // gfp 값과 mempolicy 에 의해 설정된 nodemask 로 
+    // page 할당 가능한 node
+	struct zoneref *preferred_zoneref; 
+    // fast path 를 위해 사용?  
 	int migratetype;
-	enum zone_type high_zoneidx;
+    // page 를 받아올 migrate type
+	enum zone_type high_zoneidx;   
+    // 할당 요청이 들어온 ZONE
 	bool spread_dirty_pages;
 };
 
@@ -466,19 +472,28 @@ extern void set_pageblock_order(void);
 unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 					    struct list_head *page_list);
 /* The ALLOC_WMARK bits are used as an index to zone->watermark */
-#define ALLOC_WMARK_MIN		WMARK_MIN
+#define ALLOC_WMARK_MIN		WMARK_MIN 
+// zone->watermark[0] 사용
 #define ALLOC_WMARK_LOW		WMARK_LOW
+// zone->watermark[1] 사용
 #define ALLOC_WMARK_HIGH	WMARK_HIGH
+// zone->watermark[2] 사용
 #define ALLOC_NO_WATERMARKS	0x04 /* don't check watermarks at all */
 
 /* Mask to get the watermark bits */
 #define ALLOC_WMARK_MASK	(ALLOC_NO_WATERMARKS-1)
 
-#define ALLOC_HARDER		0x10 /* try to alloc harder */
+#define ALLOC_HARDER		0x10 /* try to alloc harder */ 
+// 할당 watermark 의 기준값에 대한 rule 
+// 이값 설정시, WMARK_MIN 값을 기존 min 의 1/4 배 감소
 #define ALLOC_HIGH		0x20 /* __GFP_HIGH set */
-#define ALLOC_CPUSET		0x40 /* check for correct cpuset */
+// 할당 watermark 의 기준값에 대한 rule 
+// 이값 설정시, WMARK_MIN 값을 기존 min 의 1/2 배 감소
+#define ALLOC_CPUSET		0x40 /* check for correct cpuset */ 
+// memory 를 cpuset 설정된 CPU 에 달린 영역에서 가져와야됨
+// 즉 cgroup 의 cpu subsystem 에서 설정한 정책 사용
 #define ALLOC_CMA		0x80 /* allow allocations from CMA areas */
-
+// memory 를 CMA 영역에서 가져와야 한다. 
 enum ttu_flags;
 struct tlbflush_unmap_batch;
 

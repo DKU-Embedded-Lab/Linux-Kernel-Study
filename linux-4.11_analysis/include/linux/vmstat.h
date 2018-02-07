@@ -143,7 +143,7 @@ static inline unsigned long global_node_page_state(enum node_stat_item item)
 #endif
 	return x;
 }
-
+// zone 의 item 에 해당하는 statistics 를 알아옴
 static inline unsigned long zone_page_state(struct zone *zone,
 					enum zone_stat_item item)
 {

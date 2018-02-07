@@ -930,8 +930,8 @@ typedef struct pglist_data {
     // logical number 를 갖음 이 node 에서의 logical start number 를 의미
     // UMA 의 경우
 	unsigned long node_present_pages; /* total number of physical pages */
-    // page frame 의 총 개수 
-    // hole 포함
+    // page frame 의 총 개수 (hole 포함)
+    // 즉 node 에 normal or high memory 가 있다는 것을 뜻함  
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
     // page frame 기반으로 계산한 전체 크기
@@ -941,6 +941,7 @@ typedef struct pglist_data {
 	wait_queue_head_t kswapd_wait; 
     // kswapd  가 zone 에서 page frame 을 backing store 로 내리기 위한 wait queue
 	wait_queue_head_t pfmemalloc_wait;
+    // page allocation 을 대기중인 task 들의 wait queue
 	struct task_struct *kswapd;	/* Protected by
 					   mem_hotplug_begin/end() */ 
     // 현재 zone 의 swap 을 담당하고 있는 kswapd 의 task_struct 를 가리킴
@@ -951,6 +952,7 @@ typedef struct pglist_data {
 	int kcompactd_max_order;
 	enum zone_type kcompactd_classzone_idx;
 	wait_queue_head_t kcompactd_wait;
+    // cpmpaction 을 대기중인 task 들의 wait queue
 	struct task_struct *kcompactd; 
     // 현재 zone 의compaction 을 담당하고 있는 kcompactd 의 task_struct 를 가리킴
 #endif
@@ -992,7 +994,9 @@ typedef struct pglist_data {
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	spinlock_t split_queue_lock;
+    // split queue 에 대한 접근 보호
 	struct list_head split_queue;
+    // base page 로 split 될 THP 들의 list
 	unsigned long split_queue_len;
 #endif
 

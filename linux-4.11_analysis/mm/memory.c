@@ -3921,7 +3921,8 @@ static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
             // pmd entry 가 THP 이면...
 			if (pmd_protnone(orig_pmd) && vma_is_accessible(vma))
 				return do_huge_pmd_numa_page(&vmf, orig_pmd);
-            // TODO. 뭐지 이거...
+            // NUMA hinting page fault 로 수행되어야 한다면 NUMA hint page fault 수행
+            //  * NUMA hinting page fault : automatic NUMA balancing 과정
 			if ((vmf.flags & FAULT_FLAG_WRITE) &&
 					!pmd_write(orig_pmd)) {
                 // write 접근이지만 pmd 가 write 불가능하게 설정된 경우 
