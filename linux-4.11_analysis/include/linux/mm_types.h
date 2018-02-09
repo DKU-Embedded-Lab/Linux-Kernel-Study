@@ -79,7 +79,10 @@ struct page {
 	/* Second double word */
 	union {
 		pgoff_t index;		/* Our offset within mapping. */
-        // mmap 에서의 즉 struct page 배열에서의 page frame offset
+        // mmap 에서의 즉 struct page 배열에서의 page frame offset 
+        //
+        // buddy allocator 에서... 
+        // 현재 page 의 migrate type 번호
 		void *freelist;		/* sl[aou]b first free object */
 		/* page_deferred_list().prev	-- second tail page */
 	};
@@ -116,7 +119,11 @@ struct page {
                 // 될 때마다 1씩 증가
                 // e.g. 두개의 process 에서 해당 page를 사용 중일 시,
                 //      이 값은 1임
-                // page를 사용중인 process 의 수를 알 수 있음
+                // page를 사용중인 process 의 수를 알 수 있음  
+                //
+                // buddy allocator 에서 ....
+                //  - PAGE_BUDDY_MAPCOUNT_VALUE 라면 buddy 의 free page 
+                //  - -1 이라면 할당되어 buddy 에서 빠져나간 page
 
 				unsigned int active;		/* SLAB */
 				struct {			/* SLUB */
@@ -199,7 +206,9 @@ struct page {
 
 	/* Remainder is not double word aligned */
 	union {
-		unsigned long private;		/* Mapping-private opaque data:
+		unsigned long private;		
+        // buddy 에서의 order slot 번호      
+                        /* Mapping-private opaque data:
 					 	 * usually used for buffer_heads
 						 * if PagePrivate set; used for
 						 * swp_entry_t if PageSwapCache;

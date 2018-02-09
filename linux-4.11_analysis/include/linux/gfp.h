@@ -33,7 +33,9 @@ struct vm_area_struct;
 #define ___GFP_FS		0x80u
 // VFS 연산 가능
 #define ___GFP_COLD		0x100u 
-// CPU cache 에 있지 않은 cold page 가 필요함
+// 이후에 별로 다시 page 를 사용하지 않을 것 
+// 같으므로 cold page 가 필요함 
+// per-CPU cache 에 cold page 를 요청
 #define ___GFP_NOWARN		0x200u 
 // page 할당 실패해도 warning 띄우지 않음
 #define ___GFP_REPEAT		0x400u 
@@ -139,6 +141,7 @@ struct vm_area_struct;
  *   This takes precedence over the __GFP_MEMALLOC flag if both are set.
  */
 #define __GFP_ATOMIC	((__force gfp_t)___GFP_ATOMIC)
+// 현재 page 요청이 higi-priority 임 즉 sleep, swap 등 없이 처리되어야 함
 #define __GFP_HIGH	((__force gfp_t)___GFP_HIGH)
 #define __GFP_MEMALLOC	((__force gfp_t)___GFP_MEMALLOC)
 #define __GFP_NOMEMALLOC ((__force gfp_t)___GFP_NOMEMALLOC)
@@ -182,7 +185,8 @@ struct vm_area_struct;
 #define __GFP_IO	((__force gfp_t)___GFP_IO)
 #define __GFP_FS	((__force gfp_t)___GFP_FS)
 #define __GFP_DIRECT_RECLAIM	((__force gfp_t)___GFP_DIRECT_RECLAIM) /* Caller can reclaim */
-#define __GFP_KSWAPD_RECLAIM	((__force gfp_t)___GFP_KSWAPD_RECLAIM) /* kswapd can wake */
+#define __GFP_KSWAPD_RECLAIM	((__force gfp_t)___GFP_KSWAPD_RECLAIM) /* kswapd can wake */ 
+// WMARK_LOW 에 도달하게 되면 kswapd 를 깨워 WMARK_HIGH 가 될 수 있을 때 까지 동작하도록 함  
 #define __GFP_RECLAIM ((__force gfp_t)(___GFP_DIRECT_RECLAIM|___GFP_KSWAPD_RECLAIM))
 #define __GFP_REPEAT	((__force gfp_t)___GFP_REPEAT)
 #define __GFP_NOFAIL	((__force gfp_t)___GFP_NOFAIL)
@@ -207,6 +211,8 @@ struct vm_area_struct;
  *   cannot be supported (e.g. page tables).
  */
 #define __GFP_COLD	((__force gfp_t)___GFP_COLD)
+// 별로 이후에 사용하지 않을 것 같은 page 이므로 cold page 를 할당받음 
+// per-CPU cache 에 cold page 할당을 요청
 #define __GFP_NOWARN	((__force gfp_t)___GFP_NOWARN)
 #define __GFP_COMP	((__force gfp_t)___GFP_COMP)
 #define __GFP_ZERO	((__force gfp_t)___GFP_ZERO)

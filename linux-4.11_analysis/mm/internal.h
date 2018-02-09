@@ -122,6 +122,7 @@ struct alloc_context {
 	enum zone_type high_zoneidx;   
     // 할당 요청이 들어온 ZONE
 	bool spread_dirty_pages;
+    // write 용 file page cache 할당 요청인지 검사 
 };
 
 #define ac_classzone_idx(ac) zonelist_zone_idx(ac->preferred_zoneref)

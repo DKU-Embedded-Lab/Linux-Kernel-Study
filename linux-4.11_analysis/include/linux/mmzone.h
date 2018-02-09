@@ -46,7 +46,8 @@ enum {
     // page table 내의 mapping 정보 변경을 통해 위치가 변경 될 수 있음
 	MIGRATE_RECLAIMABLE,
     // memory 내에서 이동이 불가능하지만, kswapd 등에 의해 page 회수가 가능한 page block
-	MIGRATE_PCPTYPES,	/* the number of types on the pcp lists */
+	MIGRATE_PCPTYPES,	/* the number of types on the pcp lists */ 
+    // per-CPU cache 에 존재하는 migrate type 까지를 나타내기 위한 flag
 	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
     // MIGRATE_RESERVE 가 삭제되고 추가된 것으로 high-order atomic allocation 을 위한 
     // page 들을 예약해둠(최대 전체 zone 의 1%)
@@ -108,6 +109,8 @@ struct free_area {
     // 하지만 각 domain 의 page block 부족시 다른 domain 으로 fall back 가능
     // fall back order : MIGRATE_UNMOVABLE -> MIGRATE_RECLAIMABLE -> MIGRATE_MOVABLE -> MIGRATE_RESERVE
     //                   MIGRATE_MOVABLE -> MIGRATE_RECLAIMABLE -> MIGRATE_UNMOVABLE -> MIGRATE_RESERVE       
+    // 
+    // free_list 에 연결된 page 중 앞에 있을수록 hot page 이며 뒤에 있을 수록 cold 한 page
 	unsigned long		nr_free;
     // 현재 order 의 모든 page type 들의 free page 의 수
 };
@@ -164,7 +167,7 @@ enum node_stat_item {
 	NR_LRU_BASE,
 	NR_INACTIVE_ANON = NR_LRU_BASE, /* must match order of LRU_[IN]ACTIVE */ //inactive anonymous page 의 수   
 	NR_ACTIVE_ANON,		/*  "     "     "   "       "         */ // active anonymous page 의 수
-	NR_INACTIVE_FILE,	/*  "     "     "   "       "         */ // inactive anonymous page 의 수
+	NR_INACTIVE_FILE,	/*  "     "     "   "       "         */ // inactive file-backed page 의 수
 	NR_ACTIVE_FILE,		/*  "     "     "   "       "         */ // active file-backed page 의 수
 	NR_UNEVICTABLE,		/*  "     "     "   "       "         */
 	NR_ISOLATED_ANON,	/* Temporary isolated pages from anon lru */
@@ -343,6 +346,7 @@ enum zone_watermarks {
 //                           +
 //                         buddy 
 
+// per page cache 로 buddy 애래서 order-0 요청의 page 에 대해 처리 
 struct per_cpu_pages {
 	int count;		/* number of pages in the list */ 
     // list 의 page 수
@@ -358,12 +362,15 @@ struct per_cpu_pages {
     // MIGRATE_MOVABLE 
     // MIGRATE_RECLAIMABLE 
     // 3 가지 type 의 order 0 개수의 page list 존재     
+    // list 에서 뒤에 있을수록(last entry) cold page 이고, 
+    // 앞에 있을 수록(first entry) hot page 임
 };
 
 // order 0 짜리 요청시 여기서 할당해줌 
 // 미리 buddy 로부터 1 개짜리 page 들을 받아 놓음
 struct per_cpu_pageset {
 	struct per_cpu_pages pcp;
+    // per-CPU cache 
 #ifdef CONFIG_NUMA
 	s8 expire;
 #endif
@@ -571,7 +578,7 @@ struct zone {
 #endif
 
 	int initialized;
-
+    // zone 초기화 완료되면 설정되는 값
 	/* Write-intensive fields used from the page allocator */
 	ZONE_PADDING(_pad1_)
 
@@ -625,7 +632,8 @@ struct zone {
 	ZONE_PADDING(_pad3_)
 	/* Zone statistics */
 	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS]; 
-    //  
+    // zone 별 각종 통계정보를 관리 
+    // e.g. free page 수 , file backed page 수..
 } ____cacheline_internodealigned_in_smp;
 
 enum pgdat_flags {
@@ -690,7 +698,12 @@ enum {
  */
 struct zoneref {
 	struct zone *zone;	/* Pointer to actual zone */
-	int zone_idx;		/* zone_idx(zoneref->zone) */
+	int zone_idx;		/* zone_idx(zoneref->zone) */ 
+    // ZONE_DMA, ZONE_NORMAL, ZONE_HIGHMEM 등에 해당하는 idx 
+    // 즉 모든 ZONE 다 있다면 ...
+    //           ZONE_DMA -> ZONE_DMA32 -> ZONE_NORMAL -> ZONE_HIGHMEM -> ZONE_NORMAL -> ZONE_DEVICE
+    // zone_idx      0           1             2              3               4              5 
+    //  이며 여기에 해당되는
 };
 
 /*
@@ -774,13 +787,10 @@ struct zoneref {
 //
 //      node_zonelist[ZONELIST_NOFALLBACK]->_zonerefs[0] = A NORMAL
 //      node_zonelist[ZONELIST_NOFALLBACK]->_zonerefs[1] = A DMA
-
-
-
-
+//
 struct zonelist {
 	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1]; 
-    // +1 은 list 의 end 를 위한 null pointer
+    // +1 은 list 의 end 를 위한 null pointer  
 };
 
 #ifndef CONFIG_DISCONTIGMEM
@@ -971,7 +981,8 @@ typedef struct pglist_data {
 	 * to userspace allocations.
 	 */
 	unsigned long		totalreserve_pages;
-
+    // node 내의 OOM 막기 위해 있어햐 하는  최소한의 reserve page 수 
+    // node 당 totalreserve_pages 만큼의 free page 는 가지고 있어야 함
 #ifdef CONFIG_NUMA
 	/*
 	 * zone reclaim becomes active if more unmapped pages exist.
@@ -1022,7 +1033,8 @@ typedef struct pglist_data {
 	/* Per-node vmstats */
 	struct per_cpu_nodestat __percpu *per_cpu_nodestats;
 	atomic_long_t		vm_stat[NR_VM_NODE_STAT_ITEMS]; 
-    // 각 종류별 vm 몇개인지
+    // node 별 각종 통계정보를 관리 
+    // e.g. free page 수 , file backed page 수..
 } pg_data_t;
 
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)

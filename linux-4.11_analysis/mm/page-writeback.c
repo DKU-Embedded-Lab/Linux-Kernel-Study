@@ -88,13 +88,19 @@ int vm_highmem_is_dirtyable;
 /*
  * The generator of dirty data starts writeback at this percentage
  */
-int vm_dirty_ratio = 20;
-
+int vm_dirty_ratio = 20; 
+// kernel parameter 로 변경되는 값으로  
+// dirty page 에 대한 sync 작업을 synchronous 하게 해야되는 dirty 비율 
+// 즉 vm_dirty_ratio % 이상이 dirty page 라면 I/O 요청을 block 하고 sync 작업 수행
 /*
  * vm_dirty_bytes starts at 0 (disabled) so that it is a function of
  * vm_dirty_ratio * the amount of dirtyable memory
  */
-unsigned long vm_dirty_bytes;
+unsigned long vm_dirty_bytes; 
+// kernel parameter 로 변경되는 값으로 
+// dirty page 에 대한 sync 작업을 synchronous 하게 해야되는 dirty 양
+// 즉 vm_dirty_bytes 이상이 dirty page 라면 I/O 요청을 block 하고 sync 작업 수행
+// default 값은 0 임
 
 /*
  * The interval between `kupdate'-style writebacks
@@ -274,18 +280,26 @@ static void wb_min_max_ratio(struct bdi_writeback *wb,
  * Returns the node's number of pages potentially available for dirty
  * page cache.  This is the base value for the per-node dirty limits.
  */
+// node 내의 dirty page cache 에 사용될 수 있는 page 들의 수 반환
 static unsigned long node_dirtyable_memory(struct pglist_data *pgdat)
 {
 	unsigned long nr_pages = 0;
 	int z;
 
 	for (z = 0; z < MAX_NR_ZONES; z++) {
+        // node_zones 에서 z 를 더하며 순회 즉 node 내의 
+        // 모든 zone 을 순회
 		struct zone *zone = pgdat->node_zones + z;
 
 		if (!populated_zone(zone))
 			continue;
+        // 해당 zone 에 가용 page 가 없는 상태라면 즉 전체 page frame 개수 중
+        // hole 을 제외한 page frame 이 없다면 다음 zone 검사 
 
 		nr_pages += zone_page_state(zone, NR_FREE_PAGES);
+        // zone 별 각종 state 의 통계를 관리하는 vm_stat 배열에 저장된 
+        // NR_FREE_PAGES 에 해당되는 값 가져옴 즉 현재 검사하는 ZONE 의 free page 
+        // 수를 가져와 더함  
 	}
 
 	/*
@@ -294,10 +308,12 @@ static unsigned long node_dirtyable_memory(struct pglist_data *pgdat)
 	 * clean pages in order to balance the zones.
 	 */
 	nr_pages -= min(nr_pages, pgdat->totalreserve_pages);
-
+    // free page 수 에서 OOM 막기 위해 최소한 node 가 
+    // 가지고 있어햐 하는 free page 수는 제외함
 	nr_pages += node_page_state(pgdat, NR_INACTIVE_FILE);
+    // file backed page 용으로 사용중인 victim candidate page 를 더함
 	nr_pages += node_page_state(pgdat, NR_ACTIVE_FILE);
-
+    // file backed  page 용으로 사용중인 working set hot page 를 더함 
 	return nr_pages;
 }
 
@@ -474,21 +490,28 @@ void global_dirty_limits(unsigned long *pbackground, unsigned long *pdirty)
  * Returns the maximum number of dirty pages allowed in a node, based
  * on the node's dirtyable memory.
  */
+// node 의 최대 dirty page 제한값을 계산하여 반환 
+// (LRU 가 per-node 이기 때문에dirty page 도 node 별로 관리됨)
 static unsigned long node_dirty_limit(struct pglist_data *pgdat)
 {
-	unsigned long node_memory = node_dirtyable_memory(pgdat);
+	unsigned long node_memory = node_dirtyable_memory(pgdat); 
+    // (NR_FREE_PAGES - lowmem reserve) + NR_ACTIVE_FILE + NR_INACTIVE_FILE 값 
+    // 즉 현재 dirty page + dirtyable free page
 	struct task_struct *tsk = current;
 	unsigned long dirty;
 
-	if (vm_dirty_bytes)
+	if (vm_dirty_bytes) 
 		dirty = DIV_ROUND_UP(vm_dirty_bytes, PAGE_SIZE) *
 			node_memory / global_dirtyable_memory();
+    // vm_dirty_bytes 가 설정되어 있다면 비율이 아닌 절대값으로 처리  
 	else
 		dirty = vm_dirty_ratio * node_memory / 100;
+    // 설정되어 있지 않다면 비율로 처리
 
 	if (tsk->flags & PF_LESS_THROTTLE || rt_task(tsk))
 		dirty += dirty / 4;
-
+    // task 가 real time task 즉 100 이하의 priority 가지는 task 라면 
+    // 25 % 정도 추가해줌
 	return dirty;
 }
 
@@ -499,9 +522,12 @@ static unsigned long node_dirty_limit(struct pglist_data *pgdat)
  * Returns %true when the dirty pages in @pgdat are within the node's
  * dirty limit, %false if the limit is exceeded.
  */
+// node 의 dirty page 가 최대 제한을 넘어가는지 확인하여 반환
 bool node_dirty_ok(struct pglist_data *pgdat)
 {
 	unsigned long limit = node_dirty_limit(pgdat);
+    // pgdat 노드의 dirty page 최대 제한값을 구함.
+    // (kernel parameter 로 설정된 vm_dirty_ratio , vm_dirty_bytes 에 따라 달라짐 )
 	unsigned long nr_pages = 0;
 
 	nr_pages += node_page_state(pgdat, NR_FILE_DIRTY);

@@ -2228,7 +2228,9 @@ static struct page *__rmqueue(struct zone *zone, unsigned int order,
  * Obtain a specified number of elements from the buddy allocator, all under
  * a single hold of the lock, for efficiency.  Add them to the supplied list.
  * Returns the number of new pages which were placed at *list.
- */
+ */ 
+// buddy 에서 migratetype 의 free_list 에서 order 크기의 
+// cold 여부의 연속 page 를 count 만큼 list 에 넣어줌
 static int rmqueue_bulk(struct zone *zone, unsigned int order,
 			unsigned long count, struct list_head *list,
 			int migratetype, bool cold)
@@ -2657,7 +2659,9 @@ static inline void zone_statistics(struct zone *preferred_zone, struct zone *z)
 #endif
 }
 
-/* Remove page from the per-cpu list, caller must protect the list */
+/* Remove page from the per-cpu list, caller must protect the list */ 
+// 현재 zone 의 per-CPU cache 로부터 migrate type 에 맞는 page 1 개를 받아오며 
+// 필요시(per-CPU cache 가 비어있게 되면) page 를 buddy 에서 받아 per-CPU cache 채움
 static struct page *__rmqueue_pcplist(struct zone *zone, int migratetype,
 			bool cold, struct per_cpu_pages *pcp,
 			struct list_head *list)
@@ -2665,41 +2669,55 @@ static struct page *__rmqueue_pcplist(struct zone *zone, int migratetype,
 	struct page *page;
 
 	do {
-		if (list_empty(list)) {
+		if (list_empty(list)) { 
+            // 해당 migrate type 의 per-CPU cache 에 할당 가능한 page 가 없다면 
+            // 즉 per-CPU cahce 가 비어있다면 buddy 에서 가져와 해당 type 에 채워줌
 			pcp->count += rmqueue_bulk(zone, 0,
 					pcp->batch, list,
 					migratetype, cold);
+            // migrate typ order-0 의 page 1 개 batch 개를 buddy 로부터 받아 list 에 추가
+            // buddy 에서 받아온 page 수만큼 pcp->count 수 증가
 			if (unlikely(list_empty(list)))
 				return NULL;
 		}
-
+        // 이제 per-CPU cache 로부터 cold 여부에 따라 page 1 개 가져옴
 		if (cold)
 			page = list_last_entry(list, struct page, lru);
+        // cold 일 경우 list 의 뒤에서 받아옴
 		else
 			page = list_first_entry(list, struct page, lru);
+        // hot 일 경우 list 의 앞에서 받아옴
 
 		list_del(&page->lru);
 		pcp->count--;
 	} while (check_new_pcp(page));
+    // per-CPU cache 로부터 받은 page 의 사용가능 여부 검사
 
 	return page;
 }
 
-/* Lock and remove page from the per-cpu list */
+/* Lock and remove page from the per-cpu list */ 
+// 현재 zone 의 per-CPU cache 로부터 migrate type 에 맞는 page 1 개를 받아옴
 static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 			struct zone *zone, unsigned int order,
 			gfp_t gfp_flags, int migratetype)
 {
 	struct per_cpu_pages *pcp;
+    // per-CPU cache
 	struct list_head *list;
 	bool cold = ((gfp_flags & __GFP_COLD) != 0);
+    // cold page 요청이 들어온 경우 설정
+    // (이후에 별로 사용하지 않을 것으로 예상될 때) 
 	struct page *page;
 	unsigned long flags;
 
 	local_irq_save(flags);
 	pcp = &this_cpu_ptr(zone->pageset)->pcp;
+    // 현재 zone 의 per-CPU cache 가져옴
 	list = &pcp->lists[migratetype];
+    // 현재 migrate type 에 맞는 per-CPU page list 가져옴
 	page = __rmqueue_pcplist(zone,  migratetype, cold, pcp, list);
+    // per-CPU cache 에서 1 개의 page 를 받아옴
 	if (page) {
 		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
 		zone_statistics(preferred_zone, zone);
@@ -2711,6 +2729,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 /*
  * Allocate a page from the given zone. Use pcplists for order-0 allocations.
  */
+// 현재 zone 에서 order 에 맞는 page 를 할당 할 수 있으므로 alloc_flags 와 migratetype 에 맞는 page  할당해줌
 static inline
 struct page *rmqueue(struct zone *preferred_zone,
 			struct zone *zone, unsigned int order,
@@ -2721,6 +2740,8 @@ struct page *rmqueue(struct zone *preferred_zone,
 	struct page *page;
 
 	if (likely(order == 0)) {
+        // order-0 에 대한 page 요청이라면 즉 1 개의 page 만 요청이 왔다면 
+        // per-CPU page cache 에서 page 할당. 
 		page = rmqueue_pcplist(preferred_zone, zone, order,
 				gfp_flags, migratetype);
 		goto out;
@@ -2929,16 +2950,22 @@ bool zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
     // free page 의 수를 구함 
 }
 
+// 현재 zone 인 z 의 free page 가 order 요청이 와도 mark 값보다 작아지게 되는지 검사 
+// order-0 인 page 요청에 대해 fast path 수행
 static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 		unsigned long mark, int classzone_idx, unsigned int alloc_flags)
 {
 	long free_pages = zone_page_state(z, NR_FREE_PAGES);
+    // 현재 zone 의 free page 수 
 	long cma_pages = 0;
 
 #ifdef CONFIG_CMA
 	/* If allocation can't use CMA areas don't use free CMA pages */
 	if (!(alloc_flags & ALLOC_CMA))
-		cma_pages = zone_page_state(z, NR_FREE_CMA_PAGES);
+		cma_pages = zone_page_state(z, NR_FREE_CMA_PAGES);    
+    // CMA 영역에서 page 를 받아와야 하는 경우가 아니라면 
+    // CMA 용도의 free page 는 빼주어야 하므로
+    // 현재 zone 의 일반 free page 가 아닌 CMA 영역에 남은 free page 를 가져옴 
 #endif
 
 	/*
@@ -2950,7 +2977,8 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 	 */
 	if (!order && (free_pages - cma_pages) > mark + z->lowmem_reserve[classzone_idx])
 		return true;
-
+    // order 이 1 인 경우 즉 page 1 개에 대한 요청일때에 대하여 검사  
+    // (전체 free page 수 - CMA 를 위한 free page) > (watermark 값) + (현재 zone 의 reserve free page) 
 	return __zone_watermark_ok(z, order, mark, classzone_idx, alloc_flags,
 					free_pages);
 }
@@ -2984,6 +3012,7 @@ static bool zone_allows_reclaim(struct zone *local_zone, struct zone *zone)
  * get_page_from_freelist goes through the zonelist trying to allocate
  * a page.
  */
+// zone fallback list 들을 순회하며 page 할당 가능한 zone 을 찾아 page 할당
 static struct page *
 get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 						const struct alloc_context *ac)
@@ -2991,13 +3020,14 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 	struct zoneref *z = ac->preferred_zoneref;
 	struct zone *zone;
 	struct pglist_data *last_pgdat_dirty_limit = NULL;
-
+    // fallback list 가장 최근순회한 node 중 dirty limit 에 도달한 node
 	/*
 	 * Scan zonelist, looking for a zone with enough free.
 	 * See also __cpuset_node_allowed() comment in kernel/cpuset.c.
 	 */
 	for_next_zone_zonelist_nodemask(zone, z, ac->zonelist, ac->high_zoneidx,
 								ac->nodemask) {
+        // 현재 zone 및 모든 fallback list 들의 zone 을 순회
 		struct page *page;
 		unsigned long mark;
 
@@ -3005,6 +3035,7 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 			(alloc_flags & ALLOC_CPUSET) &&
 			!__cpuset_zone_allowed(zone, gfp_mask))
 				continue;
+        // cpuset 이 설정되어 있다면 page 할당 요청할 zone 이 포함되어 있는지 검사
 		/*
 		 * When allocating a page cache page for writing, we
 		 * want to get it from a node that is within its dirty
@@ -3025,30 +3056,59 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 		 * dirty-throttling and the flusher threads.
 		 */
 		if (ac->spread_dirty_pages) {
+            // write 용도로 page cache 에 page 를 할당하는 것이라면... 
+            // dirty limit 에 도달하지 않은 node 에서 할당을 하여 한 node 에
+            // dirty page 들이 몰리지 않도록 함.           
 			if (last_pgdat_dirty_limit == zone->zone_pgdat)
 				continue;
-
+            // 현재 page 할당하려는 zone 의 node 가 이미 dirty limit 도달한 node 라면 
+            // 다음 zone 으로 계속 순회
+            // 즉.. ZONELIST_ORDER_ZONE 이라면..
+            //  node A 의 ZONE_HIGHMEM ... node A 의 ZONE_NORMAL ... node B 의 ZONE_HIGHMEM .. node B 의 ZONE_NORMAL 
+            //  의 순서로 순회하는데 이때 ZONE_HIGHMEM 에서 이미 현재 node 의 dirty 가 limit 도달했다고 설정되면 그 node 의 
+            //  ZONE_NORMAL 을 확인하지 않음 다음 node 로 넘어감
 			if (!node_dirty_ok(zone->zone_pgdat)) {
+                // page 할당 받으려는 node 가 dirty limit 넘어간지 아닌지 모른다면 검사해봄 
+                // vm_dirty_ratio, vm_dirty_bytes 등의 kernel parameter 를 통해 계산한 limit 값보다 크다면 
+                // 현재 node 가 limit 넘는다고 마킹해 놓고 다음 zone 검사
 				last_pgdat_dirty_limit = zone->zone_pgdat;
 				continue;
 			}
 		}
 
-		mark = zone->watermark[alloc_flags & ALLOC_WMARK_MASK];
+		mark = zone->watermark[alloc_flags & ALLOC_WMARK_MASK]; 
+        // WMARK_HIGH, WMARK_LOW, WMARK_MIN 중 현재 allocation mask 에 해당되는 값을 가져옴 
+        //
+        // watermark 값 검사 수행 
+        // order 0 인 page 요청에 대해 fast 로 검사 및 다른 요청 그냥 검사 
 		if (!zone_watermark_fast(zone, order, mark,
 				       ac_classzone_idx(ac), alloc_flags)) {
+            // order 요청하면 mark 값보다 free page 가 작아지게 되는 경우...
 			int ret;
 
 			/* Checked here to keep the fast path fast */
 			BUILD_BUG_ON(ALLOC_NO_WATERMARKS < NR_WMARK);
 			if (alloc_flags & ALLOC_NO_WATERMARKS)
 				goto try_this_zone;
-
+            // mark 보다 작을 때, 일단 조치 취하기 전에 검사한 값이 
+            // WMARK_MIN, WMARK_LOW, WMARK_HIGH 의 세가지 기준값으로 비교한게 아니라면 
+            // 그냥 현재 zone 에서 page 할당
 			if (node_reclaim_mode == 0 ||
 			    !zone_allows_reclaim(ac->preferred_zoneref->zone, zone))
 				continue;
-
-			ret = node_reclaim(zone->zone_pgdat, gfp_mask, order);
+            // node_reclaim_mode 가 0 이거나 watermark 값보다 작다고 
+            // 판단된 zone 이 속한 node 의 distance 가 기준값인 RECLAIM_DISTANCE 보다 멀다면 
+            // 그냥 다음 노드 검사
+            // 즉 wmark 값보다 작아도 reclaim 하지 않도록 설정되어 있거나 reclaim 하기 너무 멀면  
+            // 그냥 다음 node 에서  page 요청하도록 넘어감           
+            // node_reclaim_mode 는 /proc/sys/vm/zone_reclaim_mode 에서 설정가능(이름만 zone)  
+            //  0 : page alloc 시 wmark 보다 작을 때, reclaim 수행 안함. 
+            //  1 : zone reclaim on
+            //  2 : zone reclaim writes dirty pages out
+            //  4 : zone reclaim swaps pages
+			ret = node_reclaim(zone->zone_pgdat, gfp_mask, order); 
+            // 해당 zone 에 해당 page reclaim 을 수행 
+            // XXX -> node_reclaim 은 분석안하고 넘어감 
 			switch (ret) {
 			case NODE_RECLAIM_NOSCAN:
 				/* did not scan */
@@ -3057,16 +3117,20 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 				/* scanned but unreclaimable */
 				continue;
 			default:
-				/* did we reclaim enough */
+				/* did we reclaim enough */ 
+                // page reclaim 후, watermark 다시 검사
 				if (zone_watermark_ok(zone, order, mark,
 						ac_classzone_idx(ac), alloc_flags))
 					goto try_this_zone;
-
+                    // 현재 zone 가능하다면 할당해주고 불가능 하면 다음 zone 검사
 				continue;
 			}
 		}
 
 try_this_zone:
+        // 현재 zone 에서 page 를 할당할 수 있으니 buddy allocator page 요청 
+        // 아직 free page 의 수를 통해 할당이 가능할 것이라는 것만 알고 order 에 맞는
+        // 연속적인 page 가 가능한지는 모름
 		page = rmqueue(ac->preferred_zoneref->zone, zone, order,
 				gfp_mask, alloc_flags, ac->migratetype);
 		if (page) {
@@ -3503,12 +3567,17 @@ gfp_to_alloc_flags(gfp_t gfp_mask)
 	alloc_flags |= (__force int) (gfp_mask & __GFP_HIGH);
 
 	if (gfp_mask & __GFP_ATOMIC) {
+        // ATOMIC gfp flag 설정되어 있을 경우 sleep 되면안되고, 
+        // swap 되면 안되는 급하게 할당 되어야 하는 경우들임 
 		/*
 		 * Not worth trying to allocate harder for __GFP_NOMEMALLOC even
 		 * if it can't schedule.
 		 */
 		if (!(gfp_mask & __GFP_NOMEMALLOC))
-			alloc_flags |= ALLOC_HARDER;
+			alloc_flags |= ALLOC_HARDER; 
+        // OOM 대비 예약된 영역에서 할당 허용되어 있다면(__GFP_NOMEMALLOC)
+        // 할당 허용이 없다면 급하게 처리해야되는 경우이므로 ALLOC_HARDER 
+        // 추가하여 WMARK_MIN 값을 낮춤
 		/*
 		 * Ignore cpuset mems for GFP_ATOMIC rather than fail, see the
 		 * comment for __cpuset_node_allowed().
@@ -3516,6 +3585,8 @@ gfp_to_alloc_flags(gfp_t gfp_mask)
 		alloc_flags &= ~ALLOC_CPUSET;
 	} else if (unlikely(rt_task(current)) && !in_interrupt())
 		alloc_flags |= ALLOC_HARDER;
+    // real time task 이거나 interrupt context 일 경우, sleep 되면 안되므로 
+    // ALLOC_HARDER 를 적용하여 WMARK_MIN 값을 낮추어줌
 
 #ifdef CONFIG_CMA
 	if (gfpflags_to_migratetype(gfp_mask) == MIGRATE_MOVABLE)
@@ -3650,7 +3721,7 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 
 	return false;
 }
-
+// 요청 order 에 해당하는 page 가 없을 경우 호출되는 함수로 kswapd 를 깨우고..
 static inline struct page *
 __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 						struct alloc_context *ac)
@@ -3698,6 +3769,10 @@ retry_cpuset:
 	 * alloc_flags precisely. So we do that now.
 	 */
 	alloc_flags = gfp_to_alloc_flags(gfp_mask);
+    // gfp flag 값을 통해 어떻게 page 를 할당 할 것인지 설정 
+    // 첫번째 시도에서 실패한 경우이므로 좀더 할당이 될 수 있는
+    // 가능성을 높일 수 있도록 allocation flag 재조정
+    //  e.g. ATOMIC, RT task 등의 급한 task 여서 WMARK_MIN 값을 낮추어야 하는지 등
 
 	/*
 	 * We need to recalculate the starting point for the zonelist iterator
@@ -3712,6 +3787,7 @@ retry_cpuset:
 
 	if (gfp_mask & __GFP_KSWAPD_RECLAIM)
 		wake_all_kswapds(order, ac);
+    // node 마다의 kswapd 를 깨워 WMARK_HIGH 가 될 때 까지 동작
 
 	/*
 	 * The adjusted alloc_flags might result in immediate success, so try
@@ -3720,7 +3796,7 @@ retry_cpuset:
 	page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
 	if (page)
 		goto got_pg;
-
+    // kswapd 깨우고도 안된다면 compaction 수행해서 page 할당 시도
 	/*
 	 * For costly allocations, try direct compaction first, as it's likely
 	 * that we have enough base pages and don't need to reclaim. Don't try
@@ -3998,9 +4074,10 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
     // alloc_context 마저 초기화(dirty page 할당받을지, 현재 zone 을 preferred zone 으로 설정)
 	/* First allocation attempt */
 	page = get_page_from_freelist(alloc_mask, order, alloc_flags, &ac);
+    // page 할당 시도
 	if (likely(page))
 		goto out;
-
+    // 위의 memory 할당 시도가 실패한다면 연속적 가용 memory 가 없으므로 여기부터 slowpath 로 동작
 	/*
 	 * Runtime PM, block IO and its error handling path can deadlock
 	 * because I/O on the device might not complete.
