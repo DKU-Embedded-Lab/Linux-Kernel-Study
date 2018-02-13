@@ -11,7 +11,9 @@
 /*
  * For explanation of the elements of this struct, see
  * Documentation/fault-injection/fault-injection.txt
- */
+ */ 
+// 특정 조건에 대해 page fault 에 대해 fault 로 처리해 주기 
+// 위한 fault injectino framework
 struct fault_attr {
 	unsigned long probability;
 	unsigned long interval;

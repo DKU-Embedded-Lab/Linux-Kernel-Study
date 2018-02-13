@@ -94,10 +94,12 @@ enum pageflags {
 	PG_private,		/* If pagecache, has fs-private data */
 	PG_private_2,		/* If pagecache, has fs aux data */
 	PG_writeback,		/* Page is under writeback */
-	PG_head,		/* A head page */
+	PG_head,		/* A head page */ 
+    // Compound page 를 구성하고 있으며 현재 
+    // pagge 가 Compound page 내의 첫번 째 page 임 
 	PG_mappedtodisk,	/* Has blocks allocated on-disk */
 	PG_reclaim,		/* To be reclaimed asap */
-    // 곧 reclaim 될 page
+    // 곧 reclaim 될 page 로 page cache 에서 주로 사용
 	PG_swapbacked,		/* Page is backed by RAM/swap */
 	PG_unevictable,		/* Page is "unevictable"  */
 #ifdef CONFIG_MMU
@@ -516,10 +518,11 @@ static inline void set_page_writeback_keepwrite(struct page *page)
 }
 
 __PAGEFLAG(Head, head, PF_ANY) CLEARPAGEFLAG(Head, head, PF_ANY)
-
+// tail page 들에 head  page 의 주소 설정 및 tail page bit 설정
 static __always_inline void set_compound_head(struct page *page, struct page *head)
 {
 	WRITE_ONCE(page->compound_head, (unsigned long)head + 1);
+    // 여기서 1 추가하는 것은 tail page bit
 }
 
 static __always_inline void clear_compound_head(struct page *page)

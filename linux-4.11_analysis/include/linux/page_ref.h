@@ -70,7 +70,7 @@ static inline int page_count(struct page *page)
 {
 	return atomic_read(&compound_head(page)->_refcount);
 }
-
+// struct page 의 _refcount 를 v 로 설정
 static inline void set_page_count(struct page *page, int v)
 {
 	atomic_set(&page->_refcount, v);

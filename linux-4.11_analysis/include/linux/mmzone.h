@@ -50,7 +50,8 @@ enum {
     // per-CPU cache 에 존재하는 migrate type 까지를 나타내기 위한 flag
 	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
     // MIGRATE_RESERVE 가 삭제되고 추가된 것으로 high-order atomic allocation 을 위한 
-    // page 들을 예약해둠(최대 전체 zone 의 1%)
+    // page 들을 예약해둠(최대 전체 zone 의 1%) 
+    // 즉 반드시 바로 buddy 에서 할당받을 수 있어야 하는 예약된 page 들
 #ifdef CONFIG_CMA
 	/*
 	 * MIGRATE_CMA migration type is designed to mimic the way
@@ -112,7 +113,8 @@ struct free_area {
     // 
     // free_list 에 연결된 page 중 앞에 있을수록 hot page 이며 뒤에 있을 수록 cold 한 page
 	unsigned long		nr_free;
-    // 현재 order 의 모든 page type 들의 free page 의 수
+    // 현재 order 의 모든 page type 들의 free page 의 수 
+    // 즉 해당 order 의 연속적인 page 의 수
 };
 
 struct pglist_data;
@@ -591,7 +593,8 @@ struct zone {
 
 	/* Primarily protects free_area */
 	spinlock_t		lock; 
-    // free_area 에 대한 locking
+    // free_area 에 대한 locking 
+    // buddy allocator 에서 page 를 할당 받을 경우 사용되는 lock
 
 	/* Write-intensive fields used by compaction and vmstats. */
 	ZONE_PADDING(_pad2_)
@@ -858,14 +861,16 @@ typedef struct pglist_data {
     // CONFIG_SPARSEMEM 이 설정되어 있으면 이 변수가 없음? 
     // 그러니까. UMA 가 아닌 NUMA 같은 경우에는 이런 page 배열 구조가 없는 건가?
 #ifdef CONFIG_PAGE_EXTENSION
-	struct page_ext *node_page_ext; 
-    // 32bit 에서는 page flag 에 더이상 추가될 공간이 없기 때문에 이 struct 
-    // 를 통해 사용
+	struct page_ext *node_page_ext;     
+    // 32bit 에서는 page flag 에 더이상 추가될 공간이 없기 때문에 
+    // 이 struct 를 통해 page 에 해당되는 추가 정보를 담을 수 있음
     // flat memory model 이 아닐 경우사용 불가능...
     // idle page tracking, page owner tracking 등의 debugging 용도로 사용
     // flat memory model 이 아닌 경우 CONFIG_PAGE_EXTENSION 옵션을 주어 
     // 설정 가능 
-    // 
+    // mem_map 만큼 즉 page frame 의 수(struct page 배열 의 수만큼)
+    // node_page_ext 부터 시작하여struct page_ext 를 가지고 있음
+    //
     // <idle page tracking>
     // page idle flag
     //  - 이 patch 전에 idle page 들을 tracking 하는 방법은...

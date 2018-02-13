@@ -500,7 +500,8 @@ void prep_transhuge_page(struct page *page)
     //
 	INIT_LIST_HEAD(page_deferred_list(page)); 
     // 첫번째 tail page 위치에 THP 를 free 하기 위한 destructor function 을 설정해줌.
-	set_compound_page_dtor(page, TRANSHUGE_PAGE_DTOR);
+	set_compound_page_dtor(page, TRANSHUGE_PAGE_DTOR); 
+    // compound_page_dtors 함수포인터 배열 내의 index 설정
 }
 
 unsigned long __thp_get_unmapped_area(struct file *filp, unsigned long len,

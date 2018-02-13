@@ -59,7 +59,7 @@ static inline void set_page_poison(struct page *page)
 
 	__set_bit(PAGE_EXT_DEBUG_POISON, &page_ext->flags);
 }
-
+// struct page 내의 
 static inline void clear_page_poison(struct page *page)
 {
 	struct page_ext *page_ext;
@@ -70,16 +70,23 @@ static inline void clear_page_poison(struct page *page)
 
 	__clear_bit(PAGE_EXT_DEBUG_POISON, &page_ext->flags);
 }
-
+//
+// CONFIG_PAGE_POISONING 이 설정되어 있을 경우에 해당
 bool page_is_poisoned(struct page *page)
 {
 	struct page_ext *page_ext;
 
 	page_ext = lookup_page_ext(page);
+    // CONFIG_PAGE_EXTENSION 이 설정되어 있는 경우..
+    // page_ext 배열에서 struct page 에 해당하는  
+    // struct page_ext entry 를 가져옴
 	if (unlikely(!page_ext))
 		return false;
 
 	return test_bit(PAGE_EXT_DEBUG_POISON, &page_ext->flags);
+    // page_ext 에 PAGE_EXT_DEBUG_POISON 이 설정되어 있는지 검사. 
+    // 설정되어 있다면 page allocation 시, poisoned pattern 을 
+    // 검사 해 주어야 한다. 
 }
 
 static void poison_page(struct page *page)
@@ -135,7 +142,8 @@ static void check_poison_mem(unsigned char *mem, size_t bytes)
 			end - start + 1, 1);
 	dump_stack();
 }
-
+// page allocation 수행 시, poisoned page 에 대해 검사 수행 및 
+// page 사용을 위해 page poisoned flag clear 수행
 static void unpoison_page(struct page *page)
 {
 	void *addr;
@@ -145,7 +153,9 @@ static void unpoison_page(struct page *page)
 
 	addr = kmap_atomic(page);
 	check_poison_mem(addr, PAGE_SIZE);
+    // poisoned 된 page 에 대해 error & corruption 검사 수행
 	clear_page_poison(page);
+    // poisoned 되었다는 flag clear
 	kunmap_atomic(addr);
 }
 
@@ -156,14 +166,17 @@ static void unpoison_pages(struct page *page, int n)
 	for (i = 0; i < n; i++)
 		unpoison_page(page + i);
 }
-
+// page poisoining 기능 설정 시, page allocation ,free 과정에서 
+// poisoned pattern 설정 및 해제 등 수행
 void kernel_poison_pages(struct page *page, int numpages, int enable)
 {
 	if (!page_poisoning_enabled())
 		return;
-
+    // page poisoning 기능 on 안되있으면 나감
 	if (enable)
 		unpoison_pages(page, numpages);
+    // page allocation 하는 경우 poisoned 된 
+    // page 에 대해 검사하며 unpoison 수행
 	else
 		poison_pages(page, numpages);
 }

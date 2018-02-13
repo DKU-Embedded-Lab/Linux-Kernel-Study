@@ -45,7 +45,18 @@ struct page {
 	/* First double word block */
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
-	union {
+    // <compound page 관련 flag 정보>
+    // 현재 page 가 compound page 를 구성하고 있다면 flag 에 다음 두가지 
+    // 정보둥에 하나를 가지고 있음. 
+    //
+    // 64 bit
+    //  - compound page 내에서 head page 라면... PG_head
+    //  - compound page 내에서 tail page 들 중 하나라면 ... PG_tail 
+    // ==> 지금은 PG_tail 안씀 PG_head 이 flag 에 설정되어 있다면 head page 
+    //     tail page 는 compound_head 라는 filed 에 head page 의 주소가 담겨 
+    //     있다면 tail page 인거임
+    //
+    union {
 		struct address_space *mapping;	/* If low bit clear, points to
 						 * inode address_space, or NULL.
 						 * If page mapped as anonymous
@@ -61,12 +72,14 @@ struct page {
         // (이걸로 구분할 수 있는 이유가 어차피 pointer 주소는 
         // word boundary 이기 때문에 어차피 주소값의  뒷부분 
         // 0으로 채워져있음)
-        //
+        // 
+        // THP 의 경우, 두번째 tail page 의 mapping 변수를 
+        // deferred list head 로 이용
 
 		void *s_mem;			/* slab first object */
 		atomic_t compound_mapcount;	/* first tail page */ 
         // compound page 의 경우에는 tail page (두번째 이후부터의 page)들 중
-        // 첫번재 page 의 compound_mapcount 변수에 pte 에 map된 횟수가
+        // 첫번재 tail page 의 compound_mapcount 변수에 pte 에 map된 횟수가
         // 저장된다.
         // 즉 두번째 page 에 기록됨
         //
@@ -81,8 +94,8 @@ struct page {
 		pgoff_t index;		/* Our offset within mapping. */
         // mmap 에서의 즉 struct page 배열에서의 page frame offset 
         //
-        // buddy allocator 에서... 
-        // 현재 page 의 migrate type 번호
+        // buddy allocator 로부터 page 가 할당되면 
+        // 현재 page 가 속한 migrate type 번호가 들어감
 		void *freelist;		/* sl[aou]b first free object */
 		/* page_deferred_list().prev	-- second tail page */
 	};
@@ -122,9 +135,13 @@ struct page {
                 // page를 사용중인 process 의 수를 알 수 있음  
                 //
                 // buddy allocator 에서 ....
-                //  - PAGE_BUDDY_MAPCOUNT_VALUE 라면 buddy 의 free page 
-                //  - -1 이라면 할당되어 buddy 에서 빠져나간 page
-
+                //  - buddy allocator 의 free list 에 추가되게 될 때,
+                //    __SetPageBuddy 함수를 통해 -128 값인 
+                //    PAGE_BUDDY_MAPCOUNT_VALUE 로 설정
+                //  
+                //  - buddy allocator 로부터 할당되어 빠져나갈 때,
+                //    __ClearPageBuddy 함수를 통해 -1 로 설정됨                
+                //
 				unsigned int active;		/* SLAB */
 				struct {			/* SLUB */
 					unsigned inuse:16;
@@ -137,7 +154,9 @@ struct page {
 			 * Usage count, *USE WRAPPER FUNCTION* when manual
 			 * accounting. See page_ref.h
 			 */
-			atomic_t _refcount;
+			atomic_t _refcount; 
+            // page reference count
+            // 할당될 때, 1 로 초기화 됨.
 		};
 	};
 
@@ -149,7 +168,12 @@ struct page {
 	 * avoid collision and false-positive PageTail().
 	 */
 	union {
-		struct list_head lru;	/* Pageout list, eg. active_list
+		struct list_head lru;	
+                // per-CPU page list 에서 page 끼리 연결되기 위한 list_head 
+                //
+                //
+                //
+                    /* Pageout list, eg. active_list
 					 * protected by zone_lru_lock !
 					 * Can be used as a generic list
 					 * by the page owner.
@@ -175,8 +199,10 @@ struct page {
 						 */
 		/* Tail pages of compound page */
 		struct {
-			unsigned long compound_head; /* If bit zero is set */
-
+			unsigned long compound_head; /* If bit zero is set */ 
+            // tail page 들 ㅣhead page 의 주소를 가리킴 
+            // compound page 내의 tail page 일 경우, 0 bit 가 설정되어
+            // 현재 page 가 tail 인지 알 수 있음 
 			/* First tail page only */
 #ifdef CONFIG_64BIT
 			/*
@@ -186,7 +212,18 @@ struct page {
 			 * smaller code on some archtectures.
 			 */
 			unsigned int compound_dtor;
-			unsigned int compound_order;
+            // first tail page 일 경우 여기에 
+            // 현재 compound page destructor 함수들 목록내의 
+            // offset 이 설정되어 어떤 함수를 통해 현재 compound page 를 
+            // free 할 것인지 알 수 있음             
+            // 이를 통해 compound_page_dtors 내의 destructor 함수 접근 
+            // (comound page , thp, hugetlbfs 에 따라 다름)
+			unsigned int compound_order; 
+            // first tail page 일 경우 여기에 
+            // 현재 compound page 의 크기 즉 order 값 설정됨  
+            //
+            // thp 라면 여차피 order 는9 로 정해져 있으므로 order 정보는 
+            // 따로 저장 안하고 compound_dtor 만 TRANSHUGE_PAGE_DTOR 로 설정
 #else
 			unsigned short int compound_dtor;
 			unsigned short int compound_order;
@@ -207,7 +244,13 @@ struct page {
 	/* Remainder is not double word aligned */
 	union {
 		unsigned long private;		
-        // buddy 에서의 order slot 번호      
+        //  - page 가 free list 에 있을 때는 
+        //    buddy 에서의 order slot 번호를 가짐 
+        //    (해당 order 의 연속된 pageg 의 첫번째 page 가 가짐)
+        //
+        //  - page 가 할당되게 되면 0 으로 초기화되어 시작 
+        //    swap-entry 를 가지기도 함
+        //
                         /* Mapping-private opaque data:
 					 	 * usually used for buffer_heads
 						 * if PagePrivate set; used for

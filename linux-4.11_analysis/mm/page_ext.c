@@ -119,10 +119,12 @@ void __meminit pgdat_page_ext_init(struct pglist_data *pgdat)
 {
 	pgdat->node_page_ext = NULL;
 }
-
+// CONFIG_PAGE_EXTENSION 이 설정되어 있는 경우..
+// struct page 에 추가정보를 담고있는 struct page_ext 를 가져온다. 
 struct page_ext *lookup_page_ext(struct page *page)
 {
 	unsigned long pfn = page_to_pfn(page);
+    // struct page 에 해당하는 page frame 번호를 알아옴
 	unsigned long index;
 	struct page_ext *base;
 
@@ -143,6 +145,8 @@ struct page_ext *lookup_page_ext(struct page *page)
 	index = pfn - round_down(node_start_pfn(page_to_nid(page)),
 					MAX_ORDER_NR_PAGES);
 	return get_entry(base, index);
+    // struct page_ext 의 배열에서 index 번째의 page_ext 를 가져온다.  
+    // 즉 parameter 의 sruct page 에 해당하는 page_ext 를 가져옴 
 }
 
 static int __init alloc_node_page_ext(int nid)

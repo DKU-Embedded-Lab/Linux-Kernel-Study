@@ -538,7 +538,8 @@ static inline int is_vmalloc_or_module_addr(const void *x)
 #endif
 
 extern void kvfree(const void *addr);
-
+// compound page 의 mapcount 관리하는 장소인 첫번째 tail page 의 
+// compound_mapcount 주소 가져옴 
 static inline atomic_t *compound_mapcount_ptr(struct page *page)
 {
 	return &page[1].compound_mapcount;
@@ -610,25 +611,30 @@ void split_page(struct page *page, unsigned int order);
  */
 typedef void compound_page_dtor(struct page *);
 
+
 /* Keep the enum in sync with compound_page_dtors array in mm/page_alloc.c */
 enum compound_dtor_id {
-	NULL_COMPOUND_DTOR,
-	COMPOUND_PAGE_DTOR,
+	NULL_COMPOUND_DTOR, // NULL
+	COMPOUND_PAGE_DTOR, // free_compound_page 
 #ifdef CONFIG_HUGETLB_PAGE
-	HUGETLB_PAGE_DTOR,
+	HUGETLB_PAGE_DTOR, // free_huge_page 
 #endif
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	TRANSHUGE_PAGE_DTOR,
+	TRANSHUGE_PAGE_DTOR, // free_transhuge_page
 #endif
 	NR_COMPOUND_DTORS,
 };
+
 extern compound_page_dtor * const compound_page_dtors[];
 
+// compound page 의 첫번째 tail page 에  free 될 때 호출될 
+// page destructor  함수에 대한 index 설정
 static inline void set_compound_page_dtor(struct page *page,
 		enum compound_dtor_id compound_dtor)
 {
 	VM_BUG_ON_PAGE(compound_dtor >= NR_COMPOUND_DTORS, page);
 	page[1].compound_dtor = compound_dtor;
+    // 첫번째 tail page 에 destructor index 정보 저장
 }
 
 static inline compound_page_dtor *get_compound_page_dtor(struct page *page)
@@ -644,6 +650,7 @@ static inline unsigned int compound_order(struct page *page)
 	return page[1].compound_order;
 }
 
+// compound page 의 첫번째 tail page 에 compound page 의 order 정보 설정
 static inline void set_compound_order(struct page *page, unsigned int order)
 {
 	page[1].compound_order = order;

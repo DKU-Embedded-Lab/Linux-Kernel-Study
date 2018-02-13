@@ -24,9 +24,13 @@ struct page_ext_operations {
  * pages are verified whether the patterns are not corrupted and clear
  * the flag before alloc_pages().
  */
-
+// page_ext 에 설정될 수 있는 기능들
 enum page_ext_flags {
-	PAGE_EXT_DEBUG_POISON,		/* Page is poisoned */
+	PAGE_EXT_DEBUG_POISON,		/* Page is poisoned */ 
+    // page poisoning 기능으로 page 가 free 될 때, poison pattern 으로 채워진 후
+    // poisoned flag 를 함께 저장해 둠. 추 후 해당 page 가 다시 할당 될 때, 
+    // poisoned flag 가 있을 경우, poisoned pattern 을 검사하여 할당하려는 
+    // page 에 무언가 다른 write 가 써진게 있는지 확인 가능.
 	PAGE_EXT_DEBUG_GUARD,
 	PAGE_EXT_OWNER,
 #if defined(CONFIG_IDLE_PAGE_TRACKING) && !defined(CONFIG_64BIT)
