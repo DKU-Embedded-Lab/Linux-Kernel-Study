@@ -403,7 +403,7 @@ struct anon_vma *page_anon_vma(struct page *page)
 		return NULL;
 	return __page_rmapping(page);
 }
-
+// page 가 file backed page 인 경우 address_space 가져옴
 struct address_space *page_mapping(struct page *page)
 {
 	struct address_space *mapping;

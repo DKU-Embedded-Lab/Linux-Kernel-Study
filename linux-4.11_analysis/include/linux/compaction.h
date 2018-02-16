@@ -4,15 +4,16 @@
 /*
  * Determines how hard direct compaction should try to succeed.
  * Lower value means higher priority, analogically to reclaim priority.
- */
-enum compact_priority {
-	COMPACT_PRIO_SYNC_FULL,
-	MIN_COMPACT_PRIORITY = COMPACT_PRIO_SYNC_FULL,
-	COMPACT_PRIO_SYNC_LIGHT,
-	MIN_COMPACT_COSTLY_PRIORITY = COMPACT_PRIO_SYNC_LIGHT,
-	DEF_COMPACT_PRIORITY = COMPACT_PRIO_SYNC_LIGHT,
-	COMPACT_PRIO_ASYNC,
-	INIT_COMPACT_PRIORITY = COMPACT_PRIO_ASYNC
+ */ 
+// direction compaction 을 얼마나 hard 하게 할지에 대한 level 정도
+enum compact_priority {                                     //<priority level>
+	COMPACT_PRIO_SYNC_FULL,                                 // high     0  
+	MIN_COMPACT_PRIORITY = COMPACT_PRIO_SYNC_FULL,          //          0
+	COMPACT_PRIO_SYNC_LIGHT,                                //          1
+	MIN_COMPACT_COSTLY_PRIORITY = COMPACT_PRIO_SYNC_LIGHT,  //          1
+	DEF_COMPACT_PRIORITY = COMPACT_PRIO_SYNC_LIGHT,         // default  1
+	COMPACT_PRIO_ASYNC,                                     //          2
+	INIT_COMPACT_PRIORITY = COMPACT_PRIO_ASYNC              // low      2
 };
 
 /* Return values for compact_zone() and try_to_compact_pages() */
@@ -20,41 +21,63 @@ enum compact_priority {
 enum compact_result {
 	/* For more detailed tracepoint output - internal to compaction */
 	COMPACT_NOT_SUITABLE_ZONE,
+    // FIXME
+
 	/*
 	 * compaction didn't start as it was not possible or direct reclaim
 	 * was more suitable
 	 */
-	COMPACT_SKIPPED,
+	COMPACT_SKIPPED, 
+    // compaction 해주면 안되는 gfp flag 들이 있어 compaction 수행안함 
+    // compaction_suitable 에서...
+    //  - free page 가 충분히 많으면 compaction 안함
+
 	/* compaction didn't start as it was deferred due to past failures */
-	COMPACT_DEFERRED,
+	COMPACT_DEFERRED,    
+    // compaction 이 아직 동작중이지 않은 상태임
+    // (그전 lound 에서 compaction 이 실패하여 compaction term 이 증가됨)
 
 	/* compaction not active last round */
 	COMPACT_INACTIVE = COMPACT_DEFERRED,
+     // compaction 이 아직 동작중이지 않은 상태임
+    // (그전 lound 이후, 아직 다음 lound 수행될 시간이 아님)  
 
 	/* For more detailed tracepoint output - internal to compaction */
-	COMPACT_NO_SUITABLE_PAGE,
+	COMPACT_NO_SUITABLE_PAGE,    
+    // tracepoint 의 debugging message 용도로 그냥 COMPACT_CONTINUE 와 같은 의미
+
 	/* compaction should continue to another pageblock */
 	COMPACT_CONTINUE,
+    // 다른 page block 에 대해서도 계속 compaction 을 해주어야 함
 
 	/*
 	 * The full zone was compacted scanned but wasn't successfull to compact
 	 * suitable pages.
 	 */
 	COMPACT_COMPLETE,
+    // zone 전체를 scan 하였지만 order 에 맞는 page 만큼 compaction 하짐 못함 
+    // 또한 두 scanner 가 만났지만 free page 부족함
+
 	/*
 	 * direct compaction has scanned part of the zone but wasn't successfull
 	 * to compact suitable pages.
 	 */
 	COMPACT_PARTIAL_SKIPPED,
+    // zone 일부를 scan 하였지만 order 에 맞는 page 만큼 compaction 하짐 못함 
+    // 또한 두 scanner 가 만났지만 free page 부족함
 
 	/* compaction terminated prematurely due to lock contentions */
 	COMPACT_CONTENDED,
-
+    // compactino 과정이 lock 때문에 대기되어야 하거나 task 가 
+    // pending signal 이 있는 경우    
 	/*
 	 * direct compaction terminated after concluding that the allocation
 	 * should now succeed
-	 */
+	 */    
 	COMPACT_SUCCESS,
+    // direct compaction 성공하여 요청 order 의 page 할당 가능한 상태 
+    // compaction_suitable 에서...
+    //  - compaction 없이도 할당 가능한 상태
 };
 
 struct alloc_context; /* in mm/internal.h */

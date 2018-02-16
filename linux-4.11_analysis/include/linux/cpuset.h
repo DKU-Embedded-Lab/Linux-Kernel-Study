@@ -113,6 +113,7 @@ extern void cpuset_print_current_mems_allowed(void);
  * causing process failure. A retry loop with read_mems_allowed_begin and
  * read_mems_allowed_retry prevents these artificial failures.
  */
+// mems_allowed 에 대한 reader 접근을 수행하는 sequential lock 함수
 static inline unsigned int read_mems_allowed_begin(void)
 {
 	if (!cpusets_enabled())

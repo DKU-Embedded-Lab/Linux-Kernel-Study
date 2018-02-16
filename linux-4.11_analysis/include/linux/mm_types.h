@@ -67,14 +67,16 @@ struct page {
         // mapping 은 anonymous page 라면 anon_vma 로의 값을 
         // 가지고 있고, file backed page 라면 backing store 
         // 정보와 연결될 address_space 를 가짐 
-        // 두개를 구분하기 위해 anonymous page 일 경우 mapping 
-        // 변수의 LSM 가 1로 set 된다
-        // (이걸로 구분할 수 있는 이유가 어차피 pointer 주소는 
-        // word boundary 이기 때문에 어차피 주소값의  뒷부분 
-        // 0으로 채워져있음)
-        // 
-        // THP 의 경우, 두번째 tail page 의 mapping 변수를 
-        // deferred list head 로 이용
+        //  - 두개를 구분하기 위해 anonymous page 일 경우 mapping 
+        //    변수의 0-bit 가 1로 set 된다
+        //    (이걸로 구분할 수 있는 이유가 어차피 pointer 주소는 
+        //     word boundary 이기 때문에 어차피 주소값의  뒷부분 
+        //     0으로 채워져있음)
+        //  - MOVABLE page 일 경우, page 의 mapping 
+        //    변수의 1-bit 가 1로 set 된다.(PAGE_MAPPING_MOVABLE)
+        //  - THP 의 경우, 두번째 tail page 의 mapping 변수를 
+        //    deferred list head 로 이용
+        //  - 
 
 		void *s_mem;			/* slab first object */
 		atomic_t compound_mapcount;	/* first tail page */ 

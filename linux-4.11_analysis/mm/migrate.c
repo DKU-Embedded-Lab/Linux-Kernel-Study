@@ -74,7 +74,8 @@ int migrate_prep_local(void)
 
 	return 0;
 }
-
+// struct page 가 MOVABLE 로 할당된 page 이고,  isolate 해줌 즉 
+// flag 에 PG_isolated 설정해줌
 int isolate_movable_page(struct page *page, isolate_mode_t mode)
 {
 	struct address_space *mapping;
@@ -90,7 +91,9 @@ int isolate_movable_page(struct page *page, isolate_mode_t mode)
 	 */
 	if (unlikely(!get_page_unless_zero(page)))
 		goto out;
-
+        // page 의 _refcount 가 0 이면 그냥 종료 
+        // 할당된 page 아니므로...
+    // page 의 _refcount 가 0 이 아니면 증가해줌
 	/*
 	 * Check PageMovable before holding a PG_lock because page's owner
 	 * assumes anybody doesn't touch PG_lock of newly allocated page
@@ -98,6 +101,7 @@ int isolate_movable_page(struct page *page, isolate_mode_t mode)
 	 */
 	if (unlikely(!__PageMovable(page)))
 		goto out_putpage;
+    // page 가 movable page 가 아니라면 put page 하고 종료
 	/*
 	 * As movable pages are not isolated from LRU lists, concurrent
 	 * compaction threads can race against page migration functions
@@ -111,9 +115,12 @@ int isolate_movable_page(struct page *page, isolate_mode_t mode)
 	 */
 	if (unlikely(!trylock_page(page)))
 		goto out_putpage;
+    // page 의 flag 에 write 할 것이므로 lock 잡으려 함
 
 	if (!PageMovable(page) || PageIsolated(page))
 		goto out_no_isolated;
+    // page 가 file-backed page 가 아니거나
+    // PG_isolated 되어 있는 경우
 
 	mapping = page_mapping(page);
 	VM_BUG_ON_PAGE(!mapping, page);

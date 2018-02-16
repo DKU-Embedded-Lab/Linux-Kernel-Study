@@ -70,7 +70,8 @@
  * The fields area is reserved for fields mapping zone, node (for NUMA) and
  * SPARSEMEM section (for variants of SPARSEMEM that require section ids like
  * SPARSEMEM_EXTREME with !SPARSEMEM_VMEMMAP).
- */
+ */ 
+// page 의 상태 flag
 enum pageflags {
 	PG_locked,		/* Page is locked. Don't touch. */
     // 해당 page 에 무언가 다른 연산지금 하면 안됨
@@ -147,6 +148,7 @@ enum pageflags {
 
 	/* non-lru isolated movable page */
 	PG_isolated = PG_reclaim,
+    // page reclaim 또는 compactino 을 위해 isolate 되었는지 확인
 };
 
 #ifndef __GENERATING_BOUNDS_H
@@ -166,17 +168,20 @@ static inline struct page *compound_head(struct page *page)
 		return (struct page *) (head - 1);
 	return page;
 }
-
+// Compound page 의 tail page 인지 검사
 static __always_inline int PageTail(struct page *page)
 {
 	return READ_ONCE(page->compound_head) & 1;
+    // head page 에 대한 주소가 있는 compound_head 필드의 
+    // 0 bit 가 설정되어 있다면 tail page
 }
-
+// compound page 인지 여부 검사
 static __always_inline int PageCompound(struct page *page)
 {
-    // compound page 일 경우, head page 에는 page->flag 에 
-    // PG_head 설정되어 있고 tail page 의 page->compound_head 에는 
-    // head page 의 주소가 초기화되어 있음 
+    // compound page 일 경우인지 검사. 
+    // head page 는 page->flag 에 PG_head 설정되어 있고
+    // tail page 는 head page 의 주소가초기화된 compound_head 의 
+    // 0 bit 가 1 로 설정되어 있음
 	return test_bit(PG_head, &page->flags) || PageTail(page);
 }
 
@@ -218,7 +223,7 @@ static __always_inline int PageCompound(struct page *page)
 #define TESTPAGEFLAG(uname, lname, policy)				\
 static __always_inline int Page##uname(struct page *page)		\
 	{ return test_bit(PG_##lname, &policy(page, 0)->flags); }
-
+// PageLRU, PageIsolated 등 page flag 설정 여부 검사
 #define SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void SetPage##uname(struct page *page)		\
 	{ set_bit(PG_##lname, &policy(page, 1)->flags); }
@@ -427,17 +432,19 @@ static __always_inline int PageAnon(struct page *page)
     // anonymous page 의 경우, page struct 의 mapping 이 
     // struct address_space 가 아닌 struct anon_vma 를 가리킴
     // 이경우 low bit 가 PAGE_MAPPING_ANON 으로 설정되어 있음  
-    // 즉 LSB 가 1로 설정되어 있음(어차피 주소는 word 단위 
+    // 즉 0-bit 가 1로 설정되어 있음(어차피 주소는 word 단위 
     // align 이므로 뒤는 0으로 채워져 있음)
 	return ((unsigned long)page->mapping & PAGE_MAPPING_ANON) != 0;
     // mapping 의 LSB 검사
     // 즉 anonymous page 라면1 반환 file-backed page 라면 0 반환
 }
 
+// struct page 가 movable page 즉 user 를 위한 page 인지 검사한다. 
 static __always_inline int __PageMovable(struct page *page)
 {
 	return ((unsigned long)page->mapping & PAGE_MAPPING_FLAGS) ==
 				PAGE_MAPPING_MOVABLE;
+    // MOVABLE page 일 경우, 1-bit 가 set 되어 있다.
 }
 
 #ifdef CONFIG_KSM

@@ -25,12 +25,15 @@
 
 #include <linux/types.h>
 
-/* Bit indices that affect a whole block of pages */
+/* Bit indices that affect a whole block of pages */ 
+// zone 내의 모든 page block 정보를 가지고 있는 pageblock_flags 에있는 각 
+// page block 당 4 bit entry 에 해당하는 정보들
+//
 enum pageblock_bits {
-	PB_migrate,
-	PB_migrate_end = PB_migrate + 3 - 1,
+	PB_migrate,                             // 0
+	PB_migrate_end = PB_migrate + 3 - 1,    // 2
 			/* 3 bits required for migrate types */
-	PB_migrate_skip,/* If set the block is skipped by compaction */
+	PB_migrate_skip,/* If set the block is skipped by compaction */ // 3
 
 	/*
 	 * Assume the bits will always align on a word. If this assumption
@@ -69,7 +72,8 @@ unsigned long get_pfnblock_flags_mask(struct page *page,
 				unsigned long pfn,
 				unsigned long end_bitidx,
 				unsigned long mask);
-
+// page block 의 bitmap 에서 page 가 속한 page block 에 해당하는 4 bit 
+// entry 중 end_bit 에 해당하는 bit set 여부 반환
 void set_pfnblock_flags_mask(struct page *page,
 				unsigned long flags,
 				unsigned long pfn,

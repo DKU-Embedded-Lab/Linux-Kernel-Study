@@ -123,6 +123,7 @@ struct alloc_context {
     // 할당 요청이 들어온 ZONE
 	bool spread_dirty_pages;
     // write 용 file page cache 할당 요청인지 검사 
+    // node 별 dirty page 를 동일하게 배분되도록 해야함
 };
 
 #define ac_classzone_idx(ac) zonelist_zone_idx(ac->preferred_zoneref)
@@ -152,7 +153,9 @@ __find_buddy_pfn(unsigned long page_pfn, unsigned int order)
 
 extern struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 				unsigned long end_pfn, struct zone *zone);
-
+// 
+// pageblock 내의 page 범위인 start_pfn ~ end_pfn 이 속한 zone 이 
+// zone 이 맞다면 첫 base page 의 struct page 반환
 static inline struct page *pageblock_pfn_to_page(unsigned long start_pfn,
 				unsigned long end_pfn, struct zone *zone)
 {
@@ -182,27 +185,57 @@ extern int user_min_free_kbytes;
  * are moved to the end of a zone during a compaction run and the run
  * completes when free_pfn <= migrate_pfn
  */
+// page compactino 과정에서 migrate scanner, free scanner 에 의해 
+// migrate 되는 page 들을 관리하기 위한 structure
 struct compact_control {
 	struct list_head freepages;	/* List of free pages to migrate to */
+    // scan 결과 LRU list 에서 isolated 된 free page 들
 	struct list_head migratepages;	/* List of pages being migrated */
+    // scan 결과 LRU list 에서 isolated 된 in-use page 들 
 	unsigned long nr_freepages;	/* Number of isolated free pages */
+    // page 의 내용들이 옮겨지기 위해 LRU 에서 isolate 된 free page 
+    // 각 scanning round 당 횟수
 	unsigned long nr_migratepages;	/* Number of pages to migrate */
+    // page 의 내용들이 옮겨지기 위해 LRU 에서 isolate 된 migrate page 
+    // 즉 PG_isolated 설정된 page 의 수 
+    // 각 scanning round 당 횟수  
 	unsigned long total_migrate_scanned;
+    // 총 migrate scanner 가 scan 한 page 들
 	unsigned long total_free_scanned;
+    // 총 free scanner 가 scan 함 page 들
 	unsigned long free_pfn;		/* isolate_freepages search base */
+    // free scanner 가 scan 시작 할 위치
 	unsigned long migrate_pfn;	/* isolate_migratepages search base */
-	unsigned long last_migrated_pfn;/* Not yet flushed page being freed */
+    // migrate scanner 가 scan 시작 할 위치
+	unsigned long last_migrated_pfn;/* Not yet flushed page being freed */ 
+    // 최근에 PG_isolated 설정된 page frame 
 	enum migrate_mode mode;		/* Async or sync migration mode */
+    // kcompactd 에 의한 asynchronous comapction 인지 
+    // page alloc 과정에서의 synchronous compaction 인지 구분
 	bool ignore_skip_hint;		/* Scan blocks even if marked skip */
+    // page block 내의 compaction scanning 을 도와주기 위한 
+    // 해당 page block 에 대해 skip 하라는 PB_migrate_skip bit 가 설정되어 
+    // 있어도 migrate 가능 검사를 수행한다. 
 	bool ignore_block_suitable;	/* Scan blocks considered unsuitable */
 	bool direct_compaction;		/* False from kcompactd or /proc/... */
+    // page fault 과정에서의 compaction 이면 1 임 
+    // kcompactd 또는 /proc/sys/vm/compact_memory 를 통한 compactino 이면0 임 
 	bool whole_zone;		/* Whole zone should/has been scanned */
+    // 전체 zone 에 대해 scan 필요한지 검사.
+    // (e.g. compaction priority 가 높으면 즉 free page 확보 최대한 해야 하면 
+    // 전체 zone 에 대해 compaction 수행함)
 	int order;			/* order a direct compactor needs */
+    // direct compactino 시, compaction 을통해 할당해야 하는 page 수
 	const gfp_t gfp_mask;		/* gfp mask of a direct compactor */
+    // direct compaction 시의 gfp flag
 	const unsigned int alloc_flags;	/* alloc flags of a direct compactor */
 	const int classzone_idx;	/* zone index of a direct compactor */
 	struct zone *zone;
-	bool contended;			/* Signal lock or sched contention */
+	bool contended;			/* Signal lock or sched contention */ 
+    // asynchronous mode (kcompactd) 에 의한 scanning 시...
+    //  - 더 우선순위 높은 task 있거나, CPU time 시간 다됫거나 등 
+    //    reschedule 요청이 있어 scanning 종료 
+    //  - pending signal 이 있어 종료
 };
 
 unsigned long

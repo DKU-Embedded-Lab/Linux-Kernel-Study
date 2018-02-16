@@ -551,6 +551,8 @@ struct task_struct {
 	atomic_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
+    // 현재 task 의 상태를 나타내는 flag 
+    //  e.g. memory 할당하는 중, process 생성중...
 	unsigned int			ptrace;
 
 #ifdef CONFIG_SMP
@@ -634,8 +636,11 @@ struct task_struct {
     //      - SCHED_RR     : rr, soft real time process 
     //      - SCHED_FIFO   : fifo, soft real time process
 	int				nr_cpus_allowed;
-	cpumask_t			cpus_allowed; 
-    // 특정 cpu 에서만 돌게 설정하는 mask
+	cpumask_t			cpus_allowed;     
+    // bitmap 으로 system 의 모든 CPU 들에 해당하는 
+    // bit 들을 가지고있으며 현재 task 에 허용되는 
+    // CPU 일 시, 해당 bit 설정
+
 
 #ifdef CONFIG_PREEMPT_RCU
 	int				rcu_read_lock_nesting;
@@ -1030,8 +1035,13 @@ struct task_struct {
 #ifdef CONFIG_CPUSETS
 	/* Protected by ->alloc_lock: */
 	nodemask_t			mems_allowed;
+    // bitmap 으로 system 의 모든 node 들에 해당하는 
+    // bit 들을 가지고있으며 현재 task 에 허용되는 
+    // node 일 시, 해당 bit 설정
+    //
 	/* Seqence number to catch updates: */
 	seqcount_t			mems_allowed_seq;
+    // mems_allowed 접근에 대한 sequential count 
 	int				cpuset_mem_spread_rotor;
 	int				cpuset_slab_spread_rotor;
 #endif
@@ -1399,6 +1409,7 @@ extern struct pid *cad_pid;
 /*
  * Per process flags
  */
+// task 의 상태를 나타내는 flag 들...
 #define PF_IDLE			0x00000002	/* I am an IDLE thread */
 #define PF_EXITING		0x00000004	/* Getting shut down */
 #define PF_EXITPIDONE		0x00000008	/* PI exit done on shut down */
@@ -1410,6 +1421,7 @@ extern struct pid *cad_pid;
 #define PF_DUMPCORE		0x00000200	/* Dumped core */
 #define PF_SIGNALED		0x00000400	/* Killed by a signal */
 #define PF_MEMALLOC		0x00000800	/* Allocating memory */
+// task 가 page 를 reclaim 또는 compaction 하는 중임
 #define PF_NPROC_EXCEEDED	0x00001000	/* set_user() noticed that RLIMIT_NPROC was exceeded */
 #define PF_USED_MATH		0x00002000	/* If unset the fpu must be initialized before use */
 #define PF_USED_ASYNC		0x00004000	/* Used async_schedule*(), used by module init */

@@ -97,6 +97,7 @@ extern int page_group_by_mobility_disabled;
 #define NR_MIGRATETYPE_BITS (PB_migrate_end - PB_migrate + 1)
 #define MIGRATETYPE_MASK ((1UL << NR_MIGRATETYPE_BITS) - 1)
 
+// page block 에대한 migrate type 을 가져옴
 #define get_pageblock_migratetype(page)					\
 	get_pfnblock_flags_mask(page, page_to_pfn(page),		\
 			PB_migrate_end, MIGRATETYPE_MASK)
@@ -468,7 +469,8 @@ struct zone {
     // WMARK_MIN, WMARK_LOW, WMARK_HIGH  
     // 
 	unsigned long nr_reserved_highatomic;
-    // ?
+    // high atomic 즉 반드시 할당되어야 하는 MIGRATE_HIGHATOMIC 형의 
+    // 할당을 위해 미리 예약된 page(전체 zone 의 page frame 수의 1%)
 	/*
 	 * We don't know if the memory that we're going to allocate will be
 	 * freeable or/and it will be released eventually, so to avoid totally
@@ -498,7 +500,9 @@ struct zone {
 	 * In SPARSEMEM, this map is stored in struct mem_section
 	 */
 	unsigned long		*pageblock_flags; 
-    // zone 내부의 page block 들이 어떤 migrate type 에 속하는지 관리 
+    // zone 에 존재하는 모든 page block 들이 어떤 migrate type 에 속하는지 
+    // 관리하는 bitmap 의 주소
+    //  - 
     //
 #endif /* CONFIG_SPARSEMEM */
 
@@ -610,8 +614,11 @@ struct zone {
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 	/* pfn where compaction free scanner should start */
 	unsigned long		compact_cached_free_pfn;
-	/* pfn where async and sync compaction migration scanner should start */
-	unsigned long		compact_cached_migrate_pfn[2];
+	/* pfn where async and sync compaction migration scanner should start */ 
+    // async/sync compactino 의 cache 된 free scanner 시작 위치
+	unsigned long		compact_cached_migrate_pfn[2]; 
+    // asynchronous compaction 의 cached 된 migrate scanner 시작 위치(kcompactd)
+    // synchronous  compaction 의 cached 된 migrate scanner 시작 위치 
 #endif
 
 #ifdef CONFIG_COMPACTION
@@ -620,17 +627,22 @@ struct zone {
 	 * are skipped before trying again. The number attempted since
 	 * last failure is tracked with compact_considered.
 	 */
-	unsigned int		compact_considered;
+	unsigned int		compact_considered; 
+    // last failure 이후, compactino 시도 횟수 
 	unsigned int		compact_defer_shift;
+    // compaction failure 후 compaction 을 미루는 횟수
 	int			compact_order_failed;
+    //
 #endif
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 	/* Set to true when the PG_migrate_skip bits should be cleared */
 	bool			compact_blockskip_flush;
+    //
 #endif
 
 	bool			contiguous;
+    // 
 
 	ZONE_PADDING(_pad3_)
 	/* Zone statistics */
@@ -965,6 +977,7 @@ typedef struct pglist_data {
 
 #ifdef CONFIG_COMPACTION
 	int kcompactd_max_order;
+    // kcompactd kernel thread 관련
 	enum zone_type kcompactd_classzone_idx;
 	wait_queue_head_t kcompactd_wait;
     // cpmpaction 을 대기중인 task 들의 wait queue

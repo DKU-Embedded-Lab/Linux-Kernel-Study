@@ -8,8 +8,8 @@
  * MIGRATE_SYNC will block when migrating pages
  */
 enum migrate_mode {
-	MIGRATE_ASYNC,
-	MIGRATE_SYNC_LIGHT,
+	MIGRATE_ASYNC, // kcompactd 에 의한 compaction 
+	MIGRATE_SYNC_LIGHT, // page alloc 에 의한 compaction
 	MIGRATE_SYNC,
 };
 

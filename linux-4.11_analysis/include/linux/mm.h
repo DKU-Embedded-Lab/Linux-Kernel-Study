@@ -492,6 +492,9 @@ static inline int put_page_testzero(struct page *page)
  * This can be called when MMU is off so it must not access
  * any of the virtual mappings.
  */
+
+ // reference count 가 0 이 아니면 true 를 반환 및 refcount 증가 
+ // reference count 가 0 이면 false 반환
 static inline int get_page_unless_zero(struct page *page)
 {
 	return page_ref_add_unless(page, 1, 0);
@@ -642,7 +645,7 @@ static inline compound_page_dtor *get_compound_page_dtor(struct page *page)
 	VM_BUG_ON_PAGE(page[1].compound_dtor >= NR_COMPOUND_DTORS, page);
 	return compound_page_dtors[page[1].compound_dtor];
 }
-
+// compound page 이므로 첫번째 tail page 에서  page order 값을 읽어옴
 static inline unsigned int compound_order(struct page *page)
 {
 	if (!PageHead(page))
