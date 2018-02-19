@@ -423,7 +423,7 @@ unsigned long get_pfnblock_flags_mask(struct page *page, unsigned long pfn,
 {
 	return __get_pfnblock_flags_mask(page, pfn, end_bitidx, mask);
 }
-
+// page block 의 bitmap 에서 migrate type 에 해당되는 값을 가져옴
 static __always_inline int get_pfnblock_migratetype(struct page *page, unsigned long pfn)
 {
 	return __get_pfnblock_flags_mask(page, pfn, PB_migrate_end, MIGRATETYPE_MASK);
@@ -625,6 +625,8 @@ void prep_compound_page(struct page *page, unsigned int order)
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 unsigned int _debug_guardpage_minorder;
+// guard page 의 order 
+//  - 최대 guard page order 는 MAX_ORDER/2
 bool _debug_pagealloc_enabled __read_mostly
 			= IS_ENABLED(CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT);
 EXPORT_SYMBOL(_debug_pagealloc_enabled);
@@ -704,7 +706,7 @@ static inline bool set_page_guard(struct zone *zone, struct page *page,
 
 	return true;
 }
-
+// page_ext 에 설정된 struct page 가 guard page 라는 bit clear
 static inline void clear_page_guard(struct zone *zone, struct page *page,
 				unsigned int order, int migratetype)
 {
@@ -763,10 +765,16 @@ static inline void rmv_page_order(struct page *page)
  *
  * For recording page's order, we use page_private(page).
  */
+// 
+// buddy 가 page 의 buddy page 인지 검사 
+//  - 같은 order 에 속한 guard page 이거나...
+//  - 같은 order 에 속한 buddy page 이거나...
+//
 static inline int page_is_buddy(struct page *page, struct page *buddy,
 							unsigned int order)
 {
 	if (page_is_guard(buddy) && page_order(buddy) == order) {
+        // buddy page 가 guard page 이면서 buddy page 의 order 가 같음
 		if (page_zone_id(page) != page_zone_id(buddy))
 			return 0;
 
@@ -815,7 +823,7 @@ static inline int page_is_buddy(struct page *page, struct page *buddy,
  *
  * -- nyc
  */
-
+// buddy allocator 의 core free function
 static inline void __free_one_page(struct page *page,
 		unsigned long pfn,
 		struct zone *zone, unsigned int order,
@@ -823,6 +831,7 @@ static inline void __free_one_page(struct page *page,
 {
 	unsigned long combined_pfn;
 	unsigned long uninitialized_var(buddy_pfn);
+    // uninitialised 되어있다고 미리 알림. 즉 warning 없앰
 	struct page *buddy;
 	unsigned int max_order;
 
@@ -834,35 +843,59 @@ static inline void __free_one_page(struct page *page,
 	VM_BUG_ON(migratetype == -1);
 	if (likely(!is_migrate_isolate(migratetype)))
 		__mod_zone_freepage_state(zone, 1 << order, migratetype);
-
+        // MIGRATE_ISOLATE 가 아닌 경우, vm_stat 증가
 	VM_BUG_ON_PAGE(pfn & ((1 << order) - 1), page);
 	VM_BUG_ON_PAGE(bad_range(zone, page), page);
 
 continue_merging:
 	while (order < max_order - 1) {
 		buddy_pfn = __find_buddy_pfn(pfn, order);
+        // 할당 해제 하려는 order 크기 page 의
+        // pfn 에 해당하는 buddy page pfn 찾음
 		buddy = page + (buddy_pfn - pfn);
-
+        // buddy page frame 에 해당되는 struct page 를 구함
+        // (buddy_pfn - pfn 이 음수일 수도 있음) 
+        //
+        // CONFIG_HOLES_IN_ZONE 이 설정되어 있다면 
+        // 즉 ZONE 안에 hole 이 있을 수 있다면
 		if (!pfn_valid_within(buddy_pfn))
 			goto done_merging;
-		if (!page_is_buddy(page, buddy, order))
+            // buddy 가 hole 가지고 있음 더이상 merging 불가능
+		
+        // hole 있는 page 도 아니니 free page 인지 검사
+        if (!page_is_buddy(page, buddy, order))
 			goto done_merging;
+            // buddy page frame 이 buddy 가 아님 
+            // 즉 free page frame 이 아님 더이상 merging 불가능
 		/*
 		 * Our buddy is free or it is CONFIG_DEBUG_PAGEALLOC guard page,
 		 * merge with it and move up one order.
 		 */
+        // buddy page 가 hole 도아니고, buddy allocator 에 있는 free page 임 
 		if (page_is_guard(buddy)) {
+            // buddy 가 guard page 라면..
 			clear_page_guard(zone, buddy, order, migratetype);
+            // guard page 나타내는 bit clear 및 
+            // buddy 에 기록된 order 정보 0 으로 초기화
 		} else {
+            // guard page 가 아니라 그냥 buddy page 라면 
 			list_del(&buddy->lru);
+            // free page list 에서 제거 
 			zone->free_area[order].nr_free--;
+            // free page list 에서의 free page group 수 감소
 			rmv_page_order(buddy);
+            // buddy 에 PG_buddy bit clear 및 order 정보 clear  
+            // 즉 buddy page 가 buddy allocator 에 속해있다는 flag 들 삭제
 		}
 		combined_pfn = buddy_pfn & pfn;
+        // 두 buddy 의 leading page frame 구함
 		page = page + (combined_pfn - pfn);
+        // leading page frame 의 struct page 구함
 		pfn = combined_pfn;
 		order++;
+        // 합쳐주기 위해 order 증가
 	}
+    
 	if (max_order < MAX_ORDER) {
 		/* If we are here, it means order is >= pageblock_order.
 		 * We want to prevent merge between freepages on isolate
@@ -873,6 +906,7 @@ continue_merging:
 		 * low-order merging.
 		 */
 		if (unlikely(has_isolate_pageblock(zone))) {
+            // isolated 된 pageblock 이 있다면.. pass
 			int buddy_mt;
 
 			buddy_pfn = __find_buddy_pfn(pfn, order);
@@ -890,7 +924,7 @@ continue_merging:
 
 done_merging:
 	set_page_order(page, order);
-
+    // 증가된 새로운 order 정보 기록하고.
 	/*
 	 * If this is not the largest possible page, check if the buddy
 	 * of the next-highest order is free. If it is, it's possible
@@ -909,11 +943,13 @@ done_merging:
 		    page_is_buddy(higher_page, higher_buddy, order + 1)) {
 			list_add_tail(&page->lru,
 				&zone->free_area[order].free_list[migratetype]);
+            // 상위에 또 합칠 수 있는 page 가 발견된면 cold page 로 추가
 			goto out;
 		}
 	}
 
 	list_add(&page->lru, &zone->free_area[order].free_list[migratetype]);
+    // hot page 로 free list 에 page 추가
 out:
 	zone->free_area[order].nr_free++;
 }
@@ -964,7 +1000,7 @@ static void free_pages_check_bad(struct page *page)
 #endif
 	bad_page(page, bad_reason, bad_flags);
 }
-
+// bad page 여부 검사
 static inline int free_pages_check(struct page *page)
 {
 	if (likely(page_expected_state(page, PAGE_FLAGS_CHECK_AT_FREE)))
@@ -1024,7 +1060,8 @@ out:
 	clear_compound_head(page);
 	return ret;
 }
-
+// 
+// CONFIG_DEBUG_VM 의 설정 여부에 따라 check_free 에 true or false 설정
 static __always_inline bool free_pages_prepare(struct page *page,
 					unsigned int order, bool check_free)
 {
@@ -1040,13 +1077,16 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	 * avoid checking PageCompound for order-0 pages.
 	 */
 	if (unlikely(order)) {
+        // page 가 2 개 이상일 경우...
 		bool compound = PageCompound(page);
+        // head page 또는 tail page 인지 검사하여 compound page 여부 검사
 		int i;
 
 		VM_BUG_ON_PAGE(compound && compound_order(page) != order, page);
 
 		if (compound)
 			ClearPageDoubleMap(page);
+            // compound page 라면 pmd, pte 에 모두 map 되어 있다는 flag 를 clear
 		for (i = 1; i < (1 << order); i++) {
 			if (compound)
 				bad += free_tail_pages_check(page, page + i);
@@ -1059,27 +1099,44 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	}
 	if (PageMappingFlags(page))
 		page->mapping = NULL;
-	if (memcg_kmem_enabled() && PageKmemcg(page))
+	    // anonymous page 이거나 movable page 라면.. 
+        // mapping 이 가리키고 있던 anon_vma clear 및 flag clear
+    if (memcg_kmem_enabled() && PageKmemcg(page))
 		memcg_kmem_uncharge(page, order);
 	if (check_free)
 		bad += free_pages_check(page);
+        // 현재 struct page 에 대해 bad page 여부 검사
 	if (bad)
 		return false;
 
 	page_cpupid_reset_last(page);
 	page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 	reset_page_owner(page, order);
-
+    // CONFIG_PAGE_EXTENSION 이 설정되어 있는 경우
+    // struct page 에 해당하는 struct page_ext 의 flag 에서 
+    // PAGE_EXT_OWNER bit 제거
+ 
 	if (!PageHighMem(page)) {
+        // page 가 속해 있던 zone 이 HIGHMEM 인 경우...
 		debug_check_no_locks_freed(page_address(page),
 					   PAGE_SIZE << order);
 		debug_check_no_obj_freed(page_address(page),
 					   PAGE_SIZE << order);
 	}
 	arch_free_page(page, order);
+    // arch 별 free page mechanism 수행 
+    // v4.11 까지는 s390, powerpc 만..
 	kernel_poison_pages(page, 1 << order, 0);
+    // CONFIG_PAGE_POISONING 설정 시, page poisoning 을 위해 
+    // 아래 작업 수행
+    //  - struct page 에 해당하는 struct page_ext 의 
+    //    PAGE_EXT_DEBUG_POISON bit 를 설정해주고
+    //  - CONFIG_PAGE_POISONING_ZERO 가 설정되있다면 00 으로 채우고, 
+    //    설정되어 있지 않다면 aa 으로 채움
 	kernel_map_pages(page, 1 << order, 0);
+    // CONFIG_DEBUG_PAGEALLOC 설정 시 수행.. pass
 	kasan_free_pages(page, order);
+    // CONFIG_KASAN 설정 시 수행.. pass
 
 	return true;
 }
@@ -1117,6 +1174,8 @@ static bool bulkfree_pcp_prepare(struct page *page)
  * And clear the zone's pages_scanned counter, to hold off the "all pages are
  * pinned" detection logic.
  */
+// per-CPU cache 인 pcp 에서 count 만큼의 page 를 migratetype 별로 
+// RR 방식으로 buddy 에게 돌려줌
 static void free_pcppages_bulk(struct zone *zone, int count,
 					struct per_cpu_pages *pcp)
 {
@@ -1127,11 +1186,16 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 	spin_lock(&zone->lock);
 	isolated_pageblocks = has_isolate_pageblock(zone);
+    // zone 에 isolate 된 page block 있는지 여부
 	nr_scanned = node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED);
+    // vm_stat 에서 최근 page reclaim 된 후, scan 된 page 의 수를 알아옴 
 	if (nr_scanned)
 		__mod_node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED, -nr_scanned);
-
+        // scan 된 page 있을 경우.. counter 값을 다시 빼줌.
 	while (count) {
+        // batch 수의 page 를 per-CPU cache 에서 buddy 로 옮기는데 
+        // MIGRATE_PCPTYPES 까지의  수 즉 per-CPU 에서 관리되는 migratetype 만큼 
+        // round-robin 방식으로 buddy 에게 돌려줌
 		struct page *page;
 		struct list_head *list;
 
@@ -1145,8 +1209,12 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 		do {
 			batch_free++;
 			if (++migratetype == MIGRATE_PCPTYPES)
-				migratetype = 0;
+				migratetype = 0;                
 			list = &pcp->lists[migratetype];
+            // migratetype 에 해당되는 per-CPU cache 를 순회 
+            // MIGRATE_MOVABLE 부터 per-CPU cache 가져오고 비어있지 않다면 buddy 로 옮김 
+            //              MIGRATE_MOVABLE -> MIGRATE_RECLAIMABLE -> MIGRATE_PCPTYPES=>MIGRATE_UNMOVABLE
+            // migratetype         1                  2                      3=>0
 		} while (list_empty(list));
 
 		/* This is the only non-empty list. Free them all. */
@@ -1157,22 +1225,42 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 			int mt;	/* migratetype of the to-be-freed page */
 
 			page = list_last_entry(list, struct page, lru);
+            // per-CPU list 에서 cold page 를 가져와
 			/* must delete as __free_one_page list manipulates */
 			list_del(&page->lru);
-
+            // list 에서 제거
 			mt = get_pcppage_migratetype(page);
+            // 제거할 page 의 migratetype
 			/* MIGRATE_ISOLATE page should not go to pcplists */
 			VM_BUG_ON_PAGE(is_migrate_isolate(mt), page);
 			/* Pageblock could have been isolated meanwhile */
 			if (unlikely(isolated_pageblocks))
 				mt = get_pageblock_migratetype(page);
+                // isolated_pageblocks 설정 시, page 가 속한 page block 의 
+                // migrate type 을 받아옴
 
 			if (bulkfree_pcp_prepare(page))
 				continue;
+                // CONFIG_DEBUG_VM 설정 시, free 해줄 page 에 대해 
+                // bad page 검사 수행
 
 			__free_one_page(page, page_to_pfn(page), zone, 0, mt);
+            // mt 의 migratetype 인 order-0 짜리 page 를 buddy 로 돌려줌 
 			trace_mm_page_pcpu_drain(page, 0, mt);
 		} while (--count && --batch_free && !list_empty(list));
+        // free 해주어야 할 page 가 남아있고, list 가 비어있지 않으며 
+        // batch_free 에 따라 이 list에서 계속 free 할지 결정. 
+        //  - batch_free : 앞의 list 가 비어있어서 넘아갔다면 현재의 list 가 
+        //    비지 않았을 시, 앞의 list 에서 free 해줄 몫까지 free 해줌 
+        //  => batch 가 9 개이고, migratetype 이 각각 아래와 같이 free per-CPU page 
+        //     있다고 할 시...
+        // MIGRATE_UNMOVABLE    : 3 개
+        // MIGRATE_MOVABLE      : 6 개 
+        // MIGRATE_RECLAIMABLE  : 0 개
+        //
+        // MIGRATE_UNMOVABLE      | 2  3 | 5    | X   
+        // MIGRATE_MOVABLE      1 | 4    | 6  7 | 8  9
+        // MIGRATE_RECLAIMABLE  X | X    | X    | X
 	}
 	spin_unlock(&zone->lock);
 }
@@ -2708,6 +2796,8 @@ void mark_free_pages(struct zone *zone)
  * Free a 0-order page
  * cold == true ? free a cold page : free a hot page
  */
+// 할당되어 있던 1 개의 page 를 per-CPU cache 에 돌려줌 
+// per-CPU 의 page 가 high 제한을 넘으면 buddy 에게 batch 만큼 돌려줌
 void free_hot_cold_page(struct page *page, bool cold)
 {
 	struct zone *zone = page_zone(page);
@@ -2718,9 +2808,12 @@ void free_hot_cold_page(struct page *page, bool cold)
 
 	if (!free_pcp_prepare(page))
 		return;
-
+    // page free 수행 전 page 에 대해 bad page 여부 검사
 	migratetype = get_pfnblock_migratetype(page, pfn);
+    // page 가 속한 page block 의 migrate type 을 가져옴
 	set_pcppage_migratetype(page, migratetype);
+    // struct page 의 index 에 page 가 속해있던 page block 의 
+    // migratetype 을 설정
 	local_irq_save(flags);
 	__count_vm_event(PGFREE);
 
@@ -2732,23 +2825,33 @@ void free_hot_cold_page(struct page *page, bool cold)
 	 * excessively into the page allocator
 	 */
 	if (migratetype >= MIGRATE_PCPTYPES) {
+        // per-CPU cache 에서 관리되는 migratetype 의 범위를 벗어난다면 
 		if (unlikely(is_migrate_isolate(migratetype))) {
+            // MIGRATE_ISOLATE 라면 buddy 로 들어가게됨 
 			free_one_page(zone, page, pfn, 0, migratetype);
 			goto out;
 		}
+        // CONFIG_CMA 라면 MIGRATE_MOVABLE 이라고 재설정
 		migratetype = MIGRATE_MOVABLE;
 	}
 
 	pcp = &this_cpu_ptr(zone->pageset)->pcp;
+    // per-CPU cache struct 인 struct per_cpu_pages 를 가져와서
 	if (!cold)
 		list_add(&page->lru, &pcp->lists[migratetype]);
+        // hot free 일 경우, list 의 앞에 추가해 주고
 	else
 		list_add_tail(&page->lru, &pcp->lists[migratetype]);
+        // cold free 일 경우, list 의 뒤에 추가해 줌 
 	pcp->count++;
+    // 현재 per-CPU 가 가진 free page 수 증가
 	if (pcp->count >= pcp->high) {
+        // free page limit 보다 높게 된다면..
 		unsigned long batch = READ_ONCE(pcp->batch);
+        // batch 값만큼의 page 를 buddy 에게 돌려줌
 		free_pcppages_bulk(zone, batch, pcp);
 		pcp->count -= batch;
+        // free page 수 감소
 	}
 
 out:
@@ -4421,13 +4524,21 @@ unsigned long get_zeroed_page(gfp_t gfp_mask)
 }
 EXPORT_SYMBOL(get_zeroed_page);
 
+// order 크기의 struct page 를 할당해제하여 
+// buddy 또는 per-CPU cache 에 돌려줌
 void __free_pages(struct page *page, unsigned int order)
 {
 	if (put_page_testzero(page)) {
+    // free 해주려는 page 의 reference count 가 0 인지 검사. 
+    // _refcount 를 1 감소한 값이 0이라면 true
+    // (현재 page struct 에 대한 사용자가 없는지 검사)
 		if (order == 0)
 			free_hot_cold_page(page, false);
+        // page 가 1개라면 per-CPU cache 에 page 돌려주며 
+        // 다시 쓰일 가능성 높은 hot 으로 돌려줌
 		else
 			__free_pages_ok(page, order);
+        // page 가 2개 이상이라면 buddy 에게 page 돌려줌
 	}
 }
 

@@ -55,7 +55,8 @@ struct page {
     // ==> 지금은 PG_tail 안씀 PG_head 이 flag 에 설정되어 있다면 head page 
     //     tail page 는 compound_head 라는 filed 에 head page 의 주소가 담겨 
     //     있다면 tail page 인거임
-    //
+    //  - compound page 가 pte 와 pmd 에 모두 map 되어 있는상태라면 
+    //    첫번째 tail page 의 flag 에 PG_double_map 이 설정되어 있음
     union {
 		struct address_space *mapping;	/* If low bit clear, points to
 						 * inode address_space, or NULL.

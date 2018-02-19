@@ -32,7 +32,10 @@ enum page_ext_flags {
     // poisoned flag 가 있을 경우, poisoned pattern 을 검사하여 할당하려는 
     // page 에 무언가 다른 write 가 써진게 있는지 확인 가능.
 	PAGE_EXT_DEBUG_GUARD,
+    // guard page 인지에 대한 정보.
+    // 최대 가능한 guard page는 MAX_ORDER/2
 	PAGE_EXT_OWNER,
+    // page owner 정보 가지고 있나?
 #if defined(CONFIG_IDLE_PAGE_TRACKING) && !defined(CONFIG_64BIT)
 	PAGE_EXT_YOUNG,
 	PAGE_EXT_IDLE,

@@ -145,10 +145,24 @@ struct alloc_context {
  *
  * Assumption: *_mem_map is contiguous at least up to MAX_ORDER
  */
+// page_pfn 에 대한 order 단위 buddy page frame 을 구하는 함수. 
+// XOR 연산을 활용하여 buddy 구함
+//  - 나머지 bit 그대로 두고 order 크기의 bit 가 설정되어 있다면 
+//    꺼주고 설정되어 있지 않다면 켜줌으로써 buddy 를 구함 
+//    e.g. 
+//         order 1 0000 0001 에 대해 on/off 
+//         pfn 0  ... 0000 0000 -> buddy_pfn 1  ... 0000 0001
+//         pfn 1  ... 0000 0001 -> buddy_pfn 0  ... 0000 0000
+//
+//         order 3 0000 1000 에 대해 on/off
+//         pfn 16 ... 0001 0000 -> buddy_pfn 24 ... 0001 1000
+//         pfn 24 ... 0001 1000 -> buddy_pfn 16 ... 0001 0000
+//
 static inline unsigned long
 __find_buddy_pfn(unsigned long page_pfn, unsigned int order)
 {
 	return page_pfn ^ (1 << order);
+    // order 위치의 bit 를 set/unset 하여 buddy pfn 구함
 }
 
 extern struct page *__pageblock_pfn_to_page(unsigned long start_pfn,

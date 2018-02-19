@@ -354,7 +354,8 @@ struct per_cpu_pages {
 	int count;		/* number of pages in the list */ 
     // list 의 page 수
 	int high;		/* high watermark, emptying needed */
-    // count 가 넘으면 안되는 값 즉 count < high 이어야 함
+    // count 가 넘으면 안되는 값 즉 count < high 이어야 함 
+    // high 를 넘게될 경우, batch 만큼 buddy 에게 다시 돌려줌
 	int batch;		/* chunk size for buddy add/remove */
     // list 가 비게 될 때, buddy 로부터 한번에 받아올 page pool 내의 
     // page 개수
@@ -574,7 +575,7 @@ struct zone {
 	 * of pageblock. Protected by zone->lock.
 	 */
 	unsigned long		nr_isolate_pageblock; 
-    // isolated page 가뭐지 hugepage 만들기 전에 isolate 시키던데..?
+    // zone 에 isolate 된 page 가 존재하는지
 #endif
 
 #ifdef CONFIG_MEMORY_HOTPLUG

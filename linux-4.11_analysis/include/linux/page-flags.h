@@ -145,7 +145,7 @@ enum pageflags {
 
 	/* Compound pages. Stored in first tail page's flags */
 	PG_double_map = PG_private_2,
-
+    // page 가 compound page 라서 pte 와 pmd 에 모두 map 되어 있음 
 	/* non-lru isolated movable page */
 	PG_isolated = PG_reclaim,
     // page reclaim 또는 compactino 을 위해 isolate 되었는지 확인
@@ -175,7 +175,7 @@ static __always_inline int PageTail(struct page *page)
     // head page 에 대한 주소가 있는 compound_head 필드의 
     // 0 bit 가 설정되어 있다면 tail page
 }
-// compound page 인지 여부 검사
+// compound page 인지 여부 검사 
 static __always_inline int PageCompound(struct page *page)
 {
     // compound page 일 경우인지 검사. 
@@ -419,6 +419,7 @@ PAGEFLAG(Idle, idle, PF_ANY)
     
 #define PAGE_MAPPING_FLAGS	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE)
 
+// anonymous 이거나 movable page 인지 검사    
 static __always_inline int PageMappingFlags(struct page *page)
 {
 	return ((unsigned long)page->mapping & PAGE_MAPPING_FLAGS) != 0;

@@ -1933,8 +1933,10 @@ void __kernel_map_pages(struct page *page, int numpages, int enable)
 	 */
 	if (enable)
 		__set_pages_p(page, numpages);
+        // page 할당 시
 	else
 		__set_pages_np(page, numpages);
+       // page 할당 해제시.
 
 	/*
 	 * We should perform an IPI and flush all tlbs,
