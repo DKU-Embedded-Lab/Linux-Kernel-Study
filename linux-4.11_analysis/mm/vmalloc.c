@@ -324,8 +324,10 @@ static struct rb_root vmap_area_root = RB_ROOT;
 
 /* The vmap cache globals are protected by vmap_area_lock */
 static struct rb_node *free_vmap_cache;
+// 최근 free 된 vmap_area 의 cache
 static unsigned long cached_hole_size;
 static unsigned long cached_vstart;
+// 최근 할당된 vmap_area 의 시작 주소
 static unsigned long cached_align;
 
 static unsigned long vmap_area_pcpu_hole;
@@ -389,6 +391,7 @@ static BLOCKING_NOTIFIER_HEAD(vmap_notify_list);
  * Allocate a region of KVA of the specified size and alignment, within the
  * vstart and vend.
  */
+// vmalloc 영역 할당을 위한 위치를 vmap_area rbtree 에서 찾고, 추가해줌
 static struct vmap_area *alloc_vmap_area(unsigned long size,
 				unsigned long align,
 				unsigned long vstart, unsigned long vend,
@@ -438,8 +441,9 @@ nocache:
 	}
 	/* record if we encounter less permissive parameters */
 	cached_vstart = vstart;
+    // 현재 할당하려는 주소를 cache
 	cached_align = align;
-
+    // 현재 할당하려는 node 를 cache
 	/* find starting point for our search */
 	if (free_vmap_cache) {
 		first = rb_entry(free_vmap_cache, struct vmap_area, rb_node);
@@ -1190,6 +1194,8 @@ void *vm_map_ram(struct page **pages, unsigned int count, int node, pgprot_t pro
 EXPORT_SYMBOL(vm_map_ram);
 
 static struct vm_struct *vmlist __initdata;
+// vmalloc 영영역역에 해당하는 vm_struct 들의 list
+//
 /**
  * vm_area_add_early - add vmap area early during boot
  * @vm: vm_struct to add
@@ -1337,6 +1343,7 @@ void unmap_kernel_range(unsigned long addr, unsigned long size)
 }
 EXPORT_SYMBOL_GPL(unmap_kernel_range);
 
+// 할당한 비연속적인 page 들을 위한 page table 구성
 int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page **pages)
 {
 	unsigned long addr = (unsigned long)area->addr;
@@ -1372,7 +1379,8 @@ static void clear_vm_uninitialized_flag(struct vm_struct *vm)
 	smp_wmb();
 	vm->flags &= ~VM_UNINITIALIZED;
 }
-
+// vmalloc 시, kernel address space 를 위한 vm_struct 생성 
+//  - start : VMALLOC_START, end : VMALLOC_END
 static struct vm_struct *__get_vm_area_node(unsigned long size,
 		unsigned long align, unsigned long flags, unsigned long start,
 		unsigned long end, int node, gfp_t gfp_mask, const void *caller)
@@ -1392,16 +1400,17 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	area = kzalloc_node(sizeof(*area), gfp_mask & GFP_RECLAIM_MASK, node);
 	if (unlikely(!area))
 		return NULL;
-
+    // vm_struct 구조체 할당 
+    //
 	if (!(flags & VM_NO_GUARD))
 		size += PAGE_SIZE;
-
+    // VM_NO_GUARD 가 따로 설정되어 있지 않다면 
 	va = alloc_vmap_area(size, align, start, end, node, gfp_mask);
 	if (IS_ERR(va)) {
 		kfree(area);
 		return NULL;
 	}
-
+    // 요청된 size 에 맞는 kernel vma 의 위치를 찾아 rbtree, list 에 추가
 	setup_vmalloc_vm(area, va, flags, caller);
 
 	return area;
@@ -1432,6 +1441,7 @@ struct vm_struct *__get_vm_area_caller(unsigned long size, unsigned long flags,
  *	and reserved it for out purposes.  Returns the area descriptor
  *	on success or %NULL on failure.
  */
+// 
 struct vm_struct *get_vm_area(unsigned long size, unsigned long flags)
 {
 	return __get_vm_area_node(size, 1, flags, VMALLOC_START, VMALLOC_END,
@@ -1581,6 +1591,7 @@ void vfree_atomic(const void *addr)
  *
  *	NOTE: assumes that the object at *addr has a size >= sizeof(llist_node)
  */
+// vmalloc 에 대한 free 함수
 void vfree(const void *addr)
 {
 	BUG_ON(in_nmi());
@@ -1593,6 +1604,8 @@ void vfree(const void *addr)
 		__vfree_deferred(addr);
 	else
 		__vunmap(addr, 1);
+    // deallocate_pages 가 설정되어 있으므로 
+    // buddy 에게 물리 memory 반환 함
 }
 EXPORT_SYMBOL(vfree);
 
@@ -1605,12 +1618,15 @@ EXPORT_SYMBOL(vfree);
  *
  *	Must not be called in interrupt context.
  */
+// vmap, ioremap 함수에 대한 free 함수
 void vunmap(const void *addr)
 {
 	BUG_ON(in_interrupt());
 	might_sleep();
 	if (addr)
 		__vunmap(addr, 0);
+    // deallocate_pages 가 설정되어 있으므로 
+    // buddy 에게 물리 memory 반환 안함
 }
 EXPORT_SYMBOL(vunmap);
 
@@ -1730,6 +1746,7 @@ fail_no_warn:
  *	allocator with @gfp_mask flags.  Map them into contiguous
  *	kernel virtual space, using a pagetable protection of @prot.
  */
+// vmalloc 영역 할당 함수
 void *__vmalloc_node_range(unsigned long size, unsigned long align,
 			unsigned long start, unsigned long end, gfp_t gfp_mask,
 			pgprot_t prot, unsigned long vm_flags, int node,
@@ -1745,10 +1762,15 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 
 	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNINITIALIZED |
 				vm_flags, start, end, node, gfp_mask, caller);
+    // 할당하려는 vmalloc 영역의 virtual address space 내의 빈 공간 먼저 찾고 
+    // rbtree 등에 삽입
 	if (!area)
 		goto fail;
 
 	addr = __vmalloc_area_node(area, gfp_mask, prot, node);
+    // vmap_area 등을 통해 그전에 관리구조 만들었으니 해당 vmalloc 영역에 실제 
+    // 물리 page 할당하여 area 에 연결해줌. 
+    // single chunk 로 할당 받는 것이 아니라, order-0 의 page 들을 할당
 	if (!addr)
 		return NULL;
 
@@ -1802,6 +1824,7 @@ void *__vmalloc(unsigned long size, gfp_t gfp_mask, pgprot_t prot)
 }
 EXPORT_SYMBOL(__vmalloc);
 
+// vmalloc 영역 할당 함수
 static inline void *__vmalloc_node_flags(unsigned long size,
 					int node, gfp_t flags)
 {
@@ -1818,6 +1841,14 @@ static inline void *__vmalloc_node_flags(unsigned long size,
  *	For tight control over page level allocator and protection flags
  *	use __vmalloc() instead.
  */
+// kernel address space 에서 virtual memory 에서는 연속적이어야 하지만 
+// 물리 memory 에서는 연속적일 필요가 없는 memory 에 대한 할당 수행
+//  - size : byte 단위 
+//  - device driver 에서 많이 사용
+//  - ZONE_HIGHMEM or ZONE_NORMAL 에서 page 할당
+//  - kernel addr space 에서 direct mapped 영역 뒤에 hole 뒤에 옴
+//  - 각 생성되는 vmalloc 영역사이에 1 page 크기의 guard page 가 삽입
+
 void *vmalloc(unsigned long size)
 {
 	return __vmalloc_node_flags(size, NUMA_NO_NODE,

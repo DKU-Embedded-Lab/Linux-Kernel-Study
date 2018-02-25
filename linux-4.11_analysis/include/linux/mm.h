@@ -619,13 +619,17 @@ typedef void compound_page_dtor(struct page *);
 
 /* Keep the enum in sync with compound_page_dtors array in mm/page_alloc.c */
 enum compound_dtor_id {
-	NULL_COMPOUND_DTOR, // NULL
-	COMPOUND_PAGE_DTOR, // free_compound_page 
+	NULL_COMPOUND_DTOR, 
+    // NULL
+	COMPOUND_PAGE_DTOR, 
+    // free_compound_page 의 base page 전환 함수
 #ifdef CONFIG_HUGETLB_PAGE
-	HUGETLB_PAGE_DTOR, // free_huge_page 
+	HUGETLB_PAGE_DTOR, 
+    // free_huge_page 의 base page 전환 함수
 #endif
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	TRANSHUGE_PAGE_DTOR, // free_transhuge_page
+	TRANSHUGE_PAGE_DTOR, 
+    // free_transhuge_page 의 base page 전환 함수
 #endif
 	NR_COMPOUND_DTORS,
 };

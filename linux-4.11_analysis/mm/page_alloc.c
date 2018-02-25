@@ -823,7 +823,9 @@ static inline int page_is_buddy(struct page *page, struct page *buddy,
  *
  * -- nyc
  */
-// buddy allocator 의 core free function
+// buddy allocator 의 core free function 
+// migratetype 의 buddy free list 로 반환하며 freebuddy page 가 있다면 
+// 상위 order 와 merging 해주어 반환 수행
 static inline void __free_one_page(struct page *page,
 		unsigned long pfn,
 		struct zone *zone, unsigned int order,
@@ -1060,8 +1062,9 @@ out:
 	clear_compound_head(page);
 	return ret;
 }
-// 
-// CONFIG_DEBUG_VM 의 설정 여부에 따라 check_free 에 true or false 설정
+
+// CONFIG_DEBUG_VM 의 설정 여부에 따라 check_free 에 true or false 설정 
+// 및 bad page 검사 수행
 static __always_inline bool free_pages_prepare(struct page *page,
 					unsigned int order, bool check_free)
 {
@@ -1275,12 +1278,17 @@ static void free_one_page(struct zone *zone,
 	nr_scanned = node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED);
 	if (nr_scanned)
 		__mod_node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED, -nr_scanned);
+        // page reclaim 될 것이므로 counter 값 감소
 
 	if (unlikely(has_isolate_pageblock(zone) ||
 		is_migrate_isolate(migratetype))) {
+        // zone 에 isolated 된 page block 이 있거나 현재 migratetype 이 
+        // MIGRATE_ISOLATE 라면
 		migratetype = get_pfnblock_migratetype(page, pfn);
+        // migrate type 재설정
 	}
 	__free_one_page(page, pfn, zone, order, migratetype);
+    // migratetype 의 buddy free list 로 page 반환
 	spin_unlock(&zone->lock);
 }
 
@@ -1365,11 +1373,13 @@ static void __free_pages_ok(struct page *page, unsigned int order)
 
 	if (!free_pages_prepare(page, order, true))
 		return;
-
+    // 할당 해제할 page 에 대해 bad page 검사 수행 
 	migratetype = get_pfnblock_migratetype(page, pfn);
+    // page block 의 migratetype 을 가져옴
 	local_irq_save(flags);
 	__count_vm_events(PGFREE, 1 << order);
 	free_one_page(page_zone(page), page, pfn, order, migratetype);
+    // page block 의 migrate type 에 대한 buddy free list 로 page 를 반환
 	local_irq_restore(flags);
 }
 
@@ -3895,6 +3905,14 @@ static void wake_all_kswapds(unsigned int order, const struct alloc_context *ac)
 	}
 }
 
+// gfp flag 를 통해 설정할 수 있는 allocation flag 를 설정하여 반환
+//  * gfp flag 에 __GFP_ATOMIC 등이 설정 되거나, real time task 이거나, 
+//    interrupt context 인 경우, page 할당 더 잘되도록
+//    -> ALLOC_HARDER 추가
+//  * gfp flag 에 ___GFP_MOVABLE 설정된 경우, CMA 에서도 page 받을 수 있도록
+//    -> ALLOC_CMA 추가
+//  ...
+//
 static inline unsigned int
 gfp_to_alloc_flags(gfp_t gfp_mask)
 {
@@ -4090,6 +4108,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	int no_progress_loops;
 	unsigned long alloc_start = jiffies;
 	unsigned int stall_timeout = 10 * HZ;
+    // page 할당에 10s 이상 걸리는 경우 경고를 내기 위한 변수
 	unsigned int cpuset_mems_cookie;
 
 	/*
@@ -4121,18 +4140,21 @@ retry_cpuset:
 	compaction_retries = 0;
 	no_progress_loops = 0;
 	compact_priority = DEF_COMPACT_PRIORITY;
-    // page allocation 에서의 compaction 을 통한 free page 확보 level 설정.
-    // (즉 빡시게 엄청 많이 확보해놓을지 적당히 확보해 놓을지..)
+    // page allocation 에서의 compaction 을 통한 free page 확보 level 을 default 로 설정.
+    // (compact_priority : 빡시게 엄청 많이 확보해놓을지 적당히 확보해 놓을지..)
 	cpuset_mems_cookie = read_mems_allowed_begin();
     // mems_allowed 관련 seqcount 를 읽어 놓고, 
     // 추후 그사이 변경되었는지 다시 읽어서 확인 
+    // seqcount 는 reader 는 증가시키지 않고, writer 는 증가시키므로 
+    // 추 후 다시 검사 시, seqcount 가 증가하였다면 mems_allowed 가 변경된 것임
 	/*
 	 * The fast path uses conservative alloc_flags to succeed only until
 	 * kswapd needs to be woken up, and to avoid the cost of setting up
 	 * alloc_flags precisely. So we do that now.
 	 */
 	alloc_flags = gfp_to_alloc_flags(gfp_mask);
-    // gfp flag 값을 통해 어떻게 page 를 할당 할 것인지 설정 
+    // gfp flag 값을 통해 어떻게 page 를 할당할 allocation flag 설정.
+    //  - page 할당 급한 경우 ALLOC_HARDER 추가, MOVABLE 인 경우 CMA 추가 등 수행
 	/*
 	 * We need to recalculate the starting point for the zonelist iterator
 	 * because we might have used different nodemask in the fast path, or
@@ -4179,7 +4201,7 @@ retry_cpuset:
 						alloc_flags, ac,
 						INIT_COMPACT_PRIORITY,
 						&compact_result);
-        // page compaction 후 page 할당 수행
+        // direct page compaction 후 page 할당 수행
 		if (page)
 			goto got_pg;
             // 할당 성공하면 out

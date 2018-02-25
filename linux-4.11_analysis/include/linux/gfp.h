@@ -18,7 +18,9 @@ struct vm_area_struct;
 #define ___GFP_DMA		0x01u 
 // ZONE_DMA 영역에 할당 요청함
 #define ___GFP_HIGHMEM		0x02u 
-// ZONE_HIGHMEM 영역에 할당 요청함
+// ZONE_HIGHMEM 영역에 할당 요청함 
+// vmalloc 할당 시, low mem 을 아끼기 위해 kernel memory 를 
+// HIGHMEM 에 할당해 주기도 함
 #define ___GFP_DMA32		0x04u 
 // ZONE_DMA32 영역에 할당 요청함
 #define ___GFP_MOVABLE		0x08u 

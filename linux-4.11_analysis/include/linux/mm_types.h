@@ -85,7 +85,8 @@ struct page {
         // 첫번재 tail page 의 compound_mapcount 변수에 pte 에 map된 횟수가
         // 저장된다.
         // 즉 두번째 page 에 기록됨
-        //
+        //  - compound page 가 할당되면 첫번째 tail page 의 compound_mapcount 가
+        //    -1 로 초기화 된다.
         // compound page 와 일반적인 high order 할당의 차이점은 
         // TLB 성능을 높이기 위해 pte 단위가 아닌 pmd 단위로 할당한다는 것
 
@@ -367,6 +368,9 @@ struct vm_userfaultfd_ctx {};
  * space that has a special rule for the page-fault handlers (ie a shared
  * library, the executable area etc).
  */
+// 전체 virtual address space 중 user space  process 의 virtual address spcae 를 
+// 관리하기 위한 structure 
+// (kernel address space 는 struct vm_struct 로 관리)
 struct vm_area_struct {
 	/* The first cache line has the info for VMA tree walking. */
 

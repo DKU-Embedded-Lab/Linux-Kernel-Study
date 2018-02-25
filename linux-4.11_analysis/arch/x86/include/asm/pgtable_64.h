@@ -23,7 +23,7 @@ extern pte_t level1_fixmap_pgt[512];
 extern pgd_t init_level4_pgt[];
 
 #define swapper_pg_dir init_level4_pgt
-
+// master kernel page table
 extern void paging_init(void);
 
 #define pte_ERROR(e)					\
