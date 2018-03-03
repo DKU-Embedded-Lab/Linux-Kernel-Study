@@ -1369,7 +1369,9 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
  * mode:	one of the LRU isolation modes defined above
  *
  * returns 0 on success, -ve errno on failure.
- */
+ */ 
+// 
+// lru 플래그 있는 struct page 에 대해 isolate 수행
 int __isolate_lru_page(struct page *page, isolate_mode_t mode)
 {
 	int ret = -EINVAL;
@@ -1377,11 +1379,13 @@ int __isolate_lru_page(struct page *page, isolate_mode_t mode)
 	/* Only take pages on the LRU. */
 	if (!PageLRU(page))
 		return ret;
-
+        // lru page 가 아니면 isolate 실패
 	/* Compaction should not handle unevictable pages but CMA can do so */
 	if (PageUnevictable(page) && !(mode & ISOLATE_UNEVICTABLE))
 		return ret;
-
+        // 현재 struct page 가 UNEVITABLE page(PG_unevictable 설정) 이지만 
+        // 현재 compact mode 가 unevictable page 에 대해선 compaction 하지 않는 
+        // mode 이면 isolate 실패
 	ret = -EBUSY;
 
 	/*
@@ -1393,34 +1397,48 @@ int __isolate_lru_page(struct page *page, isolate_mode_t mode)
 	 * that it is possible to migrate without blocking
 	 */
 	if (mode & ISOLATE_ASYNC_MIGRATE) {
+        // asynchronous compaction 수행이라면 blocking 이 되면 안되는 경우임
+        //
 		/* All the caller can do on PageWriteback is block */
 		if (PageWriteback(page))
 			return ret;
-
+        // page 가 writeback 되는 중일 경우, 물리적 위치가 
+        // 변경되면 안되므로 isolate 중단
 		if (PageDirty(page)) {
+            // write back 되어야 하는 dirty page 일 경우 
 			struct address_space *mapping;
 
 			/*
 			 * Only pages without mappings or that have a
 			 * ->migratepage callback are possible to migrate
 			 * without blocking
-			 */
+			 */ 
+
+            // migratepage 연산이 있는 경우에만 blocking 없이 
+            // migration 이 가능하므로 isolate 수행 
 			mapping = page_mapping(page);
 			if (mapping && !mapping->a_ops->migratepage)
 				return ret;
+                // migratepage 연산이 없다면 isolate 실패
 		}
 	}
 
 	if ((mode & ISOLATE_UNMAPPED) && page_mapped(page))
-		return ret;
+		return ret; 
+        // ISOLATE_UNMAPPED 이어서 pte 에 map 되지 않은 page 를
+        // migration 해주어야 하는데 page 가 map 되어 있는 상황일 경우
+        // isolation 종료
 
 	if (likely(get_page_unless_zero(page))) {
+        // reference count 가 0 이 아닐 경우 get_page 하여 
+        // refcount 증가하고 page 가져옴
 		/*
 		 * Be careful not to clear PageLRU until after we're
 		 * sure the page is not being freed elsewhere -- the
 		 * page release code relies on it.
 		 */
 		ClearPageLRU(page);
+        // PG_lru 플래그 삭제
 		ret = 0;
 	}
 

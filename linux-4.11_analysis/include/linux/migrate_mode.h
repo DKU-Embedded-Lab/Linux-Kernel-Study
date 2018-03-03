@@ -10,7 +10,7 @@
 enum migrate_mode {
 	MIGRATE_ASYNC, // kcompactd 에 의한 compaction 
 	MIGRATE_SYNC_LIGHT, // page alloc 에 의한 compaction
-	MIGRATE_SYNC,
+	MIGRATE_SYNC,// sysfs 에 의한compaction
 };
 
 #endif		/* MIGRATE_MODE_H_INCLUDED */

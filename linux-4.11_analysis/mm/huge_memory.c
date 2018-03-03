@@ -2181,6 +2181,7 @@ static void freeze_page(struct page *page)
 		ttu_flags |= TTU_MIGRATION;
 
 	ret = try_to_unmap(page, ttu_flags);
+    // page 에 대한 page table 의 mapping 을 모두 제거
 	VM_BUG_ON_PAGE(ret, page);
 }
 
@@ -2314,7 +2315,11 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 		put_page(subpage);
 	}
 }
-
+// compound page 를 고려하여 struct page 의 mapcount 를 읽어들임 
+//  - compound 아니라면 그냥 그 page 의 _mapcount 반환
+//  - hugetlbfs 라면 쪼개질 일 없으므로 compound page 의 compound_mapcount 반환 
+//  - filebacked compound 의 경우, 512 개마다 compound_mapcount 정보 있으므로 빼줌
+//  - anonymous THP or compound 의 경우, doubpe map 이면 512 빼줌
 int total_mapcount(struct page *page)
 {
 	int i, compound, ret;
@@ -2323,18 +2328,28 @@ int total_mapcount(struct page *page)
 
 	if (likely(!PageCompound(page)))
 		return atomic_read(&page->_mapcount) + 1;
+        // compound page 가 아니라면 그냥 
+        // _mapcount 를 읽어들임
 
 	compound = compound_mapcount(page);
+    // compound huge page 의 mapcount 를 읽어들임
 	if (PageHuge(page))
+        // hugetlbfs 라면
 		return compound;
+        // compound page 의 mapcount 그냥 반환
 	ret = compound;
 	for (i = 0; i < HPAGE_PMD_NR; i++)
 		ret += atomic_read(&page[i]._mapcount) + 1;
 	/* File pages has compound_mapcount included in _mapcount */
 	if (!PageAnon(page))
 		return ret - compound * HPAGE_PMD_NR;
+        // file-backed page 일 경우, THP 의 mapcount 정보가 base page 단위 
+        // _mapcount 에 포함되어 있으므로 빼줌
 	if (PageDoubleMap(page))
 		ret -= HPAGE_PMD_NR;
+        // anonymous page 인데 pte, pmd 모두 map 되어 있을 경우, 
+        // HPAGE_PMD_NR 을 빼줌. 즉 512 를 빼줌 
+        // FIXME - double map 에 대한 이해 필요
 	return ret;
 }
 
@@ -2414,10 +2429,13 @@ int page_trans_huge_mapcount(struct page *page, int *total_mapcount)
  * Returns 0 if the hugepage is split successfully.
  * Returns -EBUSY if the page is pinned or if anon_vma disappeared from under
  * us.
- */
+ */ 
+// struct page 가 속한 THP 를 split 하여 struct list_head 의 상황에 따라 
+// null 이라면 LRU list 에 넣고, null 이 아니라면struct list_head 에 넣음
 int split_huge_page_to_list(struct page *page, struct list_head *list)
 {
 	struct page *head = compound_head(page);
+    // tail page 일 수 있으므로 head page 의 주소를 가져옴 
 	struct pglist_data *pgdata = NODE_DATA(page_to_nid(head));
 	struct anon_vma *anon_vma = NULL;
 	struct address_space *mapping = NULL;
@@ -2431,6 +2449,7 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 	VM_BUG_ON_PAGE(!PageCompound(page), page);
 
 	if (PageAnon(head)) {
+        // anonymous page 라면  
 		/*
 		 * The caller does not necessarily hold an mmap_sem that would
 		 * prevent the anon_vma disappearing so we first we take a
@@ -2440,18 +2459,25 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 		 * operations.
 		 */
 		anon_vma = page_get_anon_vma(head);
+        // page 의 mapping 으로 부터 reverse mapping 
+        // 관리하는 anon_vma 를 가져옴
 		if (!anon_vma) {
+            // page 에 anon_vma 가 없다면 종료
 			ret = -EBUSY;
 			goto out;
 		}
 		extra_pins = 0;
 		mapping = NULL;
+        // anonymous page 이므로 address_space 는 NULL
 		anon_vma_lock_write(anon_vma);
+        // anon_vma 관리 tree 에 접근하기 위해 rwsem 잡음
 	} else {
+        // anonymous page 가 아니라면
 		mapping = head->mapping;
 
 		/* Truncated ? */
 		if (!mapping) {
+            // page 에 address_space 가 없다면 종료
 			ret = -EBUSY;
 			goto out;
 		}
@@ -2459,6 +2485,7 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 		/* Addidional pins from radix tree */
 		extra_pins = HPAGE_PMD_NR;
 		anon_vma = NULL;
+        // file-backed page 이므로 anon_vma 는 NULL
 		i_mmap_lock_read(mapping);
 	}
 
@@ -2467,11 +2494,14 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 	 * split PMDs
 	 */
 	if (total_mapcount(head) != page_count(head) - extra_pins - 1) {
+        // FIXME - THP 의 전체 mapcount - reference count  - extra_pins - 1 
+        // 이 공식이 뭐지?... 
 		ret = -EBUSY;
 		goto out_unlock;
 	}
 
-	mlocked = PageMlocked(page);
+	mlocked = PageMlocked(page); 
+    // page 가 PG_mlocked 설정 여부 검사
 	freeze_page(head);
 	VM_BUG_ON_PAGE(compound_mapcount(head), head);
 

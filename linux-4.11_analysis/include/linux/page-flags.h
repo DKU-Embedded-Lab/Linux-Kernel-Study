@@ -75,14 +75,15 @@
 enum pageflags {
 	PG_locked,		/* Page is locked. Don't touch. */
     // 해당 page 에 무언가 다른 연산지금 하면 안됨
-    // e.g. storage 에서 page frame 으로 읽어옴
+    // e.g. storage 에서 page frame 으로 읽어옴 
+    // 현재 page lock 걸려 있음
 	PG_error,
     // I/O 하는 도중 error 발생
 	PG_referenced, 
     // swapping 시 사용
 	PG_uptodate,
 	PG_dirty,
-    // write back 을 위해 사용
+    // page 가 write back 을 위해 사용
 	PG_lru,
     // 
 	PG_active, 
@@ -95,6 +96,7 @@ enum pageflags {
 	PG_private,		/* If pagecache, has fs-private data */
 	PG_private_2,		/* If pagecache, has fs aux data */
 	PG_writeback,		/* Page is under writeback */
+    // page 가 Writeback 작업이 일어나는 중인 page 임
 	PG_head,		/* A head page */ 
     // Compound page 를 구성하고 있으며 현재 
     // pagge 가 Compound page 내의 첫번 째 page 임 
@@ -103,8 +105,10 @@ enum pageflags {
     // 곧 reclaim 될 page 로 page cache 에서 주로 사용
 	PG_swapbacked,		/* Page is backed by RAM/swap */
 	PG_unevictable,		/* Page is "unevictable"  */
+    // Unevictable page
 #ifdef CONFIG_MMU
-	PG_mlocked,		/* Page is vma mlocked */
+	PG_mlocked,		/* Page is vma mlocked */ 
+    // page 가 위치고정임. 물리적 위치 움직이면 안됨
 #endif
 #ifdef CONFIG_ARCH_USES_PG_UNCACHED
 	PG_uncached,		/* Page has been mapped as uncached */
@@ -165,7 +169,9 @@ static inline struct page *compound_head(struct page *page)
     //  pointer to head page if bit zero is set.
     //
 	if (unlikely(head & 1))
+        // tail page 라면 0-bit 가 1 로 설정되어 있으므로  
 		return (struct page *) (head - 1);
+        // 0-bit 를 clear 하여 head page 로의 struct page 를 반환
 	return page;
 }
 // Compound page 의 tail page 인지 검사
@@ -223,7 +229,8 @@ static __always_inline int PageCompound(struct page *page)
 #define TESTPAGEFLAG(uname, lname, policy)				\
 static __always_inline int Page##uname(struct page *page)		\
 	{ return test_bit(PG_##lname, &policy(page, 0)->flags); }
-// PageLRU, PageIsolated 등 page flag 설정 여부 검사
+// PageLRU, PageIsolated 등의  함수 page flag 설정 여부 검사 
+// PG_lru, PG_isolated
 #define SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void SetPage##uname(struct page *page)		\
 	{ set_bit(PG_##lname, &policy(page, 1)->flags); }
@@ -441,6 +448,7 @@ static __always_inline int PageAnon(struct page *page)
 }
 
 // struct page 가 movable page 즉 user 를 위한 page 인지 검사한다. 
+// movable 일 경우 true
 static __always_inline int __PageMovable(struct page *page)
 {
 	return ((unsigned long)page->mapping & PAGE_MAPPING_FLAGS) ==
@@ -631,7 +639,9 @@ static inline int PageTransTail(struct page *page)
  * by one. This reference will go away with last compound_mapcount.
  *
  * See also __split_huge_pmd_locked() and page_remove_anon_compound_rmap().
- */
+ */ 
+// 
+// Compound page 가 pte 와 pmd 모두에 map 되어 있음
 static inline int PageDoubleMap(struct page *page)
 {
 	return PageHead(page) && test_bit(PG_double_map, &page[1].flags);

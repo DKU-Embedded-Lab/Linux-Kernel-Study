@@ -50,7 +50,6 @@ struct anon_vma {
 	struct anon_vma *root;		/* Root of this anon_vma tree */
     // 현재 process 와 관련된 process 들의 anon_vma tree 에서 
     // 최초 anon_vma  즉 최초 process 의 anon_vma 
-    // red black ?
 	struct rw_semaphore rwsem;	/* W: modification, R: walking the list */
 	/*
 	 * The refcount is taken on an anon_vma when there is no

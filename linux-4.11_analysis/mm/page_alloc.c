@@ -1479,7 +1479,9 @@ void __init __free_pages_bootmem(struct page *page, unsigned long pfn,
  * interleaving within a single pageblock. It is therefore sufficient to check
  * the first and last page of a pageblock and avoid checking each individual
  * page in a pageblock.
- */
+ */ 
+// zone 에 있는 start_pfn ~ end_pfn 범위의 page block 속하는 
+// base  page 들 중 첫번째 base page 의 struct page 를 가져옴
 struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 				     unsigned long end_pfn, struct zone *zone)
 {
@@ -1491,18 +1493,18 @@ struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 
 	if (!pfn_valid(start_pfn) || !pfn_valid(end_pfn))
 		return NULL;
-
+    // page block 의 start_pfn, end_pfn 범위 검사
 	start_page = pfn_to_page(start_pfn);
 
 	if (page_zone(start_page) != zone)
 		return NULL;
-
+    // start page 가 같은 zone 에 있는지 검사
 	end_page = pfn_to_page(end_pfn);
 
 	/* This gives a shorter code than deriving page_zone(end_page) */
 	if (page_zone_id(start_page) != page_zone_id(end_page))
 		return NULL;
-
+    // start page 와 end page 가 같은 zone 에 있는지 검사
 	return start_page;
 }
 
@@ -2904,13 +2906,18 @@ void split_page(struct page *page, unsigned int order)
 	if (kmemcheck_page_is_tracked(page))
 		split_page(virt_to_page(page[0].shadow), order);
 #endif
-
+    // 연속적 page 의 경우, 첫 page 에만 _refcount 기록되어 있으므로 
+    // 모든 page 에 reference count 값 설정
 	for (i = 1; i < (1 << order); i++)
 		set_page_refcounted(page + i);
+        // 연속된 page 들의 _refcount 모두 1 로 초기화 
 	split_page_owner(page, order);
 }
 EXPORT_SYMBOL_GPL(split_page);
 
+// 
+// buddy 에서 isolate 가능 할 경우 즉 buddy 에서 free page 빼냈을 때, 
+// free page 가 watermark 안넘을 겨우, free page 를 제거 fee page 크기 반환
 int __isolate_free_page(struct page *page, unsigned int order)
 {
 	unsigned long watermark;
@@ -2921,7 +2928,8 @@ int __isolate_free_page(struct page *page, unsigned int order)
 
 	zone = page_zone(page);
 	mt = get_pageblock_migratetype(page);
-
+    // page block 의 migrate type 을 가져옴
+    
 	if (!is_migrate_isolate(mt)) {
 		/*
 		 * Obey watermarks as if the page was being allocated. We can
@@ -2930,17 +2938,25 @@ int __isolate_free_page(struct page *page, unsigned int order)
 		 * exists.
 		 */
 		watermark = min_wmark_pages(zone) + (1UL << order);
+        // 일단 여기 free page 를 isolate 해야 하므로 free page isolate 으로 인해 
+        // freepages - (1UL<<order) < watermark ? 
+        // 이걸 그냥 아래와 같이 검사
+        // freepages < watermark + (1UL<<order) ?
+
 		if (!zone_watermark_ok(zone, 0, watermark, 0, ALLOC_CMA))
 			return 0;
-
+            // watermark 보다 freepages 가 작아 isolate 힘들 경우, 
+            // 현재 연속적 page 에 대한 isolate 종료        
 		__mod_zone_freepage_state(zone, -(1UL << order), mt);
 	}
 
 	/* Remove page from free list */
 	list_del(&page->lru);
+    // buddy 의 free list에서 제거
 	zone->free_area[order].nr_free--;
+    // buddy 의 free list 의 fee page 수 감소
 	rmv_page_order(page);
-
+    // 일단 buddy 에서 빠져나왔으니 order 정보 및 PG_buddy 지움
 	/*
 	 * Set the pageblock if the isolated page is at least half of a
 	 * pageblock
@@ -3285,7 +3301,7 @@ bool zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 		      int classzone_idx, unsigned int alloc_flags)
 {
 	return __zone_watermark_ok(z, order, mark, classzone_idx, alloc_flags,
-					zone_page_state(z, NR_FREE_PAGES));
+					zone_page_state(z, NR_FREE_PAGES));    
     // zone_page_state 함수를 통해 z 의 statistics 정보중 NR_FREE_PAGES 에 해당하는
     // free page 의 수를 구함 
 }
@@ -3703,8 +3719,10 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	if (page) {
         // page 할당 성공한다면
 		struct zone *zone = page_zone(page);
-
+        // 그 page 가 속한 struct zone 을 가져와서
 		zone->compact_blockskip_flush = false;
+        // compaction 후 page 할당에 성공하였으므로 kswapd 가 
+        // pfn 의 위치를 reset 하지 않도록 false 설정 
 		compaction_defer_reset(zone, order, true);
 		count_vm_event(COMPACTSUCCESS);
 		return page;

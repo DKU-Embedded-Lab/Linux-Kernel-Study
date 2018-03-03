@@ -1323,7 +1323,9 @@ static void prep_compound_gigantic_page(struct page *page, unsigned int order)
  * PageHuge() only returns true for hugetlbfs pages, but not for normal or
  * transparent huge pages.  See the PageTransHuge() documentation for more
  * details.
- */
+ */ 
+// hugetlbfs 인 경우 true, THP 이거나 
+// normal  이거나 normal compound 인 경우는 false
 int PageHuge(struct page *page)
 {
 	if (!PageCompound(page))

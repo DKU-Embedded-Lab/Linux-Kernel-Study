@@ -17,7 +17,7 @@ typedef void free_page_t(struct page *page, unsigned long private);
 #define MIGRATEPAGE_SUCCESS		0
 
 enum migrate_reason {
-	MR_COMPACTION,
+	MR_COMPACTION, // 연속 page 확보를 위한 migratino 
 	MR_MEMORY_FAILURE,
 	MR_MEMORY_HOTPLUG,
 	MR_SYSCALL,		/* also applies to cpusets */

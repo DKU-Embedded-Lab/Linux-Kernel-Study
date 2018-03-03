@@ -65,7 +65,8 @@ static inline int page_ref_count(struct page *page)
 {
 	return atomic_read(&page->_refcount);
 }
-
+// struct page 의 reference count 를 읽어옴 
+// compound page 라면 compound head 의 reference count 를 읽어옴
 static inline int page_count(struct page *page)
 {
 	return atomic_read(&compound_head(page)->_refcount);

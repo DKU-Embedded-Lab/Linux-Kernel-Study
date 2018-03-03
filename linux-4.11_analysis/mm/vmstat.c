@@ -818,10 +818,15 @@ unsigned long node_page_state(struct pglist_data *pgdat,
 
 #ifdef CONFIG_COMPACTION
 
+// fragmentatino index 를 계산하기 위한 구조체
 struct contig_page_info {
 	unsigned long free_pages;
+    // zone 의 buddy 에서 관리되는 전체 free page 의 수  
 	unsigned long free_blocks_total;
+    // order 단위의 연속적 free page 들의 수
 	unsigned long free_blocks_suitable;
+    // 연속적 free page 들(free_blocks_total) 중 요청 order 보다 
+    // 큰 연속적 page 의 수
 };
 
 /*
@@ -832,6 +837,10 @@ struct contig_page_info {
  * migrated. Calculating that is possible, but expensive and can be
  * figured out from userspace
  */
+// fragmentation index 를 계산하기 위해 struct contig_page_info 의 
+// 아래 내용들을 채움 
+//  - buddy 내의 전체 free page 수, 연속적 free page 수, 
+//    요청 order 할당 가능한 연속적 free page 의 수
 static void fill_contig_page_info(struct zone *zone,
 				unsigned int suitable_order,
 				struct contig_page_info *info)
@@ -848,14 +857,16 @@ static void fill_contig_page_info(struct zone *zone,
 		/* Count number of free blocks */
 		blocks = zone->free_area[order].nr_free;
 		info->free_blocks_total += blocks;
-
+        // 각 order 의 연속적 page 의 수 누적
 		/* Count free base pages */
 		info->free_pages += blocks << order;
-
+        // 각 order 의 전체 page 수 누적
 		/* Count the suitable free blocks */
 		if (order >= suitable_order)
 			info->free_blocks_suitable += blocks <<
 						(order - suitable_order);
+            // 각 order 의 suitable_order 를 만족시킬 
+            // 수 있는 연속적 page 수 누적
 	}
 }
 
@@ -872,11 +883,12 @@ static int __fragmentation_index(unsigned int order, struct contig_page_info *in
 
 	if (!info->free_blocks_total)
 		return 0;
-
+    // free page block 이 buddy 내에 하나도 없는 경우 0 반환
 	/* Fragmentation index only makes sense when a request would fail */
 	if (info->free_blocks_suitable)
 		return -1000;
-
+    // order 에 맞는 page 를 할당해 줄 수 있는 free_blocks_suitable 이 
+    // 있을 경우, -1000 반환 
 	/*
 	 * Index is between 0 and 1 so return within 3 decimal places
 	 *
@@ -884,14 +896,45 @@ static int __fragmentation_index(unsigned int order, struct contig_page_info *in
 	 * 1 => allocation would fail due to fragmentation
 	 */
 	return 1000 - div_u64( (1000+(div_u64(info->free_pages * 1000ULL, requested))), info->free_blocks_total);
+    //          
+    //                 전체 free page 수 * 1000
+    //               ----------------------------  +  1000
+    //                       요청 page 수
+    // 1000 -     ------------------------------------------------
+    //                      연속적인  전체 page 의 수 
+    // e.g. 
+    //          default Fragindex skip 값 : 0 ~ 500
+    //
+    // order=4 요청에 대해   |    case 1    |   case 2  |   case 3  |   case 4  |
+    // ----------------------|--------------|-----------|-----------|-----------|
+    // free_pages            |     64       |   170     |   64      |   340     |
+    // free_blocks_total     |     30       |   30      |   64      |   60      |
+    // free_blocks_suitable  |     0        |   0       |   0       |   0       |
+    //                       |              |           |           |           |
+    //          order - 10   |     0        |   0       |   0       |   0       |
+    //          ...          |              |           |           |           |
+    //          order - 4    |     0        |   0       |   0       |   0       |
+    //          order - 3    |     2        |   16      |   0       |   58      |
+    //          order - 2    |     4        |   8       |   0       |   2       |
+    //          order - 1    |     8        |   4       |   0       |   0       |
+    //          order - 0    |     16       |   2       |   64      |   0       |
+    //-----------------------|--------------|-----------|-----------|-----------|
+    //      ==> Fragindex    |     166      |   387     |   78      |   508     | 
 }
 
 /* Same as __fragmentation index but allocs contig_page_info on stack */
+// 
+// fragmentation_index 를 계산 수행. 
+//  - 0 : page 할당 불가능 상태.(compaction 해봤자, free page 확보 불가능)
+//  - 0 ~ 1000 : 0 에 가까울 수록 compaction 결과 free page 확보 성공률이 낮고,
+//               1000 에 가까울 수록 compaction 결과 free 확보 성공률 높은
+//  - -1000 : page 할당 가능 상태. (compaction 필요 없음)
 int fragmentation_index(struct zone *zone, unsigned int order)
 {
 	struct contig_page_info info;
 
 	fill_contig_page_info(zone, order, &info);
+    // struct contig_page_info 를 채움
 	return __fragmentation_index(order, &info);
 }
 #endif

@@ -113,14 +113,16 @@ int isolate_movable_page(struct page *page, isolate_mode_t mode)
 	 * lets be sure we have the page lock
 	 * before proceeding with the movable page isolation steps.
 	 */
-	if (unlikely(!trylock_page(page)))
-		goto out_putpage;
-    // page 의 flag 에 write 할 것이므로 lock 잡으려 함
 
-	if (!PageMovable(page) || PageIsolated(page))
-		goto out_no_isolated;
+    // page 의 flag 에 write 할 것이므로 lock 잡으려 함
+	if (unlikely(!trylock_page(page)))
+		goto out_putpage; 
+        // lock 못잡으면 put_page 후 종료
+
     // page 가 file-backed page 가 아니거나
     // PG_isolated 되어 있는 경우
+	if (!PageMovable(page) || PageIsolated(page))
+		goto out_no_isolated;
 
 	mapping = page_mapping(page);
 	VM_BUG_ON_PAGE(!mapping, page);
@@ -165,17 +167,21 @@ void putback_movable_page(struct page *page)
  * built from lru, balloon, hugetlbfs page. See isolate_migratepages_range()
  * and isolate_huge_page().
  */
+// isolated 되었던 page 를 원래대로 되돌림
 void putback_movable_pages(struct list_head *l)
 {
 	struct page *page;
 	struct page *page2;
 
 	list_for_each_entry_safe(page, page2, l, lru) {
+        // l 이라는 list 를 순회
 		if (unlikely(PageHuge(page))) {
 			putback_active_hugepage(page);
 			continue;
 		}
 		list_del(&page->lru);
+        // 기존 isolate 결과 compact_control 의 migratepages 에 
+        // 연결되었던 list 에서 제거
 		/*
 		 * We isolated non-lru movable page so here we can use
 		 * __PageMovable because LRU page's mapping cannot have
@@ -1061,7 +1067,9 @@ out:
 /*
  * Obtain the lock on page, remove all ptes and migrate the page
  * to the newly allocated page in newpage.
- */
+ */ 
+// reason 의 상황에서 page 를 get_new_page 함수를 통해 확보한 free page 에 
+// migrate 해주기 위해 page 를 unmap 해주고, 내용 복사하고, newpage 를 mapping
 static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 				   free_page_t put_new_page,
 				   unsigned long private, struct page *page,
@@ -1073,27 +1081,41 @@ static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 	struct page *newpage;
 
 	newpage = get_new_page(page, private, &result);
+    // free scanner 가 확보한 page list 에서 free page 하나 가져옴 
+    //  - reason 이 MR_COMPACTION 인 경우(compaction) 에서는 compaction_alloc 함수가 
+    //    호출 되어 free scanner 가 free page 확보
 	if (!newpage)
 		return -ENOMEM;
 
 	if (page_count(page) == 1) {
+        // references count 가 1 이라면 해당 page 를 get_page 한게 
+        // scanner 에서 된 것 뿐이므로 다른 모든 user 에서는 free 된 것.  
 		/* page was freed from under us. So we are done. */
-		ClearPageActive(page);
-		ClearPageUnevictable(page);
+		ClearPageActive(page); // PG_active clear
+		ClearPageUnevictable(page); // PG_unevictable clear
 		if (unlikely(__PageMovable(page))) {
+            // MOVABLE page 였던 경우
 			lock_page(page);
 			if (!PageMovable(page))
 				__ClearPageIsolated(page);
 			unlock_page(page);
 		}
-		if (put_new_page)
+		if (put_new_page) // 따로 page 되돌리는 함수 있는지 검사
 			put_new_page(newpage, private);
+            // free 된 migrate scanner 의 isolted page 를 
+            // free scanner 를 위한 isolate list 에서 관리
 		else
 			put_page(newpage);
+            // _refcount 감소, LRU flag 제거, 
+            // per-CPU cache 에 돌려주는 일 등 수행
 		goto out;
 	}
 
 	if (unlikely(PageTransHuge(page))) {
+        // migrate 하려는 page 가 THP 인 경우
+        //  - compactino 에서는 migrate scanner 가 page scan 시, 
+        //    Compound Page 에 대하여는 isolate 하지 않기 때문에 
+        //    memory compaction 일때는 여기 수행안됨
 		lock_page(page);
 		rc = split_huge_page(page);
 		unlock_page(page);
@@ -1119,7 +1141,8 @@ out:
 		 * Compaction can migrate also non-LRU pages which are
 		 * not accounted to NR_ISOLATED_*. They can be recognized
 		 * as __PageMovable
-		 */
+		 */ 
+        // non-LRU page 일 경우, 
 		if (likely(!__PageMovable(page)))
 			dec_node_page_state(page, NR_ISOLATED_ANON +
 					page_is_file_cache(page));
@@ -1131,7 +1154,9 @@ out:
 	 * we want to retry.
 	 */
 	if (rc == MIGRATEPAGE_SUCCESS) {
+        // migration 성공할 경우
 		put_page(page);
+        // isolate 할 때, get_page 하였던 것 다시 put_page 수행
 		if (reason == MR_MEMORY_FAILURE) {
 			/*
 			 * Set PG_HWPoison on just freed page
@@ -1142,6 +1167,7 @@ out:
 				num_poisoned_pages_inc();
 		}
 	} else {
+        // migratino 실패활 경우  
 		if (rc != -EAGAIN) {
 			if (likely(!__PageMovable(page))) {
 				putback_lru_page(page);
@@ -1299,6 +1325,11 @@ out:
  *
  * Returns the number of pages that were not migrated, or an error code.
  */
+//
+// reason 이 MR_COMPACTION 인 경우...
+// migrate scanner 가 LRU 로부터 isolate 한 from list 의 page 들을 get_new_page 
+// 함수를 통해 free scanner 에서 Buddy 로부터 isolate 하여 list 에 채워 
+// 
 int migrate_pages(struct list_head *from, new_page_t get_new_page,
 		free_page_t put_new_page, unsigned long private,
 		enum migrate_mode mode, int reason)
@@ -1314,14 +1345,17 @@ int migrate_pages(struct list_head *from, new_page_t get_new_page,
 
 	if (!swapwrite)
 		current->flags |= PF_SWAPWRITE;
-
+    // 현재 task 가 swapwrite 허용하지 않는 경우 migrate_pages 
+    // 수행되는 동안 swapwrite 를 허용하도록 설정 
 	for(pass = 0; pass < 10 && retry; pass++) {
+        // retry 가 0 이 아닌경우, 최대 10 회까지 반복 가능
 		retry = 0;
 
 		list_for_each_entry_safe(page, page2, from, lru) {
+            // frome 에 있는 가 page 를 하나씩 순회
 			cond_resched();
 
-			if (PageHuge(page))
+			if (PageHuge(page)) // hugetlbfs 의 page 인지 검사
 				rc = unmap_and_move_huge_page(get_new_page,
 						put_new_page, private, page,
 						pass > 2, mode, reason);
@@ -1329,18 +1363,26 @@ int migrate_pages(struct list_head *from, new_page_t get_new_page,
 				rc = unmap_and_move(get_new_page, put_new_page,
 						private, page, pass > 2, mode,
 						reason);
+                // migrate scanner 에 의해 LRU 에서 isolate 된 page 를 unmap 및  
+                // free scanner 가 Buddy 에서 isolate 한 page 로 migrate 해주고 mapping 
+                // 3 회 이상 반복수행 일 경우 
 
 			switch(rc) {
 			case -ENOMEM:
+                // free scanner 가 memory 가 부족하여 
+                // free page 를 확보하지 못하는 경우
 				nr_failed++;
 				goto out;
 			case -EAGAIN:
+                // migration 결과가 재시도 해야 할 경우,
 				retry++;
 				break;
 			case MIGRATEPAGE_SUCCESS:
+                // migrate 성공한 경우
 				nr_succeeded++;
 				break;
 			default:
+                // migratino 실패한 경우
 				/*
 				 * Permanent failure (-EBUSY, -ENOSYS, etc.):
 				 * unlike -EAGAIN case, the failed page is
@@ -1363,6 +1405,7 @@ out:
 
 	if (!swapwrite)
 		current->flags &= ~PF_SWAPWRITE;
+        // swap write 설정 안되있던 경우 원래대로 되돌림
 
 	return rc;
 }

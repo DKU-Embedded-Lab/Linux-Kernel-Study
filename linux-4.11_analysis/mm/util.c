@@ -403,7 +403,8 @@ struct anon_vma *page_anon_vma(struct page *page)
 		return NULL;
 	return __page_rmapping(page);
 }
-// page 가 file backed page 인 경우 address_space 가져옴
+// page 가 file backed page 인 경우 address_space 가져옴 
+// anonymous page 라면 NULL
 struct address_space *page_mapping(struct page *page)
 {
 	struct address_space *mapping;
@@ -424,7 +425,7 @@ struct address_space *page_mapping(struct page *page)
 	mapping = page->mapping;
 	if ((unsigned long)mapping & PAGE_MAPPING_ANON)
 		return NULL;
-
+        // anonymous page 라면 NULL
 	return (void *)((unsigned long)mapping & ~PAGE_MAPPING_FLAGS);
 }
 EXPORT_SYMBOL(page_mapping);

@@ -203,15 +203,17 @@ extern int user_min_free_kbytes;
 // migrate 되는 page 들을 관리하기 위한 structure
 struct compact_control {
 	struct list_head freepages;	/* List of free pages to migrate to */
-    // scan 결과 LRU list 에서 isolated 된 free page 들
+    // scan 결과 Buddy free list 에서 isolated 된 free page 들
 	struct list_head migratepages;	/* List of pages being migrated */
     // scan 결과 LRU list 에서 isolated 된 in-use page 들 
+    // page 의 내용들이 옮겨지기 위해 PG_lru clear 하고 PG_isolated 설정하고 
+    // lruvec 에서 삭제한 page 들의 list
 	unsigned long nr_freepages;	/* Number of isolated free pages */
-    // page 의 내용들이 옮겨지기 위해 LRU 에서 isolate 된 free page 
+    // page 의 내용들이 옮겨지기 위해 Buddy free list 에서 isolate 된 free page 
     // 각 scanning round 당 횟수
 	unsigned long nr_migratepages;	/* Number of pages to migrate */
-    // page 의 내용들이 옮겨지기 위해 LRU 에서 isolate 된 migrate page 
-    // 즉 PG_isolated 설정된 page 의 수 
+    // page 의 내용들이 옮겨지기 위해 PG_lru clear 하고 PG_isolated 설정하고 
+    // lruvec 에서 삭제한 page 의 수
     // 각 scanning round 당 횟수  
 	unsigned long total_migrate_scanned;
     // 총 migrate scanner 가 scan 한 page 들
@@ -227,10 +229,16 @@ struct compact_control {
     // kcompactd 에 의한 asynchronous comapction 인지 
     // page alloc 과정에서의 synchronous compaction 인지 구분
 	bool ignore_skip_hint;		/* Scan blocks even if marked skip */
-    // page block 내의 compaction scanning 을 도와주기 위한 
+    // page block 내의 page scanning 을 도와주기 위한 hint 무시 여부
+    // (migrate scanner, free scanner 에 모두 hint 로 동작)
     // 해당 page block 에 대해 skip 하라는 PB_migrate_skip bit 가 설정되어 
     // 있어도 migrate 가능 검사를 수행한다. 
-	bool ignore_block_suitable;	/* Scan blocks considered unsuitable */
+	bool ignore_block_suitable;	/* Scan blocks considered unsuitable */ 
+    // priority 에 따라 free page 선택 시, MIN_COMPACT_PRIORITY 라면 
+    //  - 이미 high order free page 가 있는 page block 은 pass 및 
+    //  - MOVABLE page block 이 아닌 page block 은 pass 하지만 
+    // 그 이상의 priority 에서는 위 사항에 해당되어도 page block 에 대해 
+    // free page isolate 수행    
 	bool direct_compaction;		/* False from kcompactd or /proc/... */
     // page fault 과정에서의 compaction 이면 1 임 
     // kcompactd 또는 /proc/sys/vm/compact_memory 를 통한 compactino 이면0 임 
@@ -244,12 +252,13 @@ struct compact_control {
     // direct compaction 시의 gfp flag
 	const unsigned int alloc_flags;	/* alloc flags of a direct compactor */
 	const int classzone_idx;	/* zone index of a direct compactor */
+    // zone index 
 	struct zone *zone;
 	bool contended;			/* Signal lock or sched contention */ 
     // asynchronous mode (kcompactd) 에 의한 scanning 시...
     //  - 더 우선순위 높은 task 있거나, CPU time 시간 다됫거나 등 
-    //    reschedule 요청이 있어 scanning 종료 
-    //  - pending signal 이 있어 종료
+    //    reschedule 요청이 있어 scanning 종료되어야 할 때 설정
+    //  - pending signal 이 있어 종료되어야 할 때 설정
 };
 
 unsigned long

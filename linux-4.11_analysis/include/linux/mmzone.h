@@ -278,11 +278,14 @@ struct lruvec {
 #define LRU_ALL	     ((1 << NR_LRU_LISTS) - 1)
 
 /* Isolate unmapped file */
-#define ISOLATE_UNMAPPED	((__force isolate_mode_t)0x2)
+#define ISOLATE_UNMAPPED	((__force isolate_mode_t)0x2) 
+// pte 에 map 되지 않은 page 에 대해 migrate 수행 
 /* Isolate for asynchronous migration */
-#define ISOLATE_ASYNC_MIGRATE	((__force isolate_mode_t)0x4)
+#define ISOLATE_ASYNC_MIGRATE	((__force isolate_mode_t)0x4) 
+// async mode 로 migration 수행
 /* Isolate unevictable pages */
 #define ISOLATE_UNEVICTABLE	((__force isolate_mode_t)0x8)
+// unevictable page 에 대해 migration 가능
 
 /* LRU Isolation modes. */
 typedef unsigned __bitwise isolate_mode_t;
@@ -503,7 +506,8 @@ struct zone {
 	unsigned long		*pageblock_flags; 
     // zone 에 존재하는 모든 page block 들이 어떤 migrate type 에 속하는지 
     // 관리하는 bitmap 의 주소
-    //  - 
+    //  - migrate type 
+    //  - migration hint
     //
 #endif /* CONFIG_SPARSEMEM */
 
@@ -618,8 +622,10 @@ struct zone {
 	/* pfn where async and sync compaction migration scanner should start */ 
     // async/sync compactino 의 cache 된 free scanner 시작 위치
 	unsigned long		compact_cached_migrate_pfn[2]; 
-    // asynchronous compaction 의 cached 된 migrate scanner 시작 위치(kcompactd)
-    // synchronous  compaction 의 cached 된 migrate scanner 시작 위치 
+    // 0: asynchronous compaction 의 cached 된 migrate scanner 시작 위치
+    //  - kcompactd
+    // 1: synchronous  compaction 의 cached 된 migrate scanner 시작 위치 
+    //  - direct compaction(page fault 등)
 #endif
 
 #ifdef CONFIG_COMPACTION
@@ -629,17 +635,30 @@ struct zone {
 	 * last failure is tracked with compact_considered.
 	 */
 	unsigned int		compact_considered; 
-    // last failure 이후, compactino 시도 횟수 
+    // last failure 이후,시도된 compaction 횟수 
+    // 즉 지금까지 skip 된 compaction 수
+    //    compact_considered 의 수가 1 << compact_defer_shift 
+    //    보다 같거나 크면 compaction 진행 해주어야 한다. 
 	unsigned int		compact_defer_shift;
-    // compaction failure 후 compaction 을 미루는 횟수
+    // compaction failure 후 compaction 을 미루는 횟수 
+    // compaction failure 시에, 나중에 다시 compaction 수행 전
+    // 1 << compact_defer_shift 횟수의 compaction 을 skip 함
+    // 즉 compaction 을 skip 가능한 최대 제한     
+    // 최대 skip 가능 횟수는 64 회임
 	int			compact_order_failed;
-    //
+    // 요청 order 가 compact_order_failed 보다 작으면 skip 안되고, 
+    // compaction 진행됨
 #endif
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 	/* Set to true when the PG_migrate_skip bits should be cleared */
 	bool			compact_blockskip_flush;
-    //
+    // 설정되어 있을 시, kwapd 가 sleep 되기 전 reset_isolate_suitable 함수를
+    // 통해 아래와같은 일 수행
+    //  - cached 된 migrate, free scanner index 를 각각 zone 의 처음과 
+    //    끝으로 초기화 
+    //  - zone->pageblock_flags 에 설정된 page block 별 page block skip bit 인 
+    //  PG_migrate_skip 을 초기화
 #endif
 
 	bool			contiguous;
