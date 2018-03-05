@@ -923,7 +923,8 @@ struct page_referenced_arg {
 /*
  * arg: page_referenced_arg will be passed
  */ 
-// interval tree 에서 찾아온 vma 에 대하여 pmd, pte.. 등을 구해 accessed bit clear
+// interval tree 에서 찾아온 vma 에 대하여 pmd, pte.. 등을 구해 accessed bit clear 
+// struct rmap_walk_control 의 rmap_one 함수 포인터에 매핑되어 호출되는 함수
 static int page_referenced_one(struct page *page, struct vm_area_struct *vma,
 			unsigned long address, void *arg)
 {
@@ -1745,7 +1746,9 @@ static int page_mapcount_is_zero(struct page *page)
  * SWAP_AGAIN	- we missed a mapping, try again later
  * SWAP_FAIL	- the page is unswappable
  * SWAP_MLOCK	- page is mlocked.
- */
+ */ 
+
+// page table mapping 제거함수
 int try_to_unmap(struct page *page, enum ttu_flags flags)
 {
 	int ret;
@@ -1776,8 +1779,12 @@ int try_to_unmap(struct page *page, enum ttu_flags flags)
 		ret = rmap_walk_locked(page, &rwc);
 	else
 		ret = rmap_walk(page, &rwc);
-
+    // reverse tree 를 검색하여 struct page 에 대한
+    // page table 의 pte 를 clear 해줌
+   
 	if (ret != SWAP_MLOCK && !page_mapcount(page)) {
+        // rmap pte 결과가 SWAP_MLOCK 이 어서 mlock 된 page 로 
+        // pte clear 이 불가능한 page 가 아니고 mapcount 가 0 이라면         
 		ret = SWAP_SUCCESS;
 		if (rp.lazyfreed && !PageDirty(page))
 			ret = SWAP_LZFREE;
@@ -1873,7 +1880,8 @@ static struct anon_vma *rmap_walk_anon_lock(struct page *page,
  * LOCKED.
  */ 
 // anonymous page 일 경우, process 당 존재하는 anon_vma 를 찾아 해당 interval
-// tree search 를 통해 avc 를 찾아냄
+// tree search 를 통해 anon_vma_chain 을 찾고, anon_vma_chain 이 관리하는 
+// vm_area_struct 를 통해 page table 의 pte 를 clear 해줌
 static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 		bool locked)
 {
@@ -1927,6 +1935,7 @@ static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
         // cgroup 이 설정되있을 경우에만 호출및 검사
 
 		ret = rwc->rmap_one(page, vma, address, rwc->arg); 
+        // 찾은 vma 에 대한 page table 의 pte clear 수행
 		if (ret != SWAP_AGAIN)
 			break;
 		if (rwc->done && rwc->done(page))
@@ -1996,6 +2005,9 @@ done:
 	return ret;
 }
 
+// reverse mapping 을 통해 interval tree 를 search 하여 anon_vma_chain 즉 
+// anon_vma 를 찾아 struct page 가 mapping 된 pte clear 해주는 함수 
+// rmap lock 을 잡지 않고 호출되는 경우
 int rmap_walk(struct page *page, struct rmap_walk_control *rwc)
 {
 	if (unlikely(PageKsm(page)))
@@ -2008,7 +2020,10 @@ int rmap_walk(struct page *page, struct rmap_walk_control *rwc)
         // file backed page 일 경우
 }
 
-/* Like rmap_walk, but caller holds relevant rmap lock */
+/* Like rmap_walk, but caller holds relevant rmap lock */ 
+// reverse mapping 을 통해 interval tree 를 search 하여 anon_vma_chain 즉 
+// anon_vma 를 찾아 struct page 가 mapping 된 pte clear 해주는 함수 
+// rmap lock 을 잡고 호출되는 경우
 int rmap_walk_locked(struct page *page, struct rmap_walk_control *rwc)
 {
 	/* no ksm support for now */

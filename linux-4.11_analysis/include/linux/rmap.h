@@ -135,6 +135,8 @@ struct anon_vma_chain {
 #endif
 };
 
+// try to unmap flag 로 try_to_unmap, should_defer_flush, shrink_page_list 
+// 의 함수 parameter 로 사용되어 page 를 reclaim 해야 될 때 사용된다. 
 enum ttu_flags {
 	TTU_UNMAP = 1,			/* unmap mode */
 	TTU_MIGRATION = 2,		/* migration mode */

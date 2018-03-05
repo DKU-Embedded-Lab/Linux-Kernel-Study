@@ -1115,7 +1115,7 @@ static ICE_noinline int unmap_and_move(new_page_t get_new_page,
         // migrate 하려는 page 가 THP 인 경우
         //  - compactino 에서는 migrate scanner 가 page scan 시, 
         //    Compound Page 에 대하여는 isolate 하지 않기 때문에 
-        //    memory compaction 일때는 여기 수행안됨
+        //    <memory compaction 일때는 여기 수행안됨>
 		lock_page(page);
 		rc = split_huge_page(page);
 		unlock_page(page);
@@ -1352,7 +1352,9 @@ int migrate_pages(struct list_head *from, new_page_t get_new_page,
 		retry = 0;
 
 		list_for_each_entry_safe(page, page2, from, lru) {
-            // frome 에 있는 가 page 를 하나씩 순회
+            // frome 에 있는 가 page 를 하나씩 순회하여 
+            // get_new_page 함수를 통해 확보한 free page 
+            // 영역으로 page migration 수행
 			cond_resched();
 
 			if (PageHuge(page)) // hugetlbfs 의 page 인지 검사

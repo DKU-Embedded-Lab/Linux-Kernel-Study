@@ -480,6 +480,8 @@ pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
 	return pmd;
 }
 
+// THP 의 경우 두번째 tail page 의 struct page->mapping 변수에 
+// deferred list 의 주소를 저장
 static inline struct list_head *page_deferred_list(struct page *page)
 {
 	/*
@@ -2168,7 +2170,8 @@ void vma_adjust_trans_huge(struct vm_area_struct *vma,
 			split_huge_pmd_address(next, nstart, false, NULL);
 	}
 }
-
+// huge page 를 split 해야 될 때, struct page 가 속한 huge page 의
+// page table mapping 을 제거해주는 함수
 static void freeze_page(struct page *page)
 {
 	enum ttu_flags ttu_flags = TTU_IGNORE_MLOCK | TTU_IGNORE_ACCESS |
@@ -2315,6 +2318,8 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 		put_page(subpage);
 	}
 }
+
+// 
 // compound page 를 고려하여 struct page 의 mapcount 를 읽어들임 
 //  - compound 아니라면 그냥 그 page 의 _mapcount 반환
 //  - hugetlbfs 라면 쪼개질 일 없으므로 compound page 의 compound_mapcount 반환 
@@ -2495,14 +2500,15 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 	 */
 	if (total_mapcount(head) != page_count(head) - extra_pins - 1) {
         // FIXME - THP 의 전체 mapcount - reference count  - extra_pins - 1 
-        // 이 공식이 뭐지?... 
+        // 이게 뭐지?... 
 		ret = -EBUSY;
 		goto out_unlock;
 	}
 
 	mlocked = PageMlocked(page); 
     // page 가 PG_mlocked 설정 여부 검사
-	freeze_page(head);
+	freeze_page(head); 
+    // huge page 에 속한 모든 struct page 를 참조하는 pte 를 clear 해줌
 	VM_BUG_ON_PAGE(compound_mapcount(head), head);
 
 	/* Make sure the page is not on per-CPU pagevec as it takes pin */
@@ -2513,6 +2519,8 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 	spin_lock_irqsave(zone_lru_lock(page_zone(head)), flags);
 
 	if (mapping) {
+        // file backed page 일 경우, page 가 
+        // page cache radix tree 에 있을 수 있음
 		void **pslot;
 
 		spin_lock(&mapping->tree_lock);
@@ -2530,7 +2538,9 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 	/* Prevent deferred_split_scan() touching ->_refcount */
 	spin_lock(&pgdata->split_queue_lock);
 	count = page_count(head);
+    // page 의 reference count 를 가져옴
 	mapcount = total_mapcount(head);
+    // huge page 단위 mapcount 를 가져옴
 	if (!mapcount && page_ref_freeze(head, 1 + extra_pins)) {
 		if (!list_empty(page_deferred_list(head))) {
 			pgdata->split_queue_len--;

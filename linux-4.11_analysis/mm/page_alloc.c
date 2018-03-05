@@ -4219,16 +4219,18 @@ retry_cpuset:
 						alloc_flags, ac,
 						INIT_COMPACT_PRIORITY,
 						&compact_result);
-        // direct page compaction 후 page 할당 수행
+        // direct page compaction 후 page 할당 시도
 		if (page)
 			goto got_pg;
-            // 할당 성공하면 out
+            // compaction 후, 할당 성공하면 out
 
 		/*
 		 * Checks for costly allocations with __GFP_NORETRY, which
 		 * includes THP page fault allocations
 		 */
 		if (gfp_mask & __GFP_NORETRY) {
+            // page 할당 실패 시, 할당 재시도를 계속하면 안되는 경우 
+            // e.g. THP 등의 high order allocation 의 경우
 			/*
 			 * If compaction is deferred for high-order allocations,
 			 * it is because sync compaction recently failed. If
@@ -4239,6 +4241,9 @@ retry_cpuset:
 			 */
 			if (compact_result == COMPACT_DEFERRED)
 				goto nopage;
+                // compaction 이 현재 deferred 상태 즉 한번 실패하여 
+                // background 로 free page 확보하도록 미뤄진 상태라면  
+                // __GFP_NORETRY 에서는 page 할당 포기하고 나감
 
 			/*
 			 * Looks like reclaim/compaction is worth trying, but
@@ -4246,6 +4251,9 @@ retry_cpuset:
 			 * using async compaction.
 			 */
 			compact_priority = INIT_COMPACT_PRIORITY;
+            // deferred 때문에 compaction 후에도 page allocation 이 안된 
+            // 경우라면 DEF_COMPACT_PRIORITY 가 아니라 한단계 낮은 
+            // INIT_COMPACT_PRIORITY 로 수행되도록 설정
 		}
 	}
 
@@ -4253,7 +4261,7 @@ retry:
 	/* Ensure kswapd doesn't accidentally go to sleep as long as we loop */
 	if (gfp_mask & __GFP_KSWAPD_RECLAIM)
 		wake_all_kswapds(order, ac);
-
+        // kswapd wakeup 되어 있는 것 확인
 	if (gfp_pfmemalloc_allowed(gfp_mask))
 		alloc_flags = ALLOC_NO_WATERMARKS;
 
@@ -4292,12 +4300,14 @@ retry:
 	/* Try direct reclaim and then allocating */
 	page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags, ac,
 							&did_some_progress);
+    // direct reclaim 을 통해 page 할당 시도
 	if (page)
 		goto got_pg;
 
 	/* Try direct compaction and then allocating */
 	page = __alloc_pages_direct_compact(gfp_mask, order, alloc_flags, ac,
 					compact_priority, &compact_result);
+    // 최종적으로 한번 더 compaction 시도
 	if (page)
 		goto got_pg;
 

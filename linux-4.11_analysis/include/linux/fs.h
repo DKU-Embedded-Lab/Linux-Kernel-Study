@@ -379,7 +379,8 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
 
 struct address_space {
 	struct inode		*host;		/* owner: inode, block_device */
-	struct radix_tree_root	page_tree;	/* radix tree of all pages */
+	struct radix_tree_root	page_tree;	/* radix tree of all pages */ 
+    // page cache 를 위한 radix tree
 	spinlock_t		tree_lock;	/* and lock protecting it */
 	atomic_t		i_mmap_writable;/* count VM_SHARED mappings */
 	struct rb_root		i_mmap;		/* tree of private and shared mappings */ 
