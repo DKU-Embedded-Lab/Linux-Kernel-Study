@@ -363,7 +363,8 @@ void *page_rmapping(struct page *page)
  * Return true if this page is mapped into pagetables.
  * For compound page it returns true if any subpage of compound page is mapped.
  */ 
-// page 가 pte 에 map 되었는제 page->_mapcount 로 확인
+// page 가 pte 에 map 되었는제 page->_mapcount 로 확인 
+// map 된 pte 가 있다면 true 없다면 false
 bool page_mapped(struct page *page)
 {
 	int i;

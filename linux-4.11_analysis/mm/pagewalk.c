@@ -280,6 +280,12 @@ static int __walk_page_range(unsigned long start, unsigned long end,
  *   @walk->mm->mmap_sem, because these function traverse vma list and/or
  *   access to vma's data.
  */
+// 
+// page table walk 함수로 page table walk 관리 struct 인 walk_mm 에 명시된 
+// mm_struct 에서 interval tree 를 통해 관리되는 vma 들 중, start ~ end 에 
+// 해당되는 vma 를 찾아 page table walk 를 수행하며 walk_mm 에 pmd_entry, 
+// pte_entry, pud_entry, hugetlb_entry 등이 설정된 경우, caller specific 
+// function 기능 수행 가능
 int walk_page_range(unsigned long start, unsigned long end,
 		    struct mm_walk *walk)
 {
@@ -329,6 +335,10 @@ int walk_page_range(unsigned long start, unsigned long end,
 	return err;
 }
 
+// walk_page_test 함수에를 통해 mm_walk 에 test_walk 가 구현되어 있을 시, 
+// page walk 수행 전,vma 에 대해 vma 에 대해 page walk 를 수행할지 
+// 통해 검사 후, vma 의 vm_start ~ vm_end 에 대해 __walk_page_range 
+// 함수를 통해 page walk 를 수행한다. 
 int walk_page_vma(struct vm_area_struct *vma, struct mm_walk *walk)
 {
 	int err;

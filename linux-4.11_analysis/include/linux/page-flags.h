@@ -117,8 +117,8 @@ enum pageflags {
 	PG_hwpoison,		/* hardware poisoned page. Don't touch */
 #endif
 #if defined(CONFIG_IDLE_PAGE_TRACKING) && defined(CONFIG_64BIT)
-	PG_young,
-	PG_idle,
+	PG_young, // idle page tracking 에서 page reclaim 방해 하지 않기 위해 ACCESSED bit 설정 대용으로 사용
+	PG_idle, // idle page tracking 에서 사용
 #endif
 	__NR_PAGEFLAGS,
 
@@ -181,7 +181,7 @@ static __always_inline int PageTail(struct page *page)
     // head page 에 대한 주소가 있는 compound_head 필드의 
     // 0 bit 가 설정되어 있다면 tail page
 }
-// compound page 인지 여부 검사 
+// compound page 인지 여부 검사 compound page 일경우, true 반환
 static __always_inline int PageCompound(struct page *page)
 {
     // compound page 일 경우인지 검사. 
@@ -226,15 +226,19 @@ static __always_inline int PageCompound(struct page *page)
 /*
  * Macros to create function definitions for page flags
  */
+//
+// PG_lru, PG_isolated 등의 page flag 설정 여부 검사
+// e.g. PageLRU(), PageBuddy(), PageKsm()...
 #define TESTPAGEFLAG(uname, lname, policy)				\
 static __always_inline int Page##uname(struct page *page)		\
-	{ return test_bit(PG_##lname, &policy(page, 0)->flags); }
-// PageLRU, PageIsolated 등의  함수 page flag 설정 여부 검사 
-// PG_lru, PG_isolated
+	{ return test_bit(PG_##lname, &policy(page, 0)->flags); } 
+// PG_young 등의 page flag 들을 set 수행   
+// e.g. SetPageYoung()
 #define SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void SetPage##uname(struct page *page)		\
 	{ set_bit(PG_##lname, &policy(page, 1)->flags); }
-
+// PG_idle 등의 page flag 들을 clear 수행 
+// e.g. ClearPageIdle
 #define CLEARPAGEFLAG(uname, lname, policy)				\
 static __always_inline void ClearPage##uname(struct page *page)		\
 	{ clear_bit(PG_##lname, &policy(page, 1)->flags); }
@@ -420,10 +424,13 @@ PAGEFLAG(Idle, idle, PF_ANY)
  * refers to user virtual address space into which the page is mapped.
  */
 #define PAGE_MAPPING_ANON	0x1 
-// 첫번째 bit 검사를 위한 mask
-#define PAGE_MAPPING_MOVABLE	0x2
+// 첫번째 MSB bit 검사를 위한 mask 로 
+// anonymous page 의 경우 0-bit 에 해당 flag 설정
+#define PAGE_MAPPING_MOVABLE	0x2 
+// 두번째 MSB bit 검사를 위한 mask 로 
+// movable age 의 경우 1-bit 에 해당 flag 설정
 #define PAGE_MAPPING_KSM	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE) 
-    
+// kernel samepage merging 은 anonymous movable page 에 대해서만 수행   
 #define PAGE_MAPPING_FLAGS	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE)
 
 // anonymous 이거나 movable page 인지 검사    

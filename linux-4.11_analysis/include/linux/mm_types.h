@@ -77,7 +77,6 @@ struct page {
         //    변수의 1-bit 가 1로 set 된다.(PAGE_MAPPING_MOVABLE)
         //  - THP 의 경우, 두번째 tail page 의 mapping 변수를 
         //    deferred list head 로 이용
-        //  - 
 
 		void *s_mem;			/* slab first object */
 		atomic_t compound_mapcount;	/* first tail page */ 
@@ -475,7 +474,8 @@ struct core_state {
 struct kioctx_table;
 struct mm_struct {
 	struct vm_area_struct *mmap;		/* list of VMAs */ 
-    // mm 이 가진 vm area 의 정보를 나타내는 single linked list 
+    // mm 이 가진 vm area 의 정보를 나타내는 single linked list  
+    // low vaddr -> high vaddr 순서로 연결
 	struct rb_root mm_rb;
     // vm_area_struct 와 관련된 rb- tree 로 rb tree 의 root 를 가리킴
 	u32 vmacache_seqnum;                   

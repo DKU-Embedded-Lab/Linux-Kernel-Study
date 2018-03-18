@@ -188,7 +188,8 @@ static inline int pmd_large(pmd_t pte)
 	return pmd_flags(pte) & _PAGE_PSE;
 }
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE 
+// THP 로 사용되는 pmd 인지 검사
 static inline int pmd_trans_huge(pmd_t pmd)
 {
     // _PAGE_PSE : THP 관련
@@ -196,7 +197,8 @@ static inline int pmd_trans_huge(pmd_t pmd)
 	return (pmd_val(pmd) & (_PAGE_PSE|_PAGE_DEVMAP)) == _PAGE_PSE;
 }
 
-#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD 
+// THP 로 사용되는 pud 인지 검사
 static inline int pud_trans_huge(pud_t pud)
 {
 	return (pud_val(pud) & (_PAGE_PSE|_PAGE_DEVMAP)) == _PAGE_PSE;

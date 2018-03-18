@@ -472,9 +472,12 @@ int ptep_test_and_clear_young(struct vm_area_struct *vma,
 {
 	int ret = 0;
 
-	if (pte_young(*ptep))
+	if (pte_young(*ptep)) // accessed bit 가 설정되어 있다면
 		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
 					 (unsigned long *) &ptep->pte);
+        // accessedbit 를 clear 해주고 기존설정되어 있던 
+        // 값을 가져옴 
+        // 즉. accessed bit clear 하고, clear 하기 전 값 가져옴
 
 	if (ret)
 		pte_update(vma->vm_mm, addr, ptep);

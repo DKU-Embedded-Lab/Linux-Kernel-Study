@@ -419,6 +419,7 @@ struct sched_entity {
 
 struct sched_rt_entity {
 	struct list_head		run_list;
+    // runnable task 들의 list
 	unsigned long			timeout;
 	unsigned long			watchdog_stamp;
 	unsigned int			time_slice; 
@@ -544,12 +545,15 @@ struct task_struct {
 #endif
 	/* -1 unrunnable, 0 runnable, >0 stopped: */
 	volatile long			state;
-    // kernel stack 은 2 page 크기의 kernel stack 을 가지며, 각 process 마다THREAD_STACK 크기만큼 kernel stack 
-    // 이 생성됨. context switch 시에 USER STACK 을 가리키던 SP 가 KERNEL STACK 을 가리키게 됨.
+    // TASK_RUNNING, TASK_INTERRUPTIBLE, TASK_UNINTERRUPTIBLE, TASK_STOPPED 등의 task 상태
 	void				*stack;
     // stack 즉 kernel stack 은 dup_task_struct 함수에서 thread 든, process 든 관련 없이 새로 생성됨 
+    // kernel stack 은 2 page 크기의 kernel stack 을 가지며, 각 process 마다THREAD_STACK 크기만큼 kernel stack 
+    // 이 생성됨. context switch 시에 USER STACK 을 가리키던 SP 가 KERNEL STACK 을 가리키게 됨.
 	atomic_t			usage;
-	/* Per task flags (PF_*), defined further below: */
+	/* Per task flags (PF_*), defined further below: */ 
+    // get_task_struct 또는 fork 호출시 증가되는 값으로 task_struct 의 reference count 를 의미
+    //
 	unsigned int			flags;
     // 현재 task 의 상태를 나타내는 flag 
     //  e.g. memory 할당하는 중, process 생성중...

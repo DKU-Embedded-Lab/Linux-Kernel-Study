@@ -66,27 +66,40 @@ static int page_idle_clear_pte_refs_one(struct page *page,
 		if (pvmw.pte) {
 			referenced = ptep_clear_young_notify(vma, addr,
 					pvmw.pte);
+            // pte 의 ACCESSED BIT clear 수행
 		} else if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
 			referenced = pmdp_clear_young_notify(vma, addr,
 					pvmw.pmd);
+            // THP 설정되어 있다면 pmd 의 ACCESSED BIT clear 수행
 		} else {
 			/* unexpected pmd-mapped page? */
 			WARN_ON_ONCE(1);
 		}
 	}
-
+    // ACCESSED BIT 가 설정되어 있었어서 ACCESSED BIT 를 clear 하고 
+    // 그전 값을 가져왔다면 referenced 는 false 가 아님
 	if (referenced) {
 		clear_page_idle(page);
+        // page 가 reference 되었으니 PG_idle clear 수행 
 		/*
 		 * We cleared the referenced bit in a mapping to this page. To
 		 * avoid interference with page reclaim, mark it young so that
 		 * page_referenced() will return > 0.
 		 */
 		set_page_young(page);
+        // idle page tracking 을 위해 page teble 의 accessed bit 를 
+        // clear 해주었으므로 page reclaim 에 영향을 주지 않게 
+        // PG_young 을 설정하여 추후, page reclaim 에서 page_referenced 
+        // 검사 시, true 반환되도록 해줌
 	}
 	return SWAP_AGAIN;
 }
-
+// 주어진 struct page 에 대해 idle page tracking 수행   
+// page 에 해당되는 pte 에 accessed bit 설정된 경우.. 
+//  - ACCESSED bit clear 
+//  - idle flag clear 
+//  - youg flag set 
+// 을 수행해줌
 static void page_idle_clear_pte_refs(struct page *page)
 {
 	/*
@@ -102,11 +115,15 @@ static void page_idle_clear_pte_refs(struct page *page)
 	if (!page_mapped(page) ||
 	    !page_rmapping(page))
 		return;
+    // pte map 된 page 인지 검사하여 map 되지 않은 page 라면 out 하고 
+    // map 된 page 라면 mapping flag 제거
 
 	need_lock = !PageAnon(page) || PageKsm(page);
 	if (need_lock && !trylock_page(page))
 		return;
-
+    // anonymous page 가 아니고, KSM page 인 경우, 
+    // idle page tracking 하는데 PG_locked 설정해 주어야 함. 
+    // 그전에 먼저 lock 기다려야 된다면 idle tracking pass 함
 	rmap_walk(page, (struct rmap_walk_control *)&rwc);
 
 	if (need_lock)

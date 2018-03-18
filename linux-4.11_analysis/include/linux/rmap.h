@@ -322,17 +322,19 @@ int page_mapped_in_vma(struct page *page, struct vm_area_struct *vma);
  * done: for checking traversing termination condition
  * anon_lock: for getting anon_lock by optimized way rather than default
  * invalid_vma: for skipping uninterested vma
- */
+ */ 
+// 
+// reverse mapping 관련 control structure
 struct rmap_walk_control {
 	void *arg;
     // rmap_one 함수에 전달될 argument
 	int (*rmap_one)(struct page *page, struct vm_area_struct *vma,
 					unsigned long addr, void *arg);
-    // page 를 가리키는 pte 를 찾아 PAGE_ACCESSED bit 를 clear 하는
-    // 함수 
+    // page 를 가리키는 pte 를 찾아 PAGE_ACCESSED bit 를 clear 하는 함수 
+    // e.g. page_referenced_one
 	int (*done)(struct page *page);
 	struct anon_vma *(*anon_lock)(struct page *page);
-    // page 와 연결된 anon_vma 를 lock 잡으며 가져오는 함수
+    // page 와 관련된 anon_vma 를 lock 잡으며 가져오는 함수
 	bool (*invalid_vma)(struct vm_area_struct *vma, void *arg);
     // VM_LOCKED 이거나 VM_MAYSHARE 등 page out 되면 안되는 page 
     // 들을 skip 하는 함수

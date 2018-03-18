@@ -1191,6 +1191,7 @@ static inline bool managed_zone(struct zone *zone)
 }
 
 /* Returns true if a zone has memory */
+// 가용 memory 를 가진 zone 인지 확인
 static inline bool populated_zone(struct zone *zone)
 {
 	return zone->present_pages;

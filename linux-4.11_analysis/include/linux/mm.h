@@ -1260,22 +1260,33 @@ void unmap_vmas(struct mmu_gather *tlb, struct vm_area_struct *start_vma,
  * @private:   private data for callbacks' usage
  *
  * (see the comment on walk_page_range() for more details)
- */
+ */ 
+// 
+// walk_page_range 함수를 통해 page table walk control struct 및 
+// 추가기능을 수행 할 수 있도록 해주는 것
 struct mm_walk {
 	int (*pud_entry)(pud_t *pud, unsigned long addr,
 			 unsigned long next, struct mm_walk *walk);
 	int (*pmd_entry)(pmd_t *pmd, unsigned long addr,
 			 unsigned long next, struct mm_walk *walk);
+    // 매번 non-empty pmd entry 를 walk 할 때마다 호출되어 수행 
+    // (huge pmd entry handling 가능하도록 구현되어야 함)
 	int (*pte_entry)(pte_t *pte, unsigned long addr,
 			 unsigned long next, struct mm_walk *walk);
+    // 매번 non-empty pte entry 를 walk 할 때마다 호출되어 수행     
 	int (*pte_hole)(unsigned long addr, unsigned long next,
 			struct mm_walk *walk);
+    // struct page 가 없는 page 에 대해 수행되는 함수 
+    // vm_flags 엣 VM_PFNMAP 설정시 수행
 	int (*hugetlb_entry)(pte_t *pte, unsigned long hmask,
 			     unsigned long addr, unsigned long next,
 			     struct mm_walk *walk);
 	int (*test_walk)(unsigned long addr, unsigned long next,
 			struct mm_walk *walk);
+    // vma 에 대해 page walk 수행 여부를 미리 검사 할 수 있도록 
+    // caller specific mechanism 을 구현할 수 있는 함수
 	struct mm_struct *mm;
+    // page table walk 를 수행하려는 process 의 mm
 	struct vm_area_struct *vma;
 	void *private;
 };
