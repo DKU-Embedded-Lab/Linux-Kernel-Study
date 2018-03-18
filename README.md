@@ -1,5 +1,5 @@
-# Professional-Linux-Kernel-Architecture
-Internal seminar materials to study Professional Linux Kernel Architecture.  
+# Linux-Kernel-Study-Material
+Personal commit&logs to study Linux Kernel.
 
 <!--
 Kernel study seminar material.
