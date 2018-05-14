@@ -568,10 +568,10 @@ struct fsnotify_mark_connector;
  * of the 'struct inode'
  */
 struct inode {
-	umode_t			i_mode;
+	umode_t			i_mode;		//파일타입과 권한
 	unsigned short		i_opflags;
-	kuid_t			i_uid;
-	kgid_t			i_gid;
+	kuid_t			i_uid;		//소유자 권한
+	kgid_t			i_gid;		//그룹 권한
 	unsigned int		i_flags;
 
 #ifdef CONFIG_FS_POSIX_ACL
@@ -588,7 +588,7 @@ struct inode {
 #endif
 
 	/* Stat data, not accessed from path walking */
-	unsigned long		i_ino;
+	unsigned long		i_ino;		//VFS inode에 유일하게 각각 부여되는 번호
 	/*
 	 * Filesystems may only read i_nlink directly.  They shall use the
 	 * following functions for modification:
@@ -597,19 +597,19 @@ struct inode {
 	 *    inode_(inc|dec)_link_count
 	 */
 	union {
-		const unsigned int i_nlink;
+		const unsigned int i_nlink;	// hard link 개수
 		unsigned int __i_nlink;
 	};
-	dev_t			i_rdev;
-	loff_t			i_size;
-	struct timespec		i_atime;
-	struct timespec		i_mtime;
-	struct timespec		i_ctime;
+	dev_t			i_rdev;		// 장치를 나타낼 때 사용, 장치의 데이터 구조 포인터를 포함함
+	loff_t			i_size;		// file length
+	struct timespec		i_atime;	// last access time
+	struct timespec		i_mtime;	// last modify time
+	struct timespec		i_ctime;	// last inode change time
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
 	unsigned int		i_blkbits;
 	enum rw_hint		i_write_hint;
-	blkcnt_t		i_blocks;
+	blkcnt_t		i_blocks;	// block size 보통 4KB
 
 #ifdef __NEED_I_SIZE_ORDERED
 	seqcount_t		i_size_seqcount;
@@ -640,7 +640,7 @@ struct inode {
 		struct rcu_head		i_rcu;
 	};
 	atomic64_t		i_version;
-	atomic_t		i_count;
+	atomic_t		i_count;	// 같은 inode구조에 얼마나 많은 프로세서가 접근했는지 카운트
 	atomic_t		i_dio_count;
 	atomic_t		i_writecount;
 #ifdef CONFIG_IMA
@@ -649,12 +649,12 @@ struct inode {
 	const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 	struct file_lock_context	*i_flctx;
 	struct address_space	i_data;
-	struct list_head	i_devices;
+	struct list_head	i_devices;		//device file handling에 연결된다.
 	union {
-		struct pipe_inode_info	*i_pipe;
-		struct block_device	*i_bdev;
-		struct cdev		*i_cdev;
-		char			*i_link;
+		struct pipe_inode_info	*i_pipe;	//pipe 관련 정보
+		struct block_device	*i_bdev;	// block 장치에 쓰임
+		struct cdev		*i_cdev;	// 특정장치들이 이용
+		char			*i_link;	
 		unsigned		i_dir_seq;
 	};
 
