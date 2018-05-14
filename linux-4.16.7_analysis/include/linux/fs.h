@@ -579,7 +579,7 @@ struct inode {
 	struct posix_acl	*i_default_acl;
 #endif
 
-	const struct inode_operations	*i_op;
+	const struct inode_operations	*i_op;	//inode operation pointer
 	struct super_block	*i_sb;
 	struct address_space	*i_mapping;
 
@@ -1741,21 +1741,21 @@ struct file_operations {
 } __randomize_layout;
 
 struct inode_operations {
-	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
-	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
-	int (*permission) (struct inode *, int);
-	struct posix_acl * (*get_acl)(struct inode *, int);
+	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);		//dentry object에 포함된 filename에 대응하는 inode를 directory에서 탐색
+	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);	//
+	int (*permission) (struct inode *, int);						//access mode 허용 확인
+	struct posix_acl * (*get_acl)(struct inode *, int);					// 
 
-	int (*readlink) (struct dentry *, char __user *,int);
+	int (*readlink) (struct dentry *, char __user *,int);					//buffer에서 file pathname 복사
 
-	int (*create) (struct inode *,struct dentry *, umode_t, bool);
-	int (*link) (struct dentry *,struct inode *,struct dentry *);
-	int (*unlink) (struct inode *,struct dentry *);
-	int (*symlink) (struct inode *,struct dentry *,const char *);
-	int (*mkdir) (struct inode *,struct dentry *,umode_t);
-	int (*rmdir) (struct inode *,struct dentry *);
-	int (*mknod) (struct inode *,struct dentry *,umode_t,dev_t);
-	int (*rename) (struct inode *, struct dentry *,
+	int (*create) (struct inode *,struct dentry *, umode_t, bool);				//new inode 생성
+	int (*link) (struct dentry *,struct inode *,struct dentry *);				//link(old, dir, new)로써, 새로운 hard link 생성
+	int (*unlink) (struct inode *,struct dentry *);						//hard link 삭제
+	int (*symlink) (struct inode *,struct dentry *,const char *);				//symbolic link를 위한 새로운 inode 생성
+	int (*mkdir) (struct inode *,struct dentry *,umode_t);					//새로운 directoty로 inode 생성
+	int (*rmdir) (struct inode *,struct dentry *);						//dentry object에 있는 directory 삭제
+	int (*mknod) (struct inode *,struct dentry *,umode_t,dev_t);				//new disk inode 생성, mode는 파일타입 설정, dev는major number 지정
+	int (*rename) (struct inode *, struct dentry *,						//디렉토리 내부에서 심볼릭링크를 위해 새로운 inode 생성
 			struct inode *, struct dentry *, unsigned int);
 	int (*setattr) (struct dentry *, struct iattr *);
 	int (*getattr) (const struct path *, struct kstat *, u32, unsigned int);
