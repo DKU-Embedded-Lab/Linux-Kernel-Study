@@ -59,9 +59,9 @@ struct files_struct {
    * written part on a separate cache line in SMP
    */
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
-	unsigned int next_fd;
-	unsigned long close_on_exec_init[1];
-	unsigned long open_fds_init[1];
+	unsigned int next_fd;					//new file open시 사용
+	unsigned long close_on_exec_init[1];			//bitmap, 실행 중에 종료할 파일 디스크립터 set bit 포함
+	unsigned long open_fds_init[1];				//bitmap, 파일 디스크립터를open할 때 초기화함
 	unsigned long full_fds_bits_init[1];
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
 };
