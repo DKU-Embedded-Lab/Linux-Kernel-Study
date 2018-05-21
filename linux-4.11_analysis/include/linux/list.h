@@ -197,6 +197,7 @@ static inline int list_is_last(const struct list_head *list,
  * list_empty - tests whether a list is empty
  * @head: the list to test.
  */
+// list 가 비어있다면 true 반환
 static inline int list_empty(const struct list_head *head)
 {
 	return READ_ONCE(head->next) == head;

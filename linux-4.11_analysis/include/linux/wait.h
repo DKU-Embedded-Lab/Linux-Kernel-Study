@@ -133,6 +133,7 @@ init_waitqueue_func_entry(wait_queue_t *q, wait_queue_func_t func)
  * Also note that this 'optimization' trades a spin_lock() for an smp_mb(),
  * which (when the lock is uncontended) are of roughly equal cost.
  */
+// waitqueue 의 대기 list존재 여부를 검사
 static inline int waitqueue_active(wait_queue_head_t *q)
 {
 	return !list_empty(&q->task_list);

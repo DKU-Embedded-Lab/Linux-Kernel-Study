@@ -1167,7 +1167,7 @@ out:
 				num_poisoned_pages_inc();
 		}
 	} else {
-        // migratino 실패활 경우  
+        // migration 실패활 경우  
 		if (rc != -EAGAIN) {
 			if (likely(!__PageMovable(page))) {
 				putback_lru_page(page);

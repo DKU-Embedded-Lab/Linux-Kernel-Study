@@ -107,6 +107,7 @@ union swap_header {
  * current->reclaim_state points to one of these when a task is running
  * memory reclaim
  */
+// page reclaim 동작시에 task_struct 가 reference 하는 reclaim 정보 구조체
 struct reclaim_state {
 	unsigned long reclaimed_slab;
 };

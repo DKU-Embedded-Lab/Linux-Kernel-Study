@@ -251,12 +251,30 @@ int __bitmap_weight(const unsigned long *bitmap, unsigned int bits)
 }
 EXPORT_SYMBOL(__bitmap_weight);
 
+// 
+// e.g. 64 bit 에서 start 가 7 , len : 2 , map 의 값이 0 이라면...   
+//  *p                          : 0000 0000 .... 0000 0000 0000
+//  BIT_WORD                    : 7  / 64  -> 0 
+//  size                        : 9
+//  bits_to_set                 : 64-(7%64)-> 57-------
+//                                                    |
+//                                                    *
+//  mask_to_set                 : 1111 1111 .... 1111 1000 0000 
+//  BITMAP_LAST_WORD_MASK(size) : 0000 0000 .... 0001 1111 1111 
+//
+//  ->
+//  mask_to_set                 : 0000 0000 .... 0001 1000 0000 
+//  *p                          : 0000 0000 .... 0000 0000 0000
+//  ->
+//  *p                          : 0000 0000 .... 0001 1000 0000 
+//  start 번위치 bit 부터 len 만큼의 bit 를 설정 해줌
+//
 void bitmap_set(unsigned long *map, unsigned int start, int len)
 {
 	unsigned long *p = map + BIT_WORD(start);
 	const unsigned int size = start + len;
 	int bits_to_set = BITS_PER_LONG - (start % BITS_PER_LONG);
-	unsigned long mask_to_set = BITMAP_FIRST_WORD_MASK(start);
+	unsigned long mask_to_set = BITMAP_FIRST_WORD_MASK(start);    
 
 	while (len - bits_to_set >= 0) {
 		*p |= mask_to_set;
@@ -271,6 +289,26 @@ void bitmap_set(unsigned long *map, unsigned int start, int len)
 	}
 }
 EXPORT_SYMBOL(bitmap_set);
+
+// 
+// e.g. 64 bit 에서 start 가 7 , len : 2 , map 의 값이 0 이라면...  
+//  *p                          : 0000 0000 .... 0001 1100 0000
+//  BIT_WORD                    : 7  / 64  -> 0 
+//  size                        : 9
+//  bits_to_set                 : 64-(7%64)-> 57-------
+//                                                    |
+//                                                    *
+//  mask_to_clear               : 1111 1111 .... 1111 1000 0000 
+//  BITMAP_LAST_WORD_MASK(size) : 0000 0000 .... 0001 1111 1111 
+//
+//  ->
+//  mask_to_clear               : 0000 0000 .... 0001 1000 0000 
+//  ~mask_to_clear              : 1111 1111 .... 1110 0111 1111
+//  *p                          : 0000 0000 .... 0001 1100 0000 
+//  ->
+//  *p                          : 0000 0000 .... 0000 0100 0000 
+//
+//  start bit 부터 len 만큼의 bit 를 clear 해줌
 
 void bitmap_clear(unsigned long *map, unsigned int start, int len)
 {

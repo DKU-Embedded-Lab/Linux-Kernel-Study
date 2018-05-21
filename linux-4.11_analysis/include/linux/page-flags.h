@@ -598,6 +598,7 @@ static inline int PageTransHuge(struct page *page)
  * and hugetlbfs pages, so it should only be called when it's known
  * that hugetlbfs pages aren't involved.
  */
+// hugetlbfs 이거나THP 라면 1 반환
 static inline int PageTransCompound(struct page *page)
 {
 	return PageCompound(page);
