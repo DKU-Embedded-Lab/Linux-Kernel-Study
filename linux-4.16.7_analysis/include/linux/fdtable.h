@@ -24,7 +24,10 @@
 #define NR_OPEN_DEFAULT BITS_PER_LONG
 
 struct fdtable {
+	//프로세스가 현재 컨트롤 할 수 있는 파일 오브젝트와 디스크립터의 최대 갯수를 나타낸다.
+	//기본적으로 제한이 없지만 data struct를 관리하기 위해 필요하다.
 	unsigned int max_fds;
+	//RCU mechanism을 통해 락에 관계없이 읽을 수 있으므로, 속도면에서 좋아진다.
 	struct file __rcu **fd;      /* current fd array */
 	unsigned long *close_on_exec;
 	unsigned long *open_fds;
@@ -59,11 +62,12 @@ struct files_struct {
    * written part on a separate cache line in SMP
    */
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
-	unsigned int next_fd;					//new file open시 사용
+	unsigned int next_fd;					//new file open시 사용된 파일 디스크립터 번호를 나타냄
+	//embedded_fd_set 에서 unsigned long으로 변경됨 검색필요
 	unsigned long close_on_exec_init[1];			//bitmap, 실행 중에 종료할 파일 디스크립터 set bit 포함
 	unsigned long open_fds_init[1];				//bitmap, 파일 디스크립터를open할 때 초기화함
 	unsigned long full_fds_bits_init[1];
-	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
+	struct file __rcu * fd_array[NR_OPEN_DEFAULT]; 		//열린 모두의 struct file을 포인터로 나타냄, NR_OPEN_DEFAULT == BITS_PER_LONG -> 32bits=32, 64bits=64
 };
 
 struct file_operations;

@@ -782,6 +782,7 @@ struct task_struct {
 	unsigned long			last_switch_count;
 #endif
 	/* Filesystem information: */
+	//fs_struct 위치 : /include/linux/sched.h -> /include/linux/tdtable.h
 	struct fs_struct		*fs;
 
 	/* Open file information: */
