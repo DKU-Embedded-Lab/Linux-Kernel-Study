@@ -872,7 +872,9 @@ static inline int zone_to_nid(struct zone *zone)
 
 #ifdef NODE_NOT_IN_PAGE_FLAGS
 extern int page_to_nid(const struct page *page);
-#else
+#else 
+// page 의 flag 값을 통해 page 가 속한 pg_data_t 의 nid 를 가져옴 
+// pg_data_t 는 NODE_DATA 매크로를 통해 가져올 수 있음. 
 static inline int page_to_nid(const struct page *page)
 {
 	return (page->flags >> NODES_PGSHIFT) & NODES_MASK;

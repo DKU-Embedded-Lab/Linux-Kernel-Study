@@ -3102,12 +3102,16 @@ static void age_active_anon(struct pglist_data *pgdat,
 	} while (memcg);
 }
 
+// 요청 order 후 free page 의 값이 WMARK_HIGH 보다 작을경우.. false 반환  
+// 요청 order 만족 page 가 buddy에 하나도 없을 경우... false 
 static bool zone_balanced(struct zone *zone, int order, int classzone_idx)
 {
 	unsigned long mark = high_wmark_pages(zone);
 
 	if (!zone_watermark_ok_safe(zone, order, mark, classzone_idx))
 		return false;
+        // 아직 요청 order 의 처리 결과의 free page 가 WMARK_HIGH 보다 
+        // 작아지게 될 상황이라면 balance 되지 않은 상태이므로 false 반환
 
 	/*
 	 * If any eligible zone is balanced then the node is not considered
@@ -3126,6 +3130,8 @@ static bool zone_balanced(struct zone *zone, int order, int classzone_idx)
  *
  * Returns true if kswapd is ready to sleep
  */
+// 
+// kswapd를 통해 page reclaim 을 수행한 결과가 high-watermark 값까지 도달했는지 검사
 static bool prepare_kswapd_sleep(pg_data_t *pgdat, int order, int classzone_idx)
 {
 	int i;
@@ -3154,9 +3160,13 @@ static bool prepare_kswapd_sleep(pg_data_t *pgdat, int order, int classzone_idx)
 
 		if (!zone_balanced(zone, order, classzone_idx))
 			return false;
+            // free page가 high watermark 값보다 작은 상태라면 zone_balanced 에서 false 값 반환
+            // 이므로 결과적으로 prepare_kswapd_sleep 에서 false 반환 되어 kswapd page reclaim 수행
 	}
 
 	return true;
+    // 모든 zone 이 balance 되어 있으므로 kswapd 가 sleep 할 필요 없음
+    // 
 }
 
 /*
@@ -3337,7 +3347,7 @@ out:
 	 */
 	return sc.order;
 }
-
+// kswapd 수행 후, WMARK_LOW 에 도달하게 되어 kswapd 가 깨어나기 전까지 sleep 
 static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_order,
 				unsigned int classzone_idx)
 {
@@ -3351,6 +3361,7 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 
 	/* Try to sleep for a short interval */
 	if (prepare_kswapd_sleep(pgdat, reclaim_order, classzone_idx)) {
+        // kswapd sleep 과정 
 		/*
 		 * Compaction records what page blocks it recently failed to
 		 * isolate pages from and skips them in the future scanning.
@@ -3381,6 +3392,7 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 		prepare_to_wait(&pgdat->kswapd_wait, &wait, TASK_INTERRUPTIBLE);
 	}
 
+    // kswapd 를 sleep 하지 않고 page reclaim 수행해주어야 하므로 필요한 설정값 해줌
 	/*
 	 * After a short sleep, check if it was a premature sleep. If not, then
 	 * go fully to sleep until explicitly woken up.
@@ -3424,7 +3436,8 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
  *
  * If there are applications that are active memory-allocators
  * (most normal use), this basically shouldn't matter.
- */
+ */ 
+// kswapd process 가 
 static int kswapd(void *p)
 {
 	unsigned int alloc_order, reclaim_order, classzone_idx;
@@ -3435,7 +3448,7 @@ static int kswapd(void *p)
 		.reclaimed_slab = 0,
 	};
 	const struct cpumask *cpumask = cpumask_of_node(pgdat->node_id);
-
+    // node 의 cpumask 를 가져옴
 	lockdep_set_current_reclaim_state(GFP_KERNEL);
 
 	if (!cpumask_empty(cpumask))
@@ -3455,17 +3468,24 @@ static int kswapd(void *p)
 	 * trying to free the first piece of memory in the first place).
 	 */
 	tsk->flags |= PF_MEMALLOC | PF_SWAPWRITE | PF_KSWAPD;
+    // PF_MEMALLOC 플래그를 통해 현재 task struct 가 page reclaim 중임을 설정 
+    // PF_SWAPWRITE 플래그를 통해 swap space 로의 write 허용 
+    // PF_KSWAPD 플래그를 통해 현재 task 가 kswapd 임을 설정
 	set_freezable();
 
 	pgdat->kswapd_order = alloc_order = reclaim_order = 0;
+    // kswapd 초기에 allocation order 를 0 으로 초기화 
+    // kswapd_order는 추후 kswapd 를 깨우는 기준들 중 하나로 사용
 	pgdat->kswapd_classzone_idx = classzone_idx = 0;
+    // kswapd_classzone_idx는 추후 kswapd 를 깨우는 기준들 중 하나로 사용
+
 	for ( ; ; ) {
 		bool ret;
 
 kswapd_try_sleep:
 		kswapd_try_to_sleep(pgdat, alloc_order, reclaim_order,
 					classzone_idx);
-
+        // 기준에 적합하지 않을 시, 잠들 수 있도록 계속 검사
 		/* Read the new order and classzone_idx */
 		alloc_order = reclaim_order = pgdat->kswapd_order;
 		classzone_idx = pgdat->kswapd_classzone_idx;
@@ -3494,6 +3514,7 @@ kswapd_try_sleep:
 		trace_mm_vmscan_kswapd_wake(pgdat->node_id, classzone_idx,
 						alloc_order);
 		reclaim_order = balance_pgdat(pgdat, alloc_order, classzone_idx);
+        // balance_pgdat 함수를 통해 마지막에 회수한 page order를 반환
 		if (reclaim_order < alloc_order)
 			goto kswapd_try_sleep;
 
@@ -3607,6 +3628,8 @@ static int kswapd_cpu_online(unsigned int cpu)
  * This kswapd start function will be called by init and node-hot-add.
  * On node-hot-add, kswapd will moved to proper cpus if cpus are hot-added.
  */
+// 
+// kswapd kernel thread 를 동작시키는 함수
 int kswapd_run(int nid)
 {
 	pg_data_t *pgdat = NODE_DATA(nid);

@@ -1976,6 +1976,11 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
 		set_page_pfmemalloc(page);
 	else
 		clear_page_pfmemalloc(page);
+#ifdef CONFIG_SON 
+#if SON_PBSTAT_ENABLE
+
+#endif
+#endif
 }
 
 /*
@@ -3223,7 +3228,9 @@ static inline bool should_fail_alloc_page(gfp_t gfp_mask, unsigned int order)
  * to check in the allocation paths if no pages are free.
  */
 // 현재 zone 의 free page 가 mark 의 기준 경계값 벗어나는지 검사 
-// free page 가 wmark 보다 작다면 false
+// free page 가 wmark 보다 작다면 false 
+// free page 의 수가 mark 보다는 많은데, 요청 order 를 만족하는 연속적 page 가 
+// 없다면 false 반환
 bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 			 int classzone_idx, unsigned int alloc_flags,
 			 long free_pages)
@@ -3262,7 +3269,7 @@ bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 	 */
 	if (free_pages <= min + z->lowmem_reserve[classzone_idx])
 		return false;
-    // free_page 의 양이 OOM 막기 위해 예약된 lowmem_reserve 를 제외한 min 보다 작다면 
+    // free_page 의 양이 OOM 막기 위해 예약된 lowmem_reserve 를 제외한 mark 보다 작다면 
     // 기준 watermark 보다 작게 되므로 false 반환
     //
 	/* If this is an order-0 request then the watermark is fine */
@@ -3284,8 +3291,12 @@ bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 		for (mt = 0; mt < MIGRATE_PCPTYPES; mt++) {
 			if (!list_empty(&area->free_list[mt]))
 				return true;
+                // 하나라도 있다면 true 반환 
+                // 여기서 true 가 반환되어 kcompactd 가 wakeup됨
 		}
-        // pcp list 에도 없는지 검사 
+        // MIGRATE_UNMOVABLE, MIGRATE_MOVABLE, MIGRATE_RECLAIMABLE 의 세가지 
+        // type 에 대해 free_list 에 하나라도 제공가능한 free page 가 
+        // 있는지 검사
 
 #ifdef CONFIG_CMA
 		if ((alloc_flags & ALLOC_CMA) &&
@@ -3338,7 +3349,8 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 	return __zone_watermark_ok(z, order, mark, classzone_idx, alloc_flags,
 					free_pages);
 }
-
+// struct zone 으로의 order 에 넘어온 값의 요청에 대해 freepage 가 mark 의 WMARK 값보다 작은지 검사
+// 작다면 false 반환
 bool zone_watermark_ok_safe(struct zone *z, unsigned int order,
 			unsigned long mark, int classzone_idx)
 {
@@ -3349,6 +3361,8 @@ bool zone_watermark_ok_safe(struct zone *z, unsigned int order,
 
 	return __zone_watermark_ok(z, order, mark, classzone_idx, 0,
 								free_pages);
+    // 현재 zone 에서 order 에 대한 요청 처리 시, order 즉 high watermark 보다 free 
+    // page 가 작아진다면 false  반환
 }
 
 #ifdef CONFIG_NUMA
@@ -3498,6 +3512,7 @@ try_this_zone:
 		if (page) {
             // order 에 해당하는 연속적 page 가 있어서 할당 해 줄 수 있는 경우
 			prep_new_page(page, order, gfp_mask, alloc_flags);
+
             // 할당해줄 연속된 page 를 반환하기 전 점검 및 page allocation 후, 
             // _refcount, page clearing, compound page 설정 등 
 			/*
@@ -6622,7 +6637,8 @@ static unsigned long __paginginit calc_memmap_size(unsigned long spanned_pages,
  *   - clear the memory bitmaps
  *
  * NOTE: pgdat should get zeroed by caller.
- */
+ */ 
+// zone 초기화에 수행되는 함수
 static void __paginginit free_area_init_core(struct pglist_data *pgdat)
 {
 	enum zone_type j;

@@ -56,7 +56,14 @@ struct page {
     //     tail page 는 compound_head 라는 filed 에 head page 의 주소가 담겨 
     //     있다면 tail page 인거임
     //  - compound page 가 pte 와 pmd 에 모두 map 되어 있는상태라면 
-    //    첫번째 tail page 의 flag 에 PG_double_map 이 설정되어 있음
+    //    첫번째 tail page 의 flag 에 PG_double_map 이 설정되어 있음 
+    //  - flag 를 통해 현재 page가 어느 zone에 속해 있는지 구할 수도 있음. 
+    //    page_zonenum 함수에서 page->flags >> ZONES_PGSHIFT) & ZONES_MASK 
+    //    연산을 통해 zone type 을 가져옴
+    //  - flag 를 통해 현재 page가 어느 node에 속해 있는지 구할 수도 있음. 
+    //    page_to_nid 함수에서 page->flags >> NODES_PGSHIFT) & NODES_MASK 
+    //    연산을 통해 node id를 가져옴 
+    //    page_pgdat 를 통해 pg_data_t를 가져오기도 가능.
     union {
 		struct address_space *mapping;	/* If low bit clear, points to
 						 * inode address_space, or NULL.

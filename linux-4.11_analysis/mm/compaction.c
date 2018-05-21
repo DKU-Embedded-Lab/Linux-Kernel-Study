@@ -327,7 +327,8 @@ static void __reset_isolation_suitable(struct zone *zone)
 	reset_cached_positions(zone);
     // migrate, free scanner 의 cache 된 위치 정보 초기화
 }
-
+// 
+// kcompactd 가 scan 하며 설정한 page block 에 대한 hint bit 들을 모두 clear
 void reset_isolation_suitable(pg_data_t *pgdat)
 {
 	int zoneid;
@@ -1045,6 +1046,10 @@ isolate_success:
         // isolate 한 
 		nr_isolated++;
 
+#ifdef CONFIG_SON  
+        page->son_compact_target=1;
+#endif
+
 		/*
 		 * Record where we could have freed pages by migration and not
 		 * yet flushed them to buddy allocator.
@@ -1401,7 +1406,7 @@ static struct page *compaction_alloc(struct page *migratepage,
         // freepages list 가 비어있다면
 		if (!cc->contended)
 			isolate_freepages(cc);
-            // free scanner 가동
+            // free scanner 가동작
         // free scanner 가동후에도 freepages list 가 
         // 비어있다면 page 가져오기 실패 및 종료
 		if (list_empty(&cc->freepages))
@@ -1746,6 +1751,8 @@ static enum compact_result __compaction_suitable(struct zone *zone, int order,
 		return COMPACT_CONTINUE;
         // 그냥 zone 상태 관련 없이 compaction 수행
 	watermark = zone->watermark[alloc_flags & ALLOC_WMARK_MASK];
+    // kcompactd 에 의한 호출의 경우, alloc_flags가 0 이므로 
+    // watermark 는 WMARK_MIN 이 된다.
 	/*
 	 * If watermarks for high-order allocation are already met, there
 	 * should be no need for compaction at all.
@@ -1832,8 +1839,12 @@ enum compact_result compaction_suitable(struct zone *zone, int order,
         //
         // fragindex
         //  - 0 :        page 할당 불가능 상태.(compaction 해봤자, free page 확보 불가능)
-        //  - 0 ~ 1000 : 0 에 가까울 수록 compaction 결과 free page 확보 성공률이 낮음
-        //               1000 에 가까울 수록 compaction 결과 free 확보 성공률 높음
+        //  - 0 ~ 1000 : 0 에 가까울 수록    
+        //                 - compaction 결과 free page 확보 성공률이 낮음 
+        //                 - 그냥 free page가 부족한게 원인임. 
+        //               1000 에 가까울 수록 
+        //                 - compaction 결과 free 확보 성공률 높음
+        //                 - fragmentation이 원인임.
         //  - -1000 :    page 할당 가능 상태. (compaction 필요 없음)
 
 		fragindex = fragmentation_index(zone, order);
@@ -2390,9 +2401,11 @@ static bool kcompactd_node_suitable(pg_data_t *pgdat)
 			continue;
 
 		if (compaction_suitable(zone, pgdat->kcompactd_max_order, 0,
-					classzone_idx) == COMPACT_CONTINUE)
-			return true;
-	}
+					classzone_idx) == COMPACT_CONTINUE){
+            trace_printk("son,compaction_suitable -> true")
+			return true;    
+	    }
+    }
 
 	return false;
 }
@@ -2474,7 +2487,8 @@ static void kcompactd_do_work(pg_data_t *pgdat)
 	if (pgdat->kcompactd_classzone_idx >= cc.classzone_idx)
 		pgdat->kcompactd_classzone_idx = pgdat->nr_zones - 1;
 }
-
+// 
+// order : kswapd 로요청된 할당 order 
 void wakeup_kcompactd(pg_data_t *pgdat, int order, int classzone_idx)
 {
 	if (!order)

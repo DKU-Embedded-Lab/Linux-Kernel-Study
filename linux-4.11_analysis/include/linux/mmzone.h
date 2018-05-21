@@ -993,7 +993,10 @@ typedef struct pglist_data {
 					   mem_hotplug_begin/end() */ 
     // 현재 zone 의 swap 을 담당하고 있는 kswapd 의 task_struct 를 가리킴
 	int kswapd_order;
+    // kswapd 의 sleep 여부 판단 기준-1 
+    // 설정된 order 보다 더 큰 order가 요청 되었는지..
 	enum zone_type kswapd_classzone_idx;
+    // kswapd 의 sleep 여부 판단 기준-2
 
 #ifdef CONFIG_COMPACTION
 	int kcompactd_max_order;

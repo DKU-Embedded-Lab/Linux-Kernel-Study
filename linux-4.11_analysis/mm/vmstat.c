@@ -925,10 +925,14 @@ static int __fragmentation_index(unsigned int order, struct contig_page_info *in
 /* Same as __fragmentation index but allocs contig_page_info on stack */
 // 
 // fragmentation_index 를 계산 수행. 
-//  - 0 : page 할당 불가능 상태.(compaction 해봤자, free page 확보 불가능)
-//  - 0 ~ 1000 : 0 에 가까울 수록 compaction 결과 free page 확보 성공률이 낮고,
-//               1000 에 가까울 수록 compaction 결과 free 확보 성공률 높은
-//  - -1000 : page 할당 가능 상태. (compaction 필요 없음)
+//  - 0 :        page 할당 불가능 상태.(compaction 해봤자, free page 확보 불가능)
+//  - 0 ~ 1000 : 0 에 가까울 수록    
+//                 - compaction 결과 free page 확보 성공률이 낮음 
+//                 - 그냥 free page가 부족한게 원인임. 
+//               1000 에 가까울 수록 
+//                 - compaction 결과 free 확보 성공률 높음
+//                 - fragmentation이 원인임.
+//  - -1000 :    page 할당 가능 상태. (compaction 필요 없음)
 int fragmentation_index(struct zone *zone, unsigned int order)
 {
 	struct contig_page_info info;

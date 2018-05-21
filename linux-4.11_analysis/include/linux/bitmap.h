@@ -183,7 +183,34 @@ extern int bitmap_print_to_pagebuf(bool list, char *buf,
 				   const unsigned long *maskp, int nmaskbits);
 
 #define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) & (BITS_PER_LONG - 1)))
-#define BITMAP_LAST_WORD_MASK(nbits) (~0UL >> (-(nbits) & (BITS_PER_LONG - 1)))
+// e.g. 64bit 에서 start : 8 이면... 
+// 16진으로 ... > (~0UL << ( 0x0000 0000 0000 00008 & 0x0000 0000 0000 0000 003F) 
+// 2진으로   ...> (~0UL >> (   0000 0000 .... 0000 1000 
+//                           & 0000 0000 .... 0011 1111 ))
+//           ---> ( 1111 1111 .... 1111 1111 << 8 )
+//
+//           ==> 1111 1111 .... 0000 0000
+//               LSB 부터 start-bit 만큼의 0-bitmask 생성
+
+
+#define BITMAP_LAST_WORD_MASK(nbits) (~0UL >> (-(nbits) & (BITS_PER_LONG - 1))) 
+// e.g. 64bit 에서 nbits : 8 이면... 
+// 16진으로 ... > (~0UL >> ( 0xFFFF FFFF FFFF FFF8 & 0x0000 0000 0000 0000 003F) 
+// 2진으로   ...> (~0UL >> (   1111 1111 .... 1111 1000 
+//                           & 0000 0000 .... 0011 1111 ))
+//           ---> ( 1111 1111 .... 1111 1111 >> 56 )
+//
+//           ==> 0000 0000 .... 1111 1111
+//               LSB 부터 start-bit 의 1-bitmask 생성
+
+// e.g. 64bit 에서 nbits : 15 이면... 
+// 16진으로 ... > (~0UL >> ( 0xFFFF FFFF FFFF FFF1 & 0x0000 0000 0000 0000 003F) 
+// 2진으로   ...> (~0UL >> (   1111 1111 .... 1111 0001
+//                           & 0000 0000 .... 0011 1111 ))
+//           ---> ( 1111 1111 .... 1111 1111 >> 49 )
+//
+//           ==> 0000 0000 .... 0000 0111 1111 1111 1111 
+//               LSB 부터 start-bit 의 1-bitmask 생성
 
 #define small_const_nbits(nbits) \
 	(__builtin_constant_p(nbits) && (nbits) <= BITS_PER_LONG)
@@ -307,14 +334,15 @@ static inline int bitmap_full(const unsigned long *src, unsigned int nbits)
 
 	return find_first_zero_bit(src, nbits) == nbits;
 }
-
+// src 에서 nbit 이내에 1 로 설정된 bit 의 수를 반환
 static __always_inline int bitmap_weight(const unsigned long *src, unsigned int nbits)
 {
 	if (small_const_nbits(nbits))
 		return hweight_long(*src & BITMAP_LAST_WORD_MASK(nbits));
 	return __bitmap_weight(src, nbits);
 }
-
+// src 의 내용에서 하위 nbit 의 bit 만큼의 값을 가져와 
+// shift 만큼 shift 연산 수행하여 dst 에 저장
 static inline void bitmap_shift_right(unsigned long *dst, const unsigned long *src,
 				unsigned int shift, int nbits)
 {
