@@ -859,9 +859,9 @@ struct file {
 		struct llist_node	fu_llist;
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
-	struct path		f_path;
+	struct path		f_path;			//filename과 inode 관계, file이 있는 filesystem의 마운트 정보를 캡슐화해서 가지고 있다.
 	struct inode		*f_inode;	/* cached value */
-	const struct file_operations	*f_op;
+	const struct file_operations	*f_op;		//호출된 file operation의 함수를 명시한다.
 
 	/*
 	 * Protects f_ep_links, f_flags.
@@ -870,15 +870,16 @@ struct file {
 	spinlock_t		f_lock;
 	enum rw_hint		f_write_hint;
 	atomic_long_t		f_count;
-	unsigned int 		f_flags;
-	fmode_t			f_mode;
+	unsigned int 		f_flags;		//open syscall에서 추가적으로 전달된 프래그들을 저장한다.
+	fmode_t			f_mode;			//파일이 열리면서 전달된 모드를 저장한다. (ex) r, w, rw
 	struct mutex		f_pos_lock;
-	loff_t			f_pos;
-	struct fown_struct	f_owner;
+	loff_t			f_pos;			//현재 읽고있는 파일 위치를 나타내며, 파일의 시작 위치부터 바이트 단위로 offset으로 나타낸다.
+	//unsigned int 	f_uid, f_gid --> delete
+	struct fown_struct	f_owner;		//현재 file과 작업 중인 프로세스를 나타냄
 	const struct cred	*f_cred;
-	struct file_ra_state	f_ra;
+	struct file_ra_state	f_ra;			//미리 읽기 특성 저장, 실제로 데이터 요청이 오기전에 미리 읽어야하는 여부와 그 방법을 지정한다. 이는 성능을 향상시킨다.
 
-	u64			f_version;
+	u64			f_version;		//캐시된 오브젝트의 일관성을 위해, 연관된 inode와 호환되는지를 체크할 때 사용한다.
 #ifdef CONFIG_SECURITY
 	void			*f_security;
 #endif
@@ -890,7 +891,7 @@ struct file {
 	struct list_head	f_ep_links;
 	struct list_head	f_tfile_llink;
 #endif /* #ifdef CONFIG_EPOLL */
-	struct address_space	*f_mapping;
+	struct address_space	*f_mapping;		//file이 연관되있는 inode가 속한 주소 공간을 가르킨다.
 	errseq_t		f_wb_err;
 } __randomize_layout
   __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */

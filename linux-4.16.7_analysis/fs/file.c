@@ -152,6 +152,8 @@ static int expand_fdtable(struct files_struct *files, unsigned int nr)
 	struct fdtable *new_fdt, *cur_fdt;
 
 	spin_unlock(&files->file_lock);
+	//최대 가능한 entry 개수를 파일 디스크립트 테이블에 할당
+	//확장한 bitmap을 위해 메모리를 확보
 	new_fdt = alloc_fdtable(nr);
 
 	/* make sure all __fd_install() have seen resize_in_progress
@@ -173,7 +175,10 @@ static int expand_fdtable(struct files_struct *files, unsigned int nr)
 	}
 	cur_fdt = files_fdtable(files);
 	BUG_ON(nr < cur_fdt->max_fds);
+	
+	//이전의 파일 디스크립터 테이블 내용을 새로운 것에 복사
 	copy_fdtable(new_fdt, cur_fdt);
+	//RCU 함수로 포인터를 새로운 파일 디스크립터 테이블로 변경한다.
 	rcu_assign_pointer(files->fdt, new_fdt);
 	if (cur_fdt != &files->fdtab)
 		call_rcu(&cur_fdt->rcu, free_fdtable_rcu);
