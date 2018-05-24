@@ -1700,23 +1700,45 @@ struct block_device_operations;
 
 struct iov_iter;
 
+//파일 함수들의 포인터를 저장한다.
+//readdir의 함수가 사라짐. 검색 필요.
 struct file_operations {
+	//커널에 컴파일 되지 않고, 모듈로써 로드될 때 사용한다.
 	struct module *owner;
-	loff_t (*llseek) (struct file *, loff_t, int);
+	
+	loff_t (*llseek) (struct file *, loff_t, int);	
+	
+	//Data를 파일디스크립터, 버퍼에 읽고 쓴다. 또한, 파일 안쪽의 offset을 명시한다.
 	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
 	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+	
 	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
 	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
 	int (*iterate) (struct file *, struct dir_context *);
 	int (*iterate_shared) (struct file *, struct dir_context *);
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
+	
+	//하드웨어 장치와 통신할 때 이용한다. 즉, device file이다.
+	//control command를 보낼 때 필요하다.
+	//동일한 이름의 명령어지만 하드웨어 상황에 의존적이다.
+	//커널 2.6에서는 ioctl하나 였지만, 현재 나눠짐 검색필요.
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
+	
+	//가상주소공간과 맵핑한 것을 가르킨다.
 	int (*mmap) (struct file *, struct vm_area_struct *);
+	
 	unsigned long mmap_supported_flags;
+	
+	//파일을 연다. file object와 inode가 일치한다.
 	int (*open) (struct inode *, struct file *);
+
 	int (*flush) (struct file *, fl_owner_t id);
+
+	//file object count가 0일 떄 사용한다. 즉, 아무도 이 파일을 사용하지않는다는 것을 의미한다.
+	//-> 메모리나 캐시가 될 필요가 없다는 걸 의미
 	int (*release) (struct inode *, struct file *);
+	
 	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
 	int (*fasync) (int, struct file *, int);
 	int (*lock) (struct file *, int, struct file_lock *);

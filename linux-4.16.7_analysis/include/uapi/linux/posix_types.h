@@ -22,6 +22,7 @@
 #undef __FD_SETSIZE
 #define __FD_SETSIZE	1024
 
+//struct embedded_fd_set과 타입캐스트가 가능하며, 더 작은 공간을 차지한다.
 typedef struct {
 	unsigned long fds_bits[__FD_SETSIZE / (8 * sizeof(long))];
 } __kernel_fd_set;
