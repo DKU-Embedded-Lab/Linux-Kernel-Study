@@ -34,6 +34,9 @@ static inline pte_t get_fixmap_pte(unsigned long vaddr)
 	return *ptep;
 }
 
+// 
+// HIGHMEM 영역을 kernel에서 접근할 경우, 
+// kmap을 통해 mapping을 하여 사용하여 접근 수행
 void *kmap(struct page *page)
 {
 	might_sleep();
@@ -52,6 +55,9 @@ void kunmap(struct page *page)
 }
 EXPORT_SYMBOL(kunmap);
 
+// HIGHMEM 영역을 kernel에서 접근할 경우, 
+// kmap에서처럼 pkmap_count 가 모두 사용중이여서 sleep되고 기다리는 
+// 작업이 수행되면 안되는 interrupt context등의 경우를 위한 mapping을 해줌 
 void *kmap_atomic(struct page *page)
 {
 	unsigned int idx;

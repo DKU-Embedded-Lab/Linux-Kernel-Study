@@ -428,7 +428,8 @@ PAGEFLAG(Idle, idle, PF_ANY)
 // anonymous page 의 경우 0-bit 에 해당 flag 설정
 #define PAGE_MAPPING_MOVABLE	0x2 
 // 두번째 MSB bit 검사를 위한 mask 로 
-// movable age 의 경우 1-bit 에 해당 flag 설정
+// movable age 의 경우 1-bit 에 해당 flag 설정 
+// LRU page는 해당되지 않음
 #define PAGE_MAPPING_KSM	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE) 
 // kernel samepage merging 은 anonymous movable page 에 대해서만 수행   
 #define PAGE_MAPPING_FLAGS	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE)

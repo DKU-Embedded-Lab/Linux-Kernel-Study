@@ -36,7 +36,9 @@ extern bool __vmalloc_start_set; /* set once high_memory is set */
 #else
 #define LAST_PKMAP 1024
 #endif
-
+// 
+// 32-bit 에서 direct mapping 영역 이후,pkmap address space 의 시작주소 
+//
 #define PKMAP_BASE ((FIXADDR_START - PAGE_SIZE * (LAST_PKMAP + 1))	\
 		    & PMD_MASK)
 

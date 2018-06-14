@@ -62,7 +62,8 @@ static inline unsigned int get_pkmap_color(struct page *page)
 
 /*
  * Get next index for mapping inside PKMAP region for page with given color.
- */
+ */ 
+// kernel kmap address space의 다음 mapping entry를 가져옴
 static inline unsigned int get_next_pkmap_nr(unsigned int color)
 {
 	static unsigned int last_pkmap_nr;
@@ -123,7 +124,9 @@ unsigned int nr_free_highpages (void)
 	return pages;
 }
 
-static int pkmap_count[LAST_PKMAP];
+static int pkmap_count[LAST_PKMAP]; 
+// pkmap address space 의 LAST_PKMAP 수의 map 된 page들의 각 usage count정보
+// 1 이라면 사용중이지 않은 것. 
 static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(kmap_lock);
 
 pte_t * pkmap_page_table;
@@ -209,32 +212,42 @@ void kmap_flush_unused(void)
 	flush_all_zero_pkmaps();
 	unlock_kmap();
 }
-
+// page가 kernel virtual address 에 kmap함수를 통해 map되어야 할 때 
+// 새로 mapping정보를 구성해줌
 static inline unsigned long map_new_virtual(struct page *page)
 {
 	unsigned long vaddr;
 	int count;
 	unsigned int last_pkmap_nr;
 	unsigned int color = get_pkmap_color(page);
-
+    // page가 map될 kernel virtual address space color를 가져옴  
+    // arch 별로 별도 정의되어 있지 않을 시 그냥 0 반환
 start:
 	count = get_pkmap_entries_count(color);
+    // pkmap_count 에서 사용중이지 않은 entry검색을 시작할 위치를 가져옴 
+    // arch 별로 별도 정의되어 있지 않는 한 LAST_PKMAP부터 즉 맨 끝부터 검색
 	/* Find an empty entry */
 	for (;;) {
 		last_pkmap_nr = get_next_pkmap_nr(color);
 		if (no_more_pkmaps(last_pkmap_nr, color)) {
+            // kernel kmap address space가 모두 사용중이라면
 			flush_all_zero_pkmaps();
+            // pkmap_count 가 1인 entry를 clear
 			count = get_pkmap_entries_count(color);
 		}
 		if (!pkmap_count[last_pkmap_nr])
-			break;	/* Found a usable entry */
+			break;	/* Found a usable entry */ 
+            // 빈 entry 찾은 경우
 		if (--count)
-			continue;
+			continue; 
+            // 맨뒤부터 감소하면서 검색
 
 		/*
 		 * Sleep for somebody else to unmap their entries
 		 */
-		{
+		{ 
+            // 모든 entry가 사용중일 경우 여기 도달하여 
+            // unmap 될 때 까지 sleep 
 			DECLARE_WAITQUEUE(wait, current);
 			wait_queue_head_t *pkmap_map_wait =
 				get_pkmap_wait_queue_head(color);
@@ -260,7 +273,7 @@ start:
 
 	pkmap_count[last_pkmap_nr] = 1;
 	set_page_address(page, (void *)vaddr);
-
+    // hash table에 추가 
 	return vaddr;
 }
 
@@ -271,7 +284,11 @@ start:
  * Returns the page's virtual memory address.
  *
  * We cannot call this from interrupts, as it may block.
- */
+ */ 
+// highmem 의 page를 kernel address space로 map 하는 함수 
+// user page를 kernel 에서 사용해야 될 때, 이미 page_address_htable 에 map되어 
+// 사용중이라면 usage counter 증가 후 종료하고, 사용중이지 않았다면 map_new_virtual 
+// 을 통해 새로 map 구성해줌
 void *kmap_high(struct page *page)
 {
 	unsigned long vaddr;
@@ -281,10 +298,13 @@ void *kmap_high(struct page *page)
 	 * after we have the lock.
 	 */
 	lock_kmap();
-	vaddr = (unsigned long)page_address(page);
+	vaddr = (unsigned long)page_address(page); 
+    // struct page가 이미 map되어 kernel vaddr이 있는지 확인
 	if (!vaddr)
 		vaddr = map_new_virtual(page);
-	pkmap_count[PKMAP_NR(vaddr)]++;
+        // 그전에 map된적이 없다면 새로 mapping 구성
+	pkmap_count[PKMAP_NR(vaddr)]++; 
+    // 현재 사용중임을 check하기 위해 count증가
 	BUG_ON(pkmap_count[PKMAP_NR(vaddr)] < 2);
 	unlock_kmap();
 	return (void*) vaddr;
@@ -377,11 +397,16 @@ EXPORT_SYMBOL(kunmap_high);
 
 /*
  * Describes one page->virtual association
- */
+ */ 
+// kmap address space 에 mapping 된 page들에 대해 
+// 각 virtual address 와 물리 page를 관리하기 위한 구조체
 struct page_address_map {
 	struct page *page;
+    // mapping 된 mem_map의 물리 page
 	void *virtual;
+    // kmap address space 에 map된 kernel virtual address spacce 주소 위치
 	struct list_head list;
+    // 해당 page가 관리되고 있는 page_address_htable 내의 위치
 };
 
 static struct page_address_map page_address_maps[LAST_PKMAP];
@@ -389,8 +414,39 @@ static struct page_address_map page_address_maps[LAST_PKMAP];
 /*
  * Hash table bucket
  */
+// kmap address space에 map된 page 를 관리 
+//  
+//  kernel address space 
+//                            LAST_PKMAP X PAGE_SIZE(2MB)
+//                              <--------------------> 
+//                   vmalloc addr space  |  kmap address space  |  fixed vaddr space
+//                  <--------------------------------------------------------------->
+//                                       ^                      ^           
+//                                       |                      |           
+//                                  PKMAP_BASE           FIXADDR_START      
+//                                       +                      +
+//                                      +                        +
+//                                     +                          +
+//                                                                          
+//                            |-----|-----|-----|-----|----------|-----|
+//                               0     1     2     3     ...     LAST_PKMAP  
+//                               |     |     |     |                |
+//                           page16 page1 page5 page34
+//  page_address_htable
+//  page_address_slot[0]   - page_address_map - page_address_map - page_address_map - page_address_map - .. 
+//                                  |                  |                  |                  |
+//                                page5              page1              page16             page34
+//  page_address_slot[1]   - page_address_map ..
+//  page_address_slot[2]   - page_address_map - page_address_map ..
+//  page_address_slot[3]   - page_address_map - ..
+//  page_address_slot[4]   - page_address_map - page_address_map ..
+//  page_address_slot[5]   - page_address_map - ..
+//  page_address_slot[6]   - page_address_map - page_address_map ..
+//  ...
+//  page_address_slot[127] - page_address_map - page_address_map ..
+//
 static struct page_address_slot {
-	struct list_head lh;			/* List of page_address_maps */
+	struct list_head lh;			/* List of page_address_maps */ 
 	spinlock_t lock;			/* Protect this bucket's list */
 } ____cacheline_aligned_in_smp page_address_htable[1<<PA_HASH_ORDER];
 
@@ -405,6 +461,8 @@ static struct page_address_slot *page_slot(const struct page *page)
  *
  * Returns the page's virtual address.
  */
+// kmap address space 에 map된 page의 kernel virtual address 를 
+// 가져오기 위한 함수
 void *page_address(const struct page *page)
 {
 	unsigned long flags;

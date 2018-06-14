@@ -52,7 +52,10 @@ static inline struct page *kmap_to_page(void *addr)
 
 #define totalhigh_pages 0UL
 
-#ifndef ARCH_HAS_KMAP
+#ifndef ARCH_HAS_KMAP 
+// 
+// HIGHMEM 이 없을 경우 모든 page들에 대해 direct mapping 가능하므로 
+// page address 만을 반환
 static inline void *kmap(struct page *page)
 {
 	might_sleep();

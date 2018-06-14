@@ -2,7 +2,27 @@
 #define _ASM_HIGHMEM_H
 
 #include <asm/kmap_types.h>
-
+// 
+// 32-bit 에서 direct mapping 영역 이후,pkmap address space 의 시작주소 
+//  virtual address space.
+//                                                                                                                      4KB page 512 개가 map가능하며 
+//                                                                                                                      pkmap_count로 표현 가능
+//                                                            VMALLOC_OFFSET                        2 X PAGE_SIZE(8KB)  LAST_PKMAP X PAGE_SIZE(2MB)
+//                                                            <----------->                            <------------> <--------------------> 
+//  |  process address space   |  kernel image  |  memm_map  |  pages gap   |  vmalloc address space  |  pages page  |  kmap address space  |  fixed virtual address mapping  |  pages gap  |
+//  -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//  0                          ^                                            ^                         ^              ^                      ^                                 ^
+//                             |                                            |                         |              |                      |                                 |
+//                         PAGE_OFFSET                               VMALLOC_START             VMALLOC_END      PKMAP_BASE           FIXADDR_START                       FIXADDR_TOP 
+//                                                                                                                   +                      +                                 +
+//                                                                                                                  +                      + +                                 +
+//                                                                                                                 +                      +   +                                 +
+//
+//                                                                                                          |---|---|---|---|----------|---|  |01234567...n|01234567...n|--... --|01234567...n| - -|
+//                                                                                                            0   1   2   3       LAST_PKMAP  |    CPU 0        CPU 1                CPU N    | | |
+//                                                                                                                                            |                                               | | |
+//                                                                                                                                      FIX_KMAP_BEGIN                             FIX_KMAP_END FIX_TEXT_POKE0,1
+//
 #define PKMAP_BASE		(PAGE_OFFSET - PMD_SIZE)
 #define LAST_PKMAP		PTRS_PER_PTE
 #define LAST_PKMAP_MASK		(LAST_PKMAP - 1)
