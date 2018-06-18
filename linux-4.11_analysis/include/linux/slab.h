@@ -22,8 +22,20 @@
  */
 #define SLAB_CONSISTENCY_CHECKS	0x00000100UL	/* DEBUG: Perform (expensive) checks on alloc/free */
 #define SLAB_RED_ZONE		0x00000400UL	/* DEBUG: Red zone objs in a cache */
+// object 를 넘어가는 write 가 발생하였을 경우, 이를  detect 하기 위해 RED_ZONE을 사용. 
+//  
+//  e.g. object  
+//   --------------------------------------------
+//   |  object format  |  red zone  |  padding  |
+//   |  (poisoining)   |            |           |
+//   --------------------------------------------
+//     
 #define SLAB_POISON		0x00000800UL	/* DEBUG: Poison objects */
 #define SLAB_HWCACHE_ALIGN	0x00002000UL	/* Align objs on cache lines */
+// processor specific L1 cache line 크기에 object 크기를 맞춤. 
+// SLAB_HWCACHE_ALIGN 이 설정되어 있지 않을 시, BYTES_PER_WORD 에 object 크기를 맞춤. 
+//  - object 크기가 align 크기보다 작다면 fill byte로 채워짐.
+//
 #define SLAB_CACHE_DMA		0x00004000UL	/* Use GFP_DMA memory */
 #define SLAB_STORE_USER		0x00010000UL	/* DEBUG: Store the last owner for bug hunting */
 #define SLAB_PANIC		0x00040000UL	/* Panic if kmem_cache_create() fails */
@@ -212,11 +224,15 @@ static inline const char *__check_heap_object(const void *ptr,
  * to do various tricks to work around compiler limitations in order to
  * ensure proper constant folding.
  */
+// SLAB 할당자 사용의 경우, kmalloc 시 할당가능한 최대 memory size : 32 MB / 최소 : 32 B
+//  일반적으로... 설정 변경 없을 시, MAX_ORDER : 11, PAGE_SHIFT : 12
+//  => 32MB가 할당 가능한 최대 크기임. 현재 ORDER, PAGE_SHIFT 설정이 25 이상일 경우, 32MB로 설정
 #define KMALLOC_SHIFT_HIGH	((MAX_ORDER + PAGE_SHIFT - 1) <= 25 ? \
 				(MAX_ORDER + PAGE_SHIFT - 1) : 25)
 #define KMALLOC_SHIFT_MAX	KMALLOC_SHIFT_HIGH
 #ifndef KMALLOC_SHIFT_LOW
-#define KMALLOC_SHIFT_LOW	5
+#define KMALLOC_SHIFT_LOW	5 
+// 최소 할당 가능 memory size : 32B                                               
 #endif
 #endif
 
@@ -224,7 +240,8 @@ static inline const char *__check_heap_object(const void *ptr,
 /*
  * SLUB directly allocates requests fitting in to an order-1 page
  * (PAGE_SIZE*2).  Larger requests are passed to the page allocator.
- */
+ */ 
+// SLUB 할당자 사용 시, kmalloc을 통해 최대 할당 가능한 memory size : 8 KB / 최소 : 8 B
 #define KMALLOC_SHIFT_HIGH	(PAGE_SHIFT + 1)
 #define KMALLOC_SHIFT_MAX	(MAX_ORDER + PAGE_SHIFT - 1)
 #ifndef KMALLOC_SHIFT_LOW
@@ -238,6 +255,7 @@ static inline const char *__check_heap_object(const void *ptr,
  * No kmalloc array is necessary since objects of different sizes can
  * be allocated from the same page.
  */
+// SLOB 할당자 사용 시, kmalloc을 통해 최대 할당 가능한 memory size : 4 KB / 8 B
 #define KMALLOC_SHIFT_HIGH	PAGE_SHIFT
 #define KMALLOC_SHIFT_MAX	(MAX_ORDER + PAGE_SHIFT - 1)
 #ifndef KMALLOC_SHIFT_LOW

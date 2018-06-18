@@ -180,17 +180,44 @@ typedef unsigned short freelist_idx_t;
  * The limit is stored in the per-cpu structure to reduce the data cache
  * footprint.
  *
- */
+ */ 
+// per-CPU slab cache , node 공유 cache, align cache등으로 사용
 struct array_cache {
-	unsigned int avail;
+	unsigned int avail;    
+    // per-CPU cahe 에서 사용가능한 free object 의 수
 	unsigned int limit;
+    // limit 개 까지 object를 가질 수 있음
 	unsigned int batchcount;
+    // slab cache object수가 부족 시, batchcount 에 설정된 값 만큼 
+    // slab allocator 로부터 object를 가져와 채움 
+    // 마치 buddy allocator의 per-CPU cache 의 batchcount 처럼
 	unsigned int touched;
+    // per-CPU cache 의 object entry가 사용 될 때, 1 로 set 
+    // cache 가 shrink 될 때, 0 으로 set
+    //  => cache 가 shrink 된 후, 접근된 적이 있는지 확인하여 접근되었으면 더 
+    //     shrink 불가능하고, 접근된적 없으면 shrink 가능 
+    // 
+    // 현재 array_cache 즉 현재 CPU를 위한 cache의 shrink에 사용
 	void *entry[];	/*
 			 * Must have this definition in here for the proper
 			 * alignment of array_cache. Also simplifies accessing
 			 * the entries.
-			 */
+			 */ 
+
+    /*      
+     * < objects in slabs >
+     *    0    1    2    3    4    5    6    7    8    9
+     *  ---------------------------------------------------
+     *  |  X |  X |  O |  X |  O |  O |  X |  X |  X |  O |
+     *  --------------------------------------------------- 
+     *  free 된 순서가 9 -> 4 -> 5 -> 2
+     *  avail : 0 (0-th entry in entry, stack top)
+     * < entry >
+     *  ---------------------------------------------------
+     *  |  2 |  5 |  4 |  9 |    |    |    |    |    |    |
+     *  ---------------------------------------------------
+     *
+     */
 };
 
 struct alien_cache {

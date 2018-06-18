@@ -86,6 +86,8 @@ struct page {
         //    deferred list head 로 이용
 
 		void *s_mem;			/* slab first object */
+        //  현재 page 가 slab allocator 에서 object를 위한 slab으로 사용중일 경우, 
+        //  할당된 첫번째 object
 		atomic_t compound_mapcount;	/* first tail page */ 
         // compound page 의 경우에는 tail page (두번째 이후부터의 page)들 중
         // 첫번재 tail page 의 compound_mapcount 변수에 pte 에 map된 횟수가
@@ -107,7 +109,19 @@ struct page {
         // buddy allocator 로부터 page 가 할당되면 
         // 현재 page 가 속한 migrate type 번호가 들어감
 		void *freelist;		/* sl[aou]b first free object */
-		/* page_deferred_list().prev	-- second tail page */
+		/* page_deferred_list().prev	-- second tail page */ 
+        /* 
+         * 현재 page가 slab allocator에서 object들을 위한 slab으로 사용될 경우, 
+         * 사용가능한 첫번째 free object
+         * 
+         * < objects in slabs >
+         *    0    1    2    3    4    5    6    7    8    9
+         *  ---------------------------------------------------
+         *  |  X |  X |  O |  X |  O |  O |  X |  X |  X |  O |
+         *  --------------------------------------------------- 
+         *
+         * freelist : 2
+         */
 	};
 
 	union {
