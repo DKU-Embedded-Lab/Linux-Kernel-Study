@@ -1969,19 +1969,26 @@ void __init inode_init(void)
 	for (loop = 0; loop < (1U << i_hash_shift); loop++)
 		INIT_HLIST_HEAD(&inode_hashtable[loop]);
 }
-
+// device file 생성시 호출되는 함수로 device의 기본 operation, 주/부 번호등 반환
 void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 {
 	inode->i_mode = mode;
+    // mode 에 device type 들어있음
 	if (S_ISCHR(mode)) {
-		inode->i_fop = &def_chr_fops;
+        // character device file 인 경우
+		inode->i_fop = &def_chr_fops;        
 		inode->i_rdev = rdev;
-	} else if (S_ISBLK(mode)) {
+        // major/minor device number 
+	} else if (S_ISBLK(mode)) {        
+        // block device file 인 경우
 		inode->i_fop = &def_blk_fops;
 		inode->i_rdev = rdev;
+        // major/minor device number 
 	} else if (S_ISFIFO(mode))
+        // named pipe 같은 FIFO 파일인 경우
 		inode->i_fop = &pipefifo_fops;
 	else if (S_ISSOCK(mode))
+        // socket 파일일 경우
 		;	/* leave it no_open_fops */
 	else
 		printk(KERN_DEBUG "init_special_inode: bogus i_mode (%o) for"

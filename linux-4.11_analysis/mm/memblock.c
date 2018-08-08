@@ -26,11 +26,15 @@
 #include "internal.h"
 
 static struct memblock_region memblock_memory_init_regions[INIT_MEMBLOCK_REGIONS] __initdata_memblock;
+// 128 개의 memory region 정의
 static struct memblock_region memblock_reserved_init_regions[INIT_MEMBLOCK_REGIONS] __initdata_memblock;
+// 128 개의 reserved memory region 정의
 #ifdef CONFIG_HAVE_MEMBLOCK_PHYS_MAP
 static struct memblock_region memblock_physmem_init_regions[INIT_PHYSMEM_REGIONS] __initdata_memblock;
+// 128 개의 physical memory block 정의
 #endif
 
+// memblock 초기화
 struct memblock memblock __initdata_memblock = {
 	.memory.regions		= memblock_memory_init_regions,
 	.memory.cnt		= 1,	/* empty dummy entry */
@@ -508,6 +512,7 @@ static void __init_memblock memblock_insert_region(struct memblock_type *type,
  * RETURNS:
  * 0 on success, -errno on failure.
  */
+// type 의 memory region을 memblock에 추가
 int __init_memblock memblock_add_range(struct memblock_type *type,
 				phys_addr_t base, phys_addr_t size,
 				int nid, unsigned long flags)
@@ -515,6 +520,7 @@ int __init_memblock memblock_add_range(struct memblock_type *type,
 	bool insert = false;
 	phys_addr_t obase = base;
 	phys_addr_t end = base + memblock_cap_size(base, &size);
+    // memory region의 마지막 주소 구함
 	int idx, nr_new;
 	struct memblock_region *rgn;
 
@@ -541,17 +547,42 @@ repeat:
 	nr_new = 0;
 
 	for_each_memblock_type(type, rgn) {
+        // memblock 내의 cnt 수만큼의 region 배열 순회 
 		phys_addr_t rbase = rgn->base;
 		phys_addr_t rend = rbase + rgn->size;
 
 		if (rbase >= end)
 			break;
+            // 제일 작은 주소 영역의 region이므로 끝남
 		if (rend <= base)
 			continue;
+            // 검사중인 region 영역의 끝보다 큰 시작주소 이므로 다음 region 검사
 		/*
 		 * @rgn overlaps.  If it separates the lower part of new
 		 * area, insert that portion.
 		 */
+
+        /*
+         *  - rgn 
+         *        rbase      rend
+         *  --------|----------|-------
+         *
+         *  - new 
+         *   base       end
+         *  ---|----------|------------
+         *
+         *  or 
+         *
+         *  - rgn 
+         *   rbase      rend
+         *  ---|----------|-------
+         *
+         *  - new 
+         *        base        end
+         *  --------|----------|------------
+         *
+         */
+
 		if (rbase > base) {
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP
 			WARN_ON(nid != memblock_get_region_node(rgn));
@@ -562,9 +593,31 @@ repeat:
 				memblock_insert_region(type, idx++, base,
 						       rbase - base, nid,
 						       flags);
+            // first round 에서는 insert 가 false 이므로 넘어감
 		}
 		/* area below @rend is dealt with, forget about it */
 		base = min(rend, end);
+        // 겹치는 경우 
+        /*
+         *  - rgn 
+         *        rbase      rend
+         *  --------|----------|-------
+         *
+         *  - new 
+         *              base
+         *              end
+         *  --------------|------------
+         *
+         *  or 
+         *
+         *  - rgn 
+         *   rbase      rend
+         *  ---|----------|-------
+         *
+         *  - new 
+         *              base  end
+         *  --------------|----|------------
+         */
 	}
 
 	/* insert the remaining portion */
@@ -587,6 +640,7 @@ repeat:
 			if (memblock_double_array(type, obase, size) < 0)
 				return -ENOMEM;
 		insert = true;
+        // 겹치는게 없다면 해당 region의 영역을 수정하고 다음 round 에서 추가
 		goto repeat;
 	} else {
 		memblock_merge_regions(type);
@@ -600,6 +654,7 @@ int __init_memblock memblock_add_node(phys_addr_t base, phys_addr_t size,
 	return memblock_add_range(&memblock.memory, base, size, nid, 0);
 }
 
+// memory region 의 시작 주소 및 크기를 받아 memblock 에 추가
 int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
 {
 	phys_addr_t end = base + size - 1;
@@ -608,6 +663,7 @@ int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
 		     &base, &end, (void *)_RET_IP_);
 
 	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
+    // memory region 을 memblock에 추가
 }
 
 /**

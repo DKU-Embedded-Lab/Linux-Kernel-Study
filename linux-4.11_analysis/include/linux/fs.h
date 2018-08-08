@@ -556,6 +556,8 @@ is_uncached_acl(struct posix_acl *acl)
  */
 struct inode {
 	umode_t			i_mode;
+    // device 파일의 경우, character device 인지 block device 인지 device type 
+    //  e.g. S_IFCHR , S_IFBLK
 	unsigned short		i_opflags;
 	kuid_t			i_uid;
 	kgid_t			i_gid;
@@ -588,6 +590,7 @@ struct inode {
 		unsigned int __i_nlink;
 	};
 	dev_t			i_rdev;
+    // device 파일의 device 파일의 경우, major/minor number 번호 있음
 	loff_t			i_size;
 	struct timespec		i_atime;
 	struct timespec		i_mtime;
@@ -632,7 +635,7 @@ struct inode {
 #ifdef CONFIG_IMA
 	atomic_t		i_readcount; /* struct files open RO */
 #endif
-	const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
+	const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */ 
 	struct file_lock_context	*i_flctx;
 	struct address_space	i_data;
 	struct list_head	i_devices;

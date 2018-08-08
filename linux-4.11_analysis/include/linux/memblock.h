@@ -22,36 +22,58 @@
 
 /* Definition of memblock flags. */
 enum {
-	MEMBLOCK_NONE		= 0x0,	/* No special request */
+	MEMBLOCK_NONE		= 0x0,	/* No special request */ 
+    // 일반적인 memory ㅇ역
 	MEMBLOCK_HOTPLUG	= 0x1,	/* hotpluggable region */
+    // memblock은 초기화 이외에도 hot plugging설정 시, 사용가능 이용도로 region사용
 	MEMBLOCK_MIRROR		= 0x2,	/* mirrored region */
+    // mirrored 영역
 	MEMBLOCK_NOMAP		= 0x4,	/* don't add to kernel direct mapping */
 };
 
+/* memory region의 크기 및 속성 */
 struct memblock_region {
-	phys_addr_t base;
+	phys_addr_t base; 
+    // region의 시작 주소
 	phys_addr_t size;
+    // region의 크기
 	unsigned long flags;
+    // 위의 enum같은 현재 region의 속성 정보
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP
 	int nid;
 #endif
 };
 
+/* memory region 들의 집합인 memblock 관리*/
 struct memblock_type {
-	unsigned long cnt;	/* number of regions */
-	unsigned long max;	/* size of the allocated array */
-	phys_addr_t total_size;	/* size of all regions */
+	unsigned long cnt;	/* number of regions */ 
+    // 현재 memblock 내의 region 수
+	unsigned long max;	/* size of the allocated array */ 
+    // 최대 사용 가능 region 수
+	phys_addr_t total_size;	/* size of all regions */ 
+    // 전체 memory region들을 합한 것의 크기 
 	struct memblock_region *regions;
+    // memblock의 주소, 크기 정보를 가진 cnt 만큼의 region들 
+    // base, size 를 기준으로 순차적으로 존재
 	char *name;
+    // memblock의 이름
 };
 
+/*
+ * 부팅 초기 시, buddy memory 를 관리하기 전의 memory 관리 
+ */
 struct memblock {
-	bool bottom_up;  /* is bottom up direction? */
+	bool bottom_up;  /* is bottom up direction? */ 
+    // true 로 설정 시, bottom up mode 에서 memory 할당 허용
 	phys_addr_t current_limit;
+    // memory block의 최대 크기
 	struct memblock_type memory;
+    // memory block의 type, 사용할 물리 memory 영역 등록
 	struct memblock_type reserved;
+    // memory block의 type, 사용 중인 물리 memory region 등록
 #ifdef CONFIG_HAVE_MEMBLOCK_PHYS_MAP
 	struct memblock_type physmem;
+    // memory block의 type
 #endif
 };
 

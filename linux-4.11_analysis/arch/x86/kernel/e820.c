@@ -1150,6 +1150,8 @@ void __init setup_memory_map(void)
 	e820_print_map(who);
 }
 
+// BIOS 에서 제공된 RAM map을 기반으로 kernel 에 의해 reserved 된 region들을 
+// memblock에 초기화 수행
 void __init memblock_x86_fill(void)
 {
 	int i;
@@ -1173,6 +1175,7 @@ void __init memblock_x86_fill(void)
 			continue;
 
 		memblock_add(ei->addr, ei->size);
+        // memblock 에 region 추가
 	}
 
 	/* throw away partial pages */
