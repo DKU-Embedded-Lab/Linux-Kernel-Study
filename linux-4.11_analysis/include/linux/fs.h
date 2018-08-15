@@ -639,6 +639,23 @@ struct inode {
 	struct file_lock_context	*i_flctx;
 	struct address_space	i_data;
 	struct list_head	i_devices;
+    // 특정 block device 를 사용중인 혹은 연결된 모든 
+    // inode 들을 연결함 
+    // 
+    // e.g. 
+    //             i_devices     i_devices
+    //      inode-A1 <--> inode-A2 <--> inode-A3   struct file-A1
+    //  i_cdev |     i_cdev  |     i_cdev  |          |  f_op
+    //         -----------------------------          |
+    //                     |                          | 
+    //                     |                          |
+    //                     | list                     |
+    //               struct cdev-A                    |
+    //                    |                           |
+    //                    |----------------------------
+    //                    |
+    //         struct file_operations(device specific)
+    //
 	union {
 		struct pipe_inode_info	*i_pipe;
 		struct block_device	*i_bdev;
@@ -646,6 +663,7 @@ struct inode {
 		char			*i_link;
 		unsigned		i_dir_seq;
 	};
+    // character device, block device 정보 관리
 
 	__u32			i_generation;
 

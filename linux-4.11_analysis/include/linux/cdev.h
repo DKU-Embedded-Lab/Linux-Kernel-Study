@@ -17,12 +17,35 @@ struct module;
 // index 스티커 라고 생각해도 될듯
 struct cdev {
 	struct kobject kobj;
+    // cdev 가 hash 로 관리되는 cdev_map 에서의 각 노드 
+    // 이 kobj 를 찾고 container_of 로 cdev 가져옴
 	struct module *owner;
+    // character device driver 관련 모듈
 	const struct file_operations *ops;
-    // 해당 device driver 관련 file operations
+    // 해당 character device specific file operations
 	struct list_head list;
+    // inode 의 i_devices 에 연결되어 해당 character device 
+    // 에 관련된 device special file 들을 연결  
+    //
+    // e.g.
+    //             i_devices     i_devices
+    //      inode-A1 <--> inode-A2 <--> inode-A3   struct file-A1
+    //  i_cdev |     i_cdev  |     i_cdev  |          |  f_op
+    //         -----------------------------          |
+    //                     |                          | 
+    //                     |                          |
+    //                     | list                     |
+    //               struct cdev-A                    |
+    //                    |                           |
+    //                    |----------------------------
+    //                    |
+    //         struct file_operations(device specific)
+    //
+
 	dev_t dev;
+    // device number 
 	unsigned int count;
+    // 현재 device 의 minor number 가 몇개인지를 나타냄
 };
 
 void cdev_init(struct cdev *, const struct file_operations *);

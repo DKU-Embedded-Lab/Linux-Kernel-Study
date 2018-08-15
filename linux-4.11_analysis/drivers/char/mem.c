@@ -825,6 +825,7 @@ static const struct file_operations full_fops = {
 	.write		= write_full,
 };
 
+// 각 minor number specific file operations 정보
 static const struct memdev {
 	const char *name;
 	umode_t mode;

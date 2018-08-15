@@ -62,7 +62,8 @@ enum kobject_action {
 
 /*
  * kernel 영역의 device 들을 객체로 추상화하여 그 정보를 가지고 있는놈.
- *
+ * kernel 내 device 들의 reference count 정보와 각 device 들의 상관관계를 가짐
+ * e.g. kobject 를 container_of 하여 struct cdev, 
  */ 
 struct kobject {
 	const char		*name; 
@@ -74,6 +75,7 @@ struct kobject {
 	struct kobj_type	*ktype;
 	struct kernfs_node	*sd; /* sysfs directory entry */
 	struct kref		kref;
+    // kobject 에 대한 reference counter
 #ifdef CONFIG_DEBUG_KOBJECT_RELEASE
 	struct delayed_work	release;
 #endif

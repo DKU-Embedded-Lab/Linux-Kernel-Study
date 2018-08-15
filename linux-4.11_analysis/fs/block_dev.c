@@ -2141,6 +2141,11 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 					     end >> PAGE_SHIFT);
 }
 
+
+// block device 을 위한 file operations   
+// 여기서의 operation 들이 block_device_operations 을 호출하며 
+// 각 device file 마다 구현되어야 하는 block_device_operations 과 달리 
+// def_blk_fops 는 모든 block device 들에 대해 공통으로 사용됨
 const struct file_operations def_blk_fops = {
 	.open		= blkdev_open,
 	.release	= blkdev_close,

@@ -365,6 +365,8 @@ void __unregister_chrdev(unsigned int major, unsigned int baseminor,
 }
 
 static DEFINE_SPINLOCK(cdev_lock);
+// character device 를 위한 global spinlock  
+// character device 번호를 관리하는 global spinlock
 
 static struct kobject *cdev_get(struct cdev *p)
 {
@@ -391,6 +393,10 @@ void cdev_put(struct cdev *p)
 /*
  * Called every time a character special file is opened
  */
+// 
+// device specific file operation 을 찾고 그 file operation 에서 open 호출  
+// (해당 device file 처음 열릴 때만 cdev_map 에서 kobject 를 검색 
+// 그 이후에는 inode 의 cdev 를 통해 접근)
 static int chrdev_open(struct inode *inode, struct file *filp)
 {
 	const struct file_operations *fops;
@@ -399,40 +405,73 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 	int ret = 0;
 
 	spin_lock(&cdev_lock);
+    // character device 를 위한 global spinlock 
 	p = inode->i_cdev;
 	if (!p) {
 		struct kobject *kobj;
+        // kobject 는 device 들을 관리하기 위한 struct 임
 		int idx;
 		spin_unlock(&cdev_lock);
 		kobj = kobj_lookup(cdev_map, inode->i_rdev, &idx);
+        // i_rdev 의 major/minor number 를 key 값으로 cdev_map 이라는 hash map 
+        // (character device database)에서 찾으려는 device 를 관리하는 kobject 를 찾는다. 
 		if (!kobj)
 			return -ENXIO;
+            // character device hash table 에서 못찾았다면 종료
 		new = container_of(kobj, struct cdev, kobj);
+        // kobj 에서 cdev 가져옴
 		spin_lock(&cdev_lock);
 		/* Check i_cdev again in case somebody beat us to it while
 		   we dropped the lock. */
 		p = inode->i_cdev;
 		if (!p) {
+            // inode 에 struct cdev 가 설정되어 있지 않다면...
 			inode->i_cdev = p = new;
+            // inode 에 cdev 를 device hash table 에서 찾은 struct cdev 로 설정
 			list_add(&inode->i_devices, &p->list);
+            // inode 를 device 관리 list 에 연결 
+            // 이를 통해 해당 device 에 연결된 inode 들을 확인 가능
 			new = NULL;
 		} else if (!cdev_get(p))
 			ret = -ENXIO;
+            // 이미 설정되어 있는 상태라면... reference count 증가
 	} else if (!cdev_get(p))
 		ret = -ENXIO;
+        // 이미 설정되어 있는 상태라면... reference count 증가
 	spin_unlock(&cdev_lock);
 	cdev_put(new);
+    // reference count 감소
 	if (ret)
 		return ret;
 
 	ret = -ENXIO;
-	fops = fops_get(p->ops);
+	fops = fops_get(p->ops); // 그 cdev 의 device specific file operation 가져옴
 	if (!fops)
-		goto out_cdev_put;
+		goto out_cdev_put; // file operation 정의되어 있지 않다면 종료
 
 	replace_fops(filp, fops);
+    // struct file 에 device specific file ops 를 set
 	if (filp->f_op->open) {
 		ret = filp->f_op->open(inode, filp);
+        // open 호출됨 
+        // 먼저 major num 기반으로 fops 에서 open 을 호출하며 
+        // 그 open 함수 내에서 minor number 마다의 specific 
+        // fop 의 open이 호출됨
+        // e.g. 
+        //  major num 기반 memory_fops-memory_open 호출.. 
+        //     |
+        //     *
+        //  minor num 기반으로...  
+        //        0  ->  mem_fops   
+        //        1  ->  kmem_fops
+        //        2  ->  null_fops
+        //        3  ->  port_fops
+        //        4  ->  zero_fops
+        //        5  ->  zero_fops
+        //        7  ->  full_fops
+        //        8  ->  random_fops
+        //        9  ->  urandom_fops
+        //        11 ->  kmsg_fops
 		if (ret)
 			goto out_cdev_put;
 	}
@@ -470,9 +509,15 @@ static void cdev_purge(struct cdev *cdev)
  * is contain the open that then fills in the correct operations
  * depending on the special file...
  */
+
+// 
+// character device 를 위한 file operations
 // character file 이 워낙 다양하기 때문에 이게 다임
 const struct file_operations def_chr_fops = {
 	.open = chrdev_open,
+    // 그 device 관련 kobject 찾고 cdev 통해 device 관련 file_operations 알아내어 open 호출 
+    // (해당 device file 처음 열릴 때만 cdev_map 에서 kobject 를 검색 
+    // 그 이후에는 inode 의 cdev 를 통해 접근)
 	.llseek = noop_llseek,
 };
 

@@ -1953,6 +1953,10 @@ struct blk_dax_ctl {
 	pfn_t pfn;
 };
 
+// 
+// def_blk_fops 의 함수들이 결과적으로 호출하는 device 마다의 operations 로
+// 각 def_blk_fops 가 모든 block device 들에 공통적으로 사용되는 반면 
+// block_device_operations 는 각 block device 마다 구현되어야 함
 struct block_device_operations {
 	int (*open) (struct block_device *, fmode_t);
 	void (*release) (struct gendisk *, fmode_t);

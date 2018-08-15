@@ -101,6 +101,8 @@ void kobj_unmap(struct kobj_map *domain, dev_t dev, unsigned long range)
 	kfree(found);
 }
 
+// device 들을 관리하는 kobject 를 찾는 함수로 dev 의 device number 에 해당하는 
+// kobject 를 찾아 반환
 struct kobject *kobj_lookup(struct kobj_map *domain, dev_t dev, int *index)
 {
 	struct kobject *kobj;
