@@ -193,9 +193,10 @@ struct gendisk {
 	 */
 	struct disk_part_tbl __rcu *part_tbl;
 	struct hd_struct part0;
-
+    // partition 정보
 	const struct block_device_operations *fops;
 	struct request_queue *queue;
+    // 현재 disk를 위한 request queue
 	void *private_data;
 
 	int flags;

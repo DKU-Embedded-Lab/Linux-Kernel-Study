@@ -61,14 +61,15 @@ typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
  */
 struct buffer_head {
 	unsigned long b_state;		/* buffer state bitmap (see above) */
-	struct buffer_head *b_this_page;/* circular list of page's buffers */
+	struct buffer_head *b_this_page;/* circular list of page's buffers */ 
+    // b_data 를 공유하는 buffer_head 들의 list  
 	struct page *b_page;		/* the page this bh is mapped to */
 	sector_t b_blocknr;		/* start block number */
     // 여기에다가 쓰겠다. 
 	size_t b_size;			/* size of mapping */
     // 얼만큼
 	char *b_data;			/* pointer to data within the page */
-    // write 할라는 주소
+    // write 할라는 주소 
 	struct block_device *b_bdev;
     // block device driver
 	bh_end_io_t *b_end_io;		/* I/O completion */

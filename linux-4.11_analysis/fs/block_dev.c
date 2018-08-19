@@ -35,6 +35,8 @@
 #include <linux/uaccess.h>
 #include "internal.h"
 
+// block device 관련 block_device instance 정보 저장하는 
+// block device specific inode. 
 struct bdev_inode {
 	struct block_device bdev;
 	struct inode vfs_inode;
@@ -957,6 +959,7 @@ static int bdev_set(struct inode *inode, void *data)
 	return 0;
 }
 
+// system 내의 모든 blockk device 들에 대한 list 의 head
 static LIST_HEAD(all_bdevs);
 
 /*
@@ -974,6 +977,8 @@ void bdev_unhash_inode(dev_t dev)
 	}
 }
 
+// device number 인 dev 를 기반으로 해당 block device 에 해당하는 
+// bdev_inode 가 있는지 찾아 block_device 를 찾고 없다면  bdev_inode 를 할당 
 struct block_device *bdget(dev_t dev)
 {
 	struct block_device *bdev;

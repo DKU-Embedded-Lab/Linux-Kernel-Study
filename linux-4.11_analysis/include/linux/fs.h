@@ -405,29 +405,69 @@ struct address_space {
 	 */
 struct request_queue;
 
+// block device 정보 관리 
+//
+// e.g. /dev/sda 에 sda1, sda2 있는 경우...  
+//
+//  /dev/sda  
+//              block_device 
+//                  |
+//          ------------------------------------
+//          |                 |                |
+//      sda1                sda2               sda3
+//      block_device        block_device       block_device 
+//      
+//    hd_struct             hd_struct           hd_struct  
+//      
+//
 struct block_device {
 	dev_t			bd_dev;  /* not a kdev_t - it's a search key */
+    // device 의 major/minor number
 	int			bd_openers;
+    // 얼마나 많이 block device 가 bd_openers 를 통해 열렸는지 에 대한 count
 	struct inode *		bd_inode;	/* will die */
+    // block device special file 들의 inode 
 	struct super_block *	bd_super;
 	struct mutex		bd_mutex;	/* open/close mutex */
 	void *			bd_claiming;
 	void *			bd_holder;
+    // bd_claim 을 통해 현재 block_device 의 holder 가 됨 
+    // e.g. 
+    //     ext4 에서 external journal 을 위해 sb 가 holder 가 됨. 
+    //     swap 에서 swapper code 가 swapon syscall 을 통해 holder 가 됨. 
+    //
 	int			bd_holders;
 	bool			bd_write_holder;
 #ifdef CONFIG_SYSFS
 	struct list_head	bd_holder_disks;
 #endif
 	struct block_device *	bd_contains;
+    // 현재 block_device 가 partition 이라면 즉 /dev/sda1 이라면 
+    // /dev/sda 를 위한 block_device 를 가리키고, 현재 block_device 가 
+    // /dev/sda 라면 자기 자신을 가리킴
 	unsigned		bd_block_size;
 	struct hd_struct *	bd_part;
+    // block device 내의 partitions 들에 대한 struct 로 partition descriptor 임
 	/* number of times partitions within this device have been opened. */
 	unsigned		bd_part_count;
+    // device 가 kernel 내에 얼마나 사용되고 있는지에 대한 usage count     
 	int			bd_invalidated;
+    // partition info 가 현재 invalid 한지 여부. 
+    // 1 로 set 될 시, disk 의 partition 정보가 rescan 됨
 	struct gendisk *	bd_disk;
+    // disk partitioning abstracion layer
 	struct request_queue *  bd_queue;
 	struct backing_dev_info *bd_bdi;
 	struct list_head	bd_list;
+    // block_device 들 끼리 서로 연결 head 는 all_bdev 임  
+    // e.g. 
+    //      all_bdev --
+    //                |
+    //           block_device  <-->  block_device  <-->  block_device 
+    //             |          bd_list   |         bd_list   | 
+    //             |                    |                   |
+    //           hd_disk              hd_disk             hd_disk    
+    //
 	/*
 	 * Private data.  You must have bd_claim'ed the block_device
 	 * to use this.  NOTE:  bd_claim allows an owner to claim
@@ -435,7 +475,7 @@ struct block_device {
 	 * care to not mess up bd_private for that case.
 	 */
 	unsigned long		bd_private;
-
+    // block device holder specific info
 	/* The counter of freeze processes */
 	int			bd_fsfreeze_count;
 	/* Mutex for freeze */
