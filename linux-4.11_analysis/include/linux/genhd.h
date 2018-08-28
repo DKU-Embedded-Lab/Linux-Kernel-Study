@@ -103,12 +103,14 @@ struct partition_meta_info {
 
 struct hd_struct {
 	sector_t start_sect;
+    // 해당 partition 의 시작 sector
 	/*
 	 * nr_sects is protected by sequence counter. One might extend a
 	 * partition while IO is happening to it and update of nr_sects
 	 * can be non-atomic on 32bit machines with 64bit sector_t.
 	 */
 	sector_t nr_sects;
+    // 해당 partition 의 크기
 	seqcount_t nr_sects_seq;
 	sector_t alignment_offset;
 	unsigned int discard_alignment;
@@ -146,6 +148,7 @@ enum {
 	DISK_EVENT_EJECT_REQUEST		= 1 << 1, /* eject requested */
 };
 
+// 그 disk 의 partition 정보를 나타내는 hd_struct 배열
 struct disk_part_tbl {
 	struct rcu_head rcu_head;
 	int len;
@@ -168,7 +171,41 @@ struct blk_integrity {
 
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
 
-// device database 에서 blk device driver 를 나타냄
+// device database 에서 blk device driver 를 나타냄 
+// 각각의 block device 자체에 대한 정보가 아닌 disk partition 정보  
+//
+// e.g. /dev/sda 에 sda1, sda2 있는 경우...  
+//
+//  /dev/sda  
+//              block_device 
+//                  |
+//          ------------------------------------
+//          |                 |                |
+//      sda1                sda2               sda3
+//              bd_disk
+//              -----------------------------------------------------------------------
+//      sda1    |        sda2    |          sda3   |                                  |
+//      block_device <---> block_device <---> block_device                            |
+//       |       bd_contains |     bd_contains    | bd_part                           |
+//       |                   |                    |                                   |
+//       |                   |                    |                                   |
+//    hd_struct <----       hd_struct <---      hd_struct <---                        |
+//                  |                    |                   |                        |
+//                  ------------------------------------------------                  |
+//                                                                 |                  |
+//                                                             -------------------    |
+//                                                             |    |   |   |...      |
+//                                                             ------------------     |
+//                                                             disk_part_tbl          |
+//                                                                 |                  |
+//                                                              gendisk <--------------
+//                       /dev/hda                               /dev/sda  
+//                           |                                     |
+//                          ...                                    | queue
+//                           |            queue_head               |
+//                     request_queue <--------------------->  request_queue
+//
+//
 struct gendisk {
 	/* major, first_minor and minors are input parameters only,
 	 * don't use directly.  Use disk_devt() and disk_max_parts().
@@ -180,7 +217,8 @@ struct gendisk {
 	int minors;                     /* maximum number of minors, =1 for
                                          * disks that can't be partitioned. */
 
-	char disk_name[DISK_NAME_LEN];	/* name of major driver */
+	char disk_name[DISK_NAME_LEN];	/* name of major driver */ 
+    // sysfs에서 disk name 을 표시하기 위한 disk 이름정보 e.g. sda, nvme0n1
 	char *(*devnode)(struct gendisk *gd, umode_t *mode);
 
 	unsigned int events;		/* supported events */
@@ -192,13 +230,14 @@ struct gendisk {
 	 * helpers.
 	 */
 	struct disk_part_tbl __rcu *part_tbl;
+    // 각 disk partition 마다 있는 partition 정보
 	struct hd_struct part0;
-    // partition 정보
 	const struct block_device_operations *fops;
+    // device specific operations
 	struct request_queue *queue;
     // 현재 disk를 위한 request queue
 	void *private_data;
-
+    // private driver data
 	int flags;
 	struct kobject *slave_dir;
 

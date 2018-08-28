@@ -1294,6 +1294,7 @@ dev_t blk_lookup_devt(const char *name, int partno)
 }
 EXPORT_SYMBOL(blk_lookup_devt);
 
+// partition 정보를 나타낼 gendisk 할당
 struct gendisk *alloc_disk(int minors)
 {
 	return alloc_disk_node(minors, NUMA_NO_NODE);

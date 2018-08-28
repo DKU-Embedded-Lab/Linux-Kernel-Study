@@ -55,8 +55,10 @@ typedef void (rq_end_io_fn)(struct request *, int);
 #define BLK_RL_SYNCFULL		(1U << 0)
 #define BLK_RL_ASYNCFULL	(1U << 1)
 
+// request queue 의 cache 로 동작
 struct request_list {
 	struct request_queue	*q;	/* the queue this rl belongs to */
+    // 현재 request list cache 가 속한 request queue
 #ifdef CONFIG_BLK_CGROUP
 	struct blkcg_gq		*blkg;	/* blkg this request pool belongs to */
 #endif
@@ -378,13 +380,17 @@ static inline int blkdev_reset_zones_ioctl(struct block_device *bdev,
 
 #endif /* CONFIG_BLK_DEV_ZONED */
 
+// 각 block device specific request queue  
+// read/fetch request 시, 일부 data 를 queueing 및 rearrange 하여 성능 높임.
 struct request_queue {
 	/*
 	 * Together with queue_head for cacheline sharing
 	 */
 	struct list_head	queue_head;
+    // request_queue 끼리 연결
 	struct request		*last_merge;
 	struct elevator_queue	*elevator;
+    // rearrange function
 	int			nr_rqs[2];	/* # allocated [a]sync rqs */
 	int			nr_rqs_elvpriv;	/* # allocated rqs w/ elvpriv */
 
@@ -397,12 +403,20 @@ struct request_queue {
 	 * determined using bio_request_list().
 	 */
 	struct request_list	root_rl;
-
-	request_fn_proc		*request_fn;
+    // 현재 request queue 의 cache 역할
+	
+    // _fn suffix 붙은 것 모두 function pointer
+    request_fn_proc		*request_fn;
+    // 각 driver 마다의 specific function 으로 request queue 에 새로운 request 를 
+    // 추가하고 request를 device 로 보내기 위한 함수
 	make_request_fn		*make_request_fn;
+    // new request를 생성
 	prep_rq_fn		*prep_rq_fn;
+    // device 로 request 가 보내지기 전에 필요한 H/W specific 처리 작업 수행(대부분 NULL) 
 	unprep_rq_fn		*unprep_rq_fn;
+    // request 가 예상치 못하게 종료 시, resource relese 용도
 	softirq_done_fn		*softirq_done_fn;
+    // soft irq 를 기반으로 i/o request 를 종료
 	rq_timed_out_fn		*rq_timed_out_fn;
 	dma_drain_needed_fn	*dma_drain_needed;
 	lld_busy_fn		*lld_busy_fn;
@@ -490,6 +504,7 @@ struct request_queue {
 	 * queue settings
 	 */
 	unsigned long		nr_requests;	/* Max # of requests */
+    // queue 에 담을 수 있는 최대 reqeust 의 수
 	unsigned int		nr_congestion_on;
 	unsigned int		nr_congestion_off;
 	unsigned int		nr_batching;
@@ -528,7 +543,7 @@ struct request_queue {
 #endif
 
 	struct queue_limits	limits;
-
+    // h/w specific 정보들 
 	/*
 	 * sg stuff
 	 */
@@ -1961,20 +1976,24 @@ struct block_device_operations {
 	int (*open) (struct block_device *, fmode_t);
 	void (*release) (struct gendisk *, fmode_t);
 	int (*rw_page)(struct block_device *, sector_t, struct page *, bool);
+    // swap operations 에서 사용되는 operation 으로 page 의 내용을 swap device 에 read/write 수행
 	int (*ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
 	int (*compat_ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
 	long (*direct_access)(struct block_device *, sector_t, void **, pfn_t *,
 			long);
+    // 지금은 없어짐... dax_operation 이 별도로 있음
 	unsigned int (*check_events) (struct gendisk *disk,
 				      unsigned int clearing);
 	/* ->media_changed() is DEPRECATED, use ->check_events() instead */
 	int (*media_changed) (struct gendisk *);
 	void (*unlock_native_capacity) (struct gendisk *);
 	int (*revalidate_disk) (struct gendisk *);
+    // 제대로 umount 안하고 다른 storage medium 으로 mount 시 호출됨
 	int (*getgeo)(struct block_device *, struct hd_geometry *);
 	/* this callback is with swap_lock and sometimes page table lock held */
 	void (*swap_slot_free_notify) (struct block_device *, unsigned long);
 	struct module *owner;
+    // block device 가 module 일 경우
 	const struct pr_ops *pr_ops;
 };
 

@@ -415,9 +415,24 @@ struct request_queue;
 //          ------------------------------------
 //          |                 |                |
 //      sda1                sda2               sda3
-//      block_device        block_device       block_device 
-//      
-//    hd_struct             hd_struct           hd_struct  
+//              bd_disk
+//              -----------------------------------------------------------------------
+//      sda1    |        sda2    |          sda3   |                                  |
+//      block_device <---> block_device <---> block_device                            |
+//       |       bd_contains |     bd_contains    | bd_part                           |
+//       |                   |                    |                                   |
+//       |                   |                    |                                   |
+//    hd_struct <----       hd_struct <---      hd_struct <---                        |
+//                  |                    |                   |                        |
+//                  ------------------------------------------------                  |
+//                                                                 |                  |
+//                                                             -------------------    |
+//                                                             |    |   |   |...      |
+//                                                             ------------------     |
+//                                                             disk_part_tbl          |
+//                                                                 |                  |
+//                                                              gendisk <--------------
+//                                                             /dev/sda 
 //      
 //
 struct block_device {
