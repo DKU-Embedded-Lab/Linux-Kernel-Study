@@ -826,6 +826,7 @@ struct request_queue *blk_init_queue(request_fn_proc *rfn, spinlock_t *lock)
 }
 EXPORT_SYMBOL(blk_init_queue);
 
+// request queue 생성 및 드라이버에 의해 제공되는 request 처리 함수 rfn 등록
 struct request_queue *
 blk_init_queue_node(request_fn_proc *rfn, spinlock_t *lock, int node_id)
 {
@@ -1759,11 +1760,14 @@ static inline void blk_partition_remap(struct bio *bio)
 	 */
 	if (bdev != bdev->bd_contains &&
 	    (bio_sectors(bio) || bio_op(bio) == REQ_OP_ZONE_RESET)) {
+        // bdev 가 bd_contains 을 통해 자기 자신을 가르키고 있지 않다면 
+        // partition 된 device 임
 		struct hd_struct *p = bdev->bd_part;
 
 		bio->bi_iter.bi_sector += p->start_sect;
+        // bio 의 io 위치를 해당 partition 의 시작위치 이후로 재설정 
 		bio->bi_bdev = bdev->bd_contains;
-
+        // bio 의 block_device 를 conrol block_device structure 를 가리키도록 재설정
 		trace_block_bio_remap(bdev_get_queue(bio->bi_bdev), bio,
 				      bdev->bd_dev,
 				      bio->bi_iter.bi_sector - p->start_sect);
@@ -1820,6 +1824,7 @@ static inline bool should_fail_request(struct hd_struct *part,
 /*
  * Check whether this bio extends beyond the end of the device.
  */
+// 현재 i/o가 가능한 size인지 검사
 static inline int bio_check_eod(struct bio *bio, unsigned int nr_sectors)
 {
 	sector_t maxsector;
@@ -1829,10 +1834,12 @@ static inline int bio_check_eod(struct bio *bio, unsigned int nr_sectors)
 
 	/* Test device or partition size, when known. */
 	maxsector = i_size_read(bio->bi_bdev->bd_inode) >> 9;
+    // io 를 수행할 block device 의 최대 sector 수를 반환
 	if (maxsector) {
 		sector_t sector = bio->bi_iter.bi_sector;
-
+        // 현재 i/o 가 진행된 sector 주소 가져옴 
 		if (maxsector < nr_sectors || maxsector - nr_sectors < sector) {
+            // 현재 i/o 가 최대 sector 를 초과하는지 검사
 			/*
 			 * This may well happen - the kernel calls bread()
 			 * without checking the size of the device, e.g., when
@@ -1851,6 +1858,7 @@ generic_make_request_checks(struct bio *bio)
 {
 	struct request_queue *q;
 	int nr_sectors = bio_sectors(bio);
+    // 현재 bio 가 i/o 할 총 sector 수를 bi_iter.bv_size 로부터 계산
 	int err = -EIO;
 	char b[BDEVNAME_SIZE];
 	struct hd_struct *part;
@@ -1859,8 +1867,10 @@ generic_make_request_checks(struct bio *bio)
 
 	if (bio_check_eod(bio, nr_sectors))
 		goto end_io;
+    // 현재 io 수행 시, block device 의 logical block 가용 용량 초과인지 검사 
 
 	q = bdev_get_queue(bio->bi_bdev);
+    // 현재 block device 와 관련된 request queue 를 가져옴
 	if (unlikely(!q)) {
 		printk(KERN_ERR
 		       "generic_make_request: Trying to access "
@@ -1871,6 +1881,7 @@ generic_make_request_checks(struct bio *bio)
 	}
 
 	part = bio->bi_bdev->bd_part;
+    // device 의 partition 정보를 가지고 있는 배열 hd_struct 를 참조
 	if (should_fail_request(part, bio->bi_iter.bi_size) ||
 	    should_fail_request(&part_to_disk(part)->part0,
 				bio->bi_iter.bi_size))
@@ -1881,10 +1892,12 @@ generic_make_request_checks(struct bio *bio)
 	 * of partition p to block n+start(p) of the disk.
 	 */
 	blk_partition_remap(bio);
+    // 현재 bio 가 수행될 위치가 partition 이라면 sector 위치 재설정 및 
+    // control block device 를 가지도록 재설정 해줌
 
 	if (bio_check_eod(bio, nr_sectors))
 		goto end_io;
-
+    // storage 의 크기가 해당 io를 가용할 수 있는지 검사
 	/*
 	 * Filter flush bio's early so that make_request based
 	 * drivers without flush support don't have to worry
@@ -1899,6 +1912,7 @@ generic_make_request_checks(struct bio *bio)
 		}
 	}
 
+    // io option 에 따른 설정
 	switch (bio_op(bio)) {
 	case REQ_OP_DISCARD:
 		if (!blk_queue_discard(q))
@@ -1932,7 +1946,7 @@ generic_make_request_checks(struct bio *bio)
 	 * layer knows how to live with it.
 	 */
 	create_io_context(GFP_ATOMIC, q->node);
-
+    // 현재 task_struct 에 io_context 생성
 	if (!blkcg_bio_issue_check(q, bio))
 		return false;
 
@@ -1971,6 +1985,7 @@ end_io:
  * a lower device by calling into generic_make_request recursively, which
  * means the bio should NOT be touched after the call to ->make_request_fn.
  */
+// bio 에 대해 request 를 생성하고 request queue 에 추가하는 i/o 작업 수행
 blk_qc_t generic_make_request(struct bio *bio)
 {
 	/*
@@ -1981,10 +1996,16 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * yet.
 	 */
 	struct bio_list bio_list_on_stack[2];
+    // bio_list_on_stack[0] : 현재 요청된 bio들 
+    // bio_list_on_stack[1] : 그 전에 요청된 bio들(아직 i/o 완료 안됨)
 	blk_qc_t ret = BLK_QC_T_NONE;
 
 	if (!generic_make_request_checks(bio))
 		goto out;
+    //  - block device 의 가용 sector 넘는지 검사
+    //  - i/o option 마다 값 설정 
+    //  - partition 일 경우, sector 재설정 및 block_device 를 
+    //    control  block_device 가리키도록 재설정
 
 	/*
 	 * We only want one ->make_request_fn to be active at a time, else
@@ -1997,7 +2018,11 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * should be added at the tail
 	 */
 	if (current->bio_list) {
+        // task_struct 에 bio_list 가 설정되어 있다면 make_request_fn 함수를 통해
+        // i/o 중에 또다른 sub function 으로 make_request_fn 이 호출된 상황이므로
 		bio_list_add(&current->bio_list[0], bio);
+        // 기존 task_struct 가 수행되던 bio 들을 가지고 있는 것이므로 
+        // 기존 list의 tail 에 추가 후 종료. 
 		goto out;
 	}
 
@@ -2017,18 +2042,26 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 */
 	BUG_ON(bio->bi_next);
 	bio_list_init(&bio_list_on_stack[0]);
+    // bio list 초기화
 	current->bio_list = bio_list_on_stack;
+    // task_struct 의 bio_list 설정
 	do {
 		struct request_queue *q = bdev_get_queue(bio->bi_bdev);
-
+        // bio 에서 현재 block_device 의 request_queue 가져옴
 		if (likely(blk_queue_enter(q, false) == 0)) {
+            
 			struct bio_list lower, same;
 
 			/* Create a fresh bio_list for all subordinate requests */
 			bio_list_on_stack[1] = bio_list_on_stack[0];
 			bio_list_init(&bio_list_on_stack[0]);
 			ret = q->make_request_fn(q, bio);
+            // single queue 의 경우 ->  block/blk-mq.c 의 blk_sq_make_request 호출 
+            // multi queue의 경우 -> block/blk-mq.c 의 blk_mq_make_request 호출
 
+            // TODO.
+            //  - generic_make_request 의 bio_list_on_stack 과정 분석
+            //  - blk_queue_exit/blk_queue_init 분석
 			blk_queue_exit(q);
 
 			/* sort new bios into those for a lower level
@@ -2066,6 +2099,8 @@ EXPORT_SYMBOL(generic_make_request);
  * interfaces; @bio must be presetup and ready for I/O.
  *
  */
+// bio 를 device layer 에 전송하는 start point
+// bio 에 i/o 수행할 것들을 추가하는 함수는 bio_add_page 임
 blk_qc_t submit_bio(struct bio *bio)
 {
 	/*
@@ -2073,18 +2108,25 @@ blk_qc_t submit_bio(struct bio *bio)
 	 * go through the normal accounting stuff before submission.
 	 */
 	if (bio_has_data(bio)) {
+        // 현재 bio 에 data가 있는지 검사
 		unsigned int count;
 
 		if (unlikely(bio_op(bio) == REQ_OP_WRITE_SAME))
 			count = bdev_logical_block_size(bio->bi_bdev) >> 9;
+            // zero filled sector 를 write 하는 경우, io 의 크기를 logical block 의 
+            // sector 수로 계산
 		else
 			count = bio_sectors(bio);
+            // 일반 i/o의 경우 io 를 수행할 sectors 수를 bio 의 
+            // bi_iter.bv_size 정보를 기반으로 계산
 
 		if (op_is_write(bio_op(bio))) {
 			count_vm_events(PGPGOUT, count);
+            // write 일 경우, vmevent count 증가
 		} else {
-			task_io_account_read(bio->bi_iter.bi_size);
+			task_io_account_read(bio->bi_iter.bi_size);            
 			count_vm_events(PGPGIN, count);
+            // read 일 경우, vmevent count 감소
 		}
 
 		if (unlikely(block_dump)) {

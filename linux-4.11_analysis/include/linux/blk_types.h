@@ -21,24 +21,45 @@ typedef void (bio_end_io_t) (struct bio *);
  * main unit of I/O for the block layer and lower layers (ie drivers and
  * stacking drivers)
  */
+// i/o 를 수행할 disk 영역의 정보와 disk 에 저장될 또는 disk 의 내용이 옮겨질 memory 
+// 내의 page 위치 정보를 가지고 있음
+// 하나의 bio는 disk 내의 연속된 영역을 나타냄 
+// 여러개의 bio들이 모여 하나의 request 로 합쳐지기도 함
+// generic_make_request 또는 submit_bio 함수를 통해 bio layer 에 queue 되며, 해당 I/O
+// request 가 완료될때 까지 대기 하지 않고, queueing 만 수행 후 반환.
+// (queue 에 공간이 없다면 여유공간 즉 memory 가 확보될 때 까지 대기하기도 함)
 struct bio {
 	struct bio		*bi_next;	/* request queue link */
+    // 하나의 single linked list를 구성하고 있는 bio linked list
 	struct block_device	*bi_bdev;
+    // request 가 속해있는(I/O될) block device
 	int			bi_error;
 	unsigned int		bi_opf;		/* bottom bits req flags,
 						 * top bits REQ_OP. Use
 						 * accessors.
 						 */
+    // 현재 i/o request 의 request type 등의 정보 flag 
+    // e.g. 
+    //  0000000000000000
+    //          ********
+    //                |
+    //                ----- * 이 8 가지 bit 는 request type 나타냄.
+    //                      - LSB 가 1 일 경우 WRITE 임(REQ_OP_WRITE)
+    //                      - LSB 가 0 일 경우 READ 임(REQ_OP_READ)
+    //
+    // REQ_NOWAIT 설정되어 있을 시, queue 에 들어갈 공간이 없다면 BLK_STS_AGAIN 상태로 반환
 	unsigned short		bi_flags;	/* status, command, etc */
 	unsigned short		bi_ioprio;
 
 	struct bvec_iter	bi_iter;
-
+    // 현재 bio 내의 bio_vec 둘을 iterate 할 때, 현재까지의 정보들을 관리하기 위한 함수
+    // 즉 iterate 하는 도중 얼마나 많은 sector 와 buffer 가 소모되었는지 등 정보 유지 
 	/* Number of segments in this BIO after
 	 * physical address coalescing is performed.
 	 */
 	unsigned int		bi_phys_segments;
-
+    // 현재 bio 관련 memory 영역의 segment 수 한 bio 에 여러 segment가 있을 수도 있고,
+    // 단일 segment 가 있을수도 있다.
 	/*
 	 * To keep track of the max segment size, we account for the
 	 * sizes of the first and last mergeable segments in this bio.
@@ -49,7 +70,7 @@ struct bio {
 	atomic_t		__bi_remaining;
 
 	bio_end_io_t		*bi_end_io;
-
+    // hardware transfer 종료시 호출되어 해당 bio의 i/o종료를 알림
 	void			*bi_private;
 #ifdef CONFIG_BLK_CGROUP
 	/*
@@ -66,7 +87,7 @@ struct bio {
 	};
 
 	unsigned short		bi_vcnt;	/* how many bio_vec's */
-
+    // bio bector array의 entry수
 	/*
 	 * Everything starting with bi_max_vecs will be preserved by bio_reset()
 	 */
@@ -139,7 +160,7 @@ struct bio {
  * meaning.
  */
 #define REQ_OP_BITS	8
-#define REQ_OP_MASK	((1 << REQ_OP_BITS) - 1)
+#define REQ_OP_MASK	((1 << REQ_OP_BITS) - 1) // .... 1111 1111
 #define REQ_FLAG_BITS	24
 
 enum req_opf {

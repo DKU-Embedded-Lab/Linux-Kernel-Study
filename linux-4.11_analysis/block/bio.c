@@ -852,6 +852,7 @@ EXPORT_SYMBOL(bio_add_pc_page);
  *	Attempt to add a page to the bio_vec maplist. This will only fail
  *	if either bio->bi_vcnt == bio->bi_max_vecs or it's a cloned bio.
  */
+// bio structure 에 bvec 을 추가하는 함수
 int bio_add_page(struct bio *bio, struct page *page,
 		 unsigned int len, unsigned int offset)
 {
@@ -869,10 +870,23 @@ int bio_add_page(struct bio *bio, struct page *page,
 	 * a consecutive offset.  Optimize this special case.
 	 */
 	if (bio->bi_vcnt > 0) {
+        // 현재 bio 내의 bvec 배열의 entry 가 1개 이상 있는 상태라면
 		bv = &bio->bi_io_vec[bio->bi_vcnt - 1];
-
+        // 일단 먼저 가장 최근에 추가된 bvec 를 가져와 현재 i/o 요청과 
+        // 합쳐질 수 있는지 확인
 		if (page == bv->bv_page &&
 		    offset == bv->bv_offset + bv->bv_len) {
+            // 같은 page이고, bv_offset + bv_len 이 현재 offset 과 같다면
+            // 즉 아래와 같은 구조라면 bv_len 만 현재 i/o 크기만큼 증가 
+            //  
+            //       bv_offset  새로운 I/O 위치가 여기라면 덧붙이기 가능
+            //          |       |
+            // ----|----*-------------|----
+            //          ^^^^^^^^
+            //            bv_len
+            //
+            //           page frame
+            //
 			bv->bv_len += len;
 			goto done;
 		}
@@ -880,15 +894,18 @@ int bio_add_page(struct bio *bio, struct page *page,
 
 	if (bio->bi_vcnt >= bio->bi_max_vecs)
 		return 0;
+    // 하나의 bio 가 담을 수 있는 최대 bvec 의 개수를 초과한다면 종료
 
 	bv		= &bio->bi_io_vec[bio->bi_vcnt];
 	bv->bv_page	= page;
 	bv->bv_len	= len;
 	bv->bv_offset	= offset;
-
+    // bvec 추가
 	bio->bi_vcnt++;
+    // bvec entry 수 증가
 done:
 	bio->bi_iter.bi_size += len;
+    // io iterator update 수행
 	return len;
 }
 EXPORT_SYMBOL(bio_add_page);

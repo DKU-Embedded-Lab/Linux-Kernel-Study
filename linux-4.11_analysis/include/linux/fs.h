@@ -442,7 +442,7 @@ struct block_device {
     // 얼마나 많이 block device 가 bd_openers 를 통해 열렸는지 에 대한 count
 	struct inode *		bd_inode;	/* will die */
     // block device special file 들의 inode 
-	struct super_block *	bd_super;
+	struct super_block *	bd_super; // TODO.
 	struct mutex		bd_mutex;	/* open/close mutex */
 	void *			bd_claiming;
 	void *			bd_holder;
@@ -463,6 +463,7 @@ struct block_device {
 	unsigned		bd_block_size;
 	struct hd_struct *	bd_part;
     // block device 내의 partitions 들에 대한 struct 로 partition descriptor 임
+    // partition 정보를 나타냄
 	/* number of times partitions within this device have been opened. */
 	unsigned		bd_part_count;
     // device 가 kernel 내에 얼마나 사용되고 있는지에 대한 usage count     

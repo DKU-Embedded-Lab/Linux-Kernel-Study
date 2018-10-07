@@ -1010,7 +1010,9 @@ struct task_struct {
 
 	/* Stacked block device info: */
 	struct bio_list			*bio_list;
-
+    // 해당 task_struct 가 수행하던 bio들의 list 
+    // bio_list[0] : 현재 요청된 bio들
+    // bio_list[1] : 그전에 요청되들어왔던 bio들이나 아직 처리안된 것들
 #ifdef CONFIG_BLOCK
 	/* Stack plugging: */
 	struct blk_plug			*plug;

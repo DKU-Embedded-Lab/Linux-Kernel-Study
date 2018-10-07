@@ -1629,7 +1629,9 @@ done:
 static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
 {
 	const int is_sync = op_is_sync(bio->bi_opf);
+    // sync io 여부 검사
 	const int is_flush_fua = op_is_flush(bio->bi_opf);
+    // flush io 여부 검사
 	struct blk_plug *plug;
 	unsigned int request_count = 0;
 	struct blk_mq_alloc_data data = { .flags = 0 };

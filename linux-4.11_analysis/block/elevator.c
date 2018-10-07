@@ -430,6 +430,8 @@ void elv_dispatch_add_tail(struct request_queue *q, struct request *rq)
 }
 EXPORT_SYMBOL(elv_dispatch_add_tail);
 
+// bio 를 request_queue 에 queue 된 기존의 request 들에 merge 할 수 
+// 있는지 검사 및 merge 수행
 enum elv_merge elv_merge(struct request_queue *q, struct request **req,
 		struct bio *bio)
 {

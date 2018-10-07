@@ -172,7 +172,7 @@ struct blk_integrity {
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
 
 // device database 에서 blk device driver 를 나타냄 
-// 각각의 block device 자체에 대한 정보가 아닌 disk partition 정보  
+// 각각의 block device 자체 즉 모든 partition 들에 대한 정보
 //
 // e.g. /dev/sda 에 sda1, sda2 있는 경우...  
 //
@@ -203,7 +203,15 @@ struct blk_integrity {
 //                           |                                     |
 //                          ...                                    | queue
 //                           |            queue_head               |
-//                     request_queue <--------------------->  request_queue
+//                     request_queue <--------------------->  request_queue 
+//                   (device 별로 가짐)
+//                           |
+//                         request 
+//                           |
+//                         request ------- bio - bio - bio ...
+//                           |
+//                         request 
+//                          ...
 //
 //
 struct gendisk {

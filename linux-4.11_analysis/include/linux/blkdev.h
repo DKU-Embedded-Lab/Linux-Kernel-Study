@@ -128,6 +128,7 @@ typedef __u32 __bitwise req_flags_t;
  * If you modify this structure, make sure to update blk_rq_init() and
  * especially blk_mq_rq_ctx_init() to take care of the added fields.
  */
+// bio 들이 모여져 만들어진 하나의 i/o request
 struct request {
 	struct list_head queuelist;
 	union {
@@ -136,6 +137,7 @@ struct request {
 	};
 
 	struct request_queue *q;
+    // 현재 requset 가 전달 될 queue
 	struct blk_mq_ctx *mq_ctx;
 
 	int cpu;
@@ -148,9 +150,10 @@ struct request {
 
 	/* the following two fields are internal, NEVER access directly */
 	unsigned int __data_len;	/* total data len */
+    // 현재 request 가 처리하는 data의 길이(byte 단위)
 	int tag;
 	sector_t __sector;		/* sector cursor */
-
+    // 현재 request 가 접근하려는 disk 상의 위치
 	struct bio *bio;
 	struct bio *biotail;
 
@@ -163,6 +166,8 @@ struct request {
 	 */
 	union {
 		struct hlist_node hash;	/* merge hash */
+        // 새로운 bio 가 기존에 존재하는 request 들과 merge 가능한지
+        // 검사하기 위한queue
 		struct list_head ipi_list;
 	};
 
@@ -173,6 +178,7 @@ struct request {
 	 */
 	union {
 		struct rb_node rb_node;	/* sort/lookup */
+        // I/O scheduler 에서 sector 단위 정렬을 위해 사용
 		struct bio_vec special_vec;
 		void *completion_data;
 	};
@@ -381,16 +387,23 @@ static inline int blkdev_reset_zones_ioctl(struct block_device *bdev,
 #endif /* CONFIG_BLK_DEV_ZONED */
 
 // 각 block device specific request queue  
-// read/fetch request 시, 일부 data 를 queueing 및 rearrange 하여 성능 높임.
+// read/fetch request 시, 일부 data 를 queueing 및 rearrange 하여 성능 높임. 
+//
+//  - request_queue 에는 struct request 가 쌓여 있고 각 request 들에는
+//    관련있는 io 요청(struct bio)들이 모아져 있다.
+//  - request queue 에 있는 request 들에 대하여 merget/collapse/sorting 등의 작업을 
+//    elevator 에 따라 수행한다.
 struct request_queue {
 	/*
 	 * Together with queue_head for cacheline sharing
 	 */
 	struct list_head	queue_head;
-    // request_queue 끼리 연결
+    // 요청 들어온 read/fetch request 들에 대한 linked list
 	struct request		*last_merge;
-	struct elevator_queue	*elevator;
-    // rearrange function
+    // 다음 merge 대상인 request
+	struct elevator_queue	*elevator; 
+    // request 들을 rearrange 해줄 algorithm 
+    //
 	int			nr_rqs[2];	/* # allocated [a]sync rqs */
 	int			nr_rqs_elvpriv;	/* # allocated rqs w/ elvpriv */
 
@@ -403,14 +416,15 @@ struct request_queue {
 	 * determined using bio_request_list().
 	 */
 	struct request_list	root_rl;
-    // 현재 request queue 의 cache 역할
+    // 현재 request queue 의 cache 역할로 one-hit cache 임. 
+    // e.g. bio merge 를 위해 request 를 찾더 중 hit 된다면 cahce 에 담김
 	
     // _fn suffix 붙은 것 모두 function pointer
     request_fn_proc		*request_fn;
     // 각 driver 마다의 specific function 으로 request queue 에 새로운 request 를 
     // 추가하고 request를 device 로 보내기 위한 함수
 	make_request_fn		*make_request_fn;
-    // new request를 생성
+    // new request를 생성하며 request_queue 에 추가함, device 가 load 될 때 등록됨 
 	prep_rq_fn		*prep_rq_fn;
     // device 로 request 가 보내지기 전에 필요한 H/W specific 처리 작업 수행(대부분 NULL) 
 	unprep_rq_fn		*unprep_rq_fn;
@@ -479,6 +493,7 @@ struct request_queue {
 	 */
 	spinlock_t		__queue_lock;
 	spinlock_t		*queue_lock;
+    // request_queue 에 대한 lock
 
 	/*
 	 * queue kobject
@@ -1276,6 +1291,7 @@ static inline void blk_set_runtime_active(struct request_queue *q) {}
  * the plug list when the task sleeps by itself. For details, please see
  * schedule() where blk_schedule_flush_plug() is called.
  */
+// request 들이 모아서 처리될 수 있도록 하는 blk plugging 관련 구조
 struct blk_plug {
 	struct list_head list; /* requests */
 	struct list_head mq_list; /* blk-mq requests */

@@ -244,6 +244,7 @@ void blk_queue_bounce(struct request_queue *q, struct bio **bio_orig)
 	 */
 	if (!bio_has_data(*bio_orig))
 		return;
+    // bio 에 data가 담겨있지 않다면 종료
 
 	/*
 	 * for non-isa bounce case, just check if the bounce pfn is equal

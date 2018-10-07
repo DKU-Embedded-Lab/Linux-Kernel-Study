@@ -60,6 +60,7 @@
 #define bio_multiple_segments(bio)				\
 	((bio)->bi_iter.bi_size != bio_iovec(bio).bv_len)
 #define bio_sectors(bio)	((bio)->bi_iter.bi_size >> 9)
+// bio 에서 i/o 가 수행될 byte를 sector 수로 변환하여 반환
 #define bio_end_sector(bio)	((bio)->bi_iter.bi_sector + bio_sectors((bio)))
 
 /*
@@ -79,6 +80,8 @@ static inline bool bio_has_data(struct bio *bio)
 	    bio_op(bio) != REQ_OP_SECURE_ERASE &&
 	    bio_op(bio) != REQ_OP_WRITE_ZEROES)
 		return true;
+    // bio 가 존재하고, bi_iter 에 설정된 i/o 할 bv_len 총합이 0이면 안되고 
+    // 설정값 확인
 
 	return false;
 }

@@ -26,21 +26,26 @@
 /*
  * was unsigned short, but we might as well be ready for > 64kB I/O pages
  */
+// 하나의 bio 를 구성하는 요소들 bio 내에서 array로 존재
 struct bio_vec {
 	struct page	*bv_page;
 	unsigned int	bv_len;
+    // i/o 할 byte 단위 크기
 	unsigned int	bv_offset;
+    // i/o 할 page frame 내의 위치
 };
 
 struct bvec_iter {
-	sector_t		bi_sector;	/* device address in 512 byte
-						   sectors */
+	sector_t		bi_sector;	/* device address in 512 byte sectors */
+    // io 를 진행한 sector 수
 	unsigned int		bi_size;	/* residual I/O count */
-
+    // struct bio 내의 i/o 가 수행되어야 할 전체 byte단위 크기 
+    // 즉 각 bvec 들의 bv_len 들을 합한 값
 	unsigned int		bi_idx;		/* current index into bvl_vec */
-
+    // 
 	unsigned int            bi_bvec_done;	/* number of bytes completed in
 						   current bvec */
+    // 현재 bvec 에서 i/o complete 된 byte 수
 };
 
 /*
