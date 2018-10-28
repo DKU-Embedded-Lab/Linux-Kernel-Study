@@ -128,7 +128,9 @@ typedef __u32 __bitwise req_flags_t;
  * If you modify this structure, make sure to update blk_rq_init() and
  * especially blk_mq_rq_ctx_init() to take care of the added fields.
  */
-// bio 들이 모여져 만들어진 하나의 i/o request
+// bio 들이 모여져 만들어진 하나의 i/o request 로 make_request_fn 함수를 통해
+// 생성되며 내부적으로 single queue의 경우 blk_queue_bio(), multi queue의 경우 
+// blk_mq_make_request() 함수에 의해 생성됨
 struct request {
 	struct list_head queuelist;
 	union {
@@ -178,7 +180,8 @@ struct request {
 	 */
 	union {
 		struct rb_node rb_node;	/* sort/lookup */
-        // I/O scheduler 에서 sector 단위 정렬을 위해 사용
+        // I/O scheduler 에서 request 들을 red black tree 로 관리하고, 
+        // 정렬을 위해 사용
 		struct bio_vec special_vec;
 		void *completion_data;
 	};
@@ -318,6 +321,7 @@ enum blk_zoned_model {
 
 struct queue_limits {
 	unsigned long		bounce_pfn;
+    // device 를 위해 추가적 page 할당 용도 
 	unsigned long		seg_boundary_mask;
 	unsigned long		virt_boundary_mask;
 
@@ -392,7 +396,8 @@ static inline int blkdev_reset_zones_ioctl(struct block_device *bdev,
 //  - request_queue 에는 struct request 가 쌓여 있고 각 request 들에는
 //    관련있는 io 요청(struct bio)들이 모아져 있다.
 //  - request queue 에 있는 request 들에 대하여 merget/collapse/sorting 등의 작업을 
-//    elevator 에 따라 수행한다.
+//    elevator 에 따라 수행한다. 
+//  - multi-queue layer 에서는 struct request 가 pre-allocate 됨
 struct request_queue {
 	/*
 	 * Together with queue_head for cacheline sharing
@@ -438,17 +443,27 @@ struct request_queue {
 	exit_rq_fn		*exit_rq_fn;
 
 	const struct blk_mq_ops	*mq_ops;
-
+    // multi-queue 관련 함수
 	unsigned int		*mq_map;
 
 	/* sw queues */
 	struct blk_mq_ctx __percpu	*queue_ctx;
+    // multi-queue layer 에서 사용되는 software tagging queue(submission queue)
+    //  - per-CPU 또는 per-NUMA node 로 할당 되어 각 CPU가 자신의 queue 에 
+    //    I/O request 를 보냄(single-queue 에서의 lock contention 이 줄어듬)
+    //  - bfq, kyber, mq-deadline 의 별도 multi-queue 용 io scheduler 에서 관리  
+    //  - 이 queue 안에서 coalescing 수행 하며 reordering 은 수행안함.
+    //    (high performance storage 에서 reordering 은 효과 없으나 coalescing 
+    //    은 전체 I/O 수행 횟수를 줄여주므로 효과 있음)
 	unsigned int		nr_queues;
 
 	unsigned int		queue_depth;
 
 	/* hw dispatch queues */
-	struct blk_mq_hw_ctx	**queue_hw_ctx;
+	struct blk_mq_hw_ctx	**queue_hw_ctx; 
+    // multi-queue layer 에서 사용되는 hardware dispatch queue 
+    // 1~2048 개 까지 할당 가능
+
 	unsigned int		nr_hw_queues;
 
 	/*
@@ -507,6 +522,7 @@ struct request_queue {
 
 #ifdef  CONFIG_BLK_DEV_INTEGRITY
 	struct blk_integrity integrity;
+    // blk integrity 
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
 
 #ifdef CONFIG_PM
@@ -1294,8 +1310,10 @@ static inline void blk_set_runtime_active(struct request_queue *q) {}
 // request 들이 모아서 처리될 수 있도록 하는 blk plugging 관련 구조
 struct blk_plug {
 	struct list_head list; /* requests */
+    // strut request 들의 list
 	struct list_head mq_list; /* blk-mq requests */
 	struct list_head cb_list; /* md requires an unplug callback */
+    // struct blk_plug_cb 들의 list
 };
 #define BLK_MAX_REQUEST_COUNT 16
 #define BLK_PLUG_FLUSH_SIZE (128 * 1024)

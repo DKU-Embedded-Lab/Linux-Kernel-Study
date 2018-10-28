@@ -8,6 +8,9 @@
 struct blk_mq_tags;
 struct blk_flush_queue;
 
+// 
+// multi-queue layer 에서 사용되는 hardware dispatch queue 
+// 1~2048 개 까지 할당 가능
 struct blk_mq_hw_ctx {
 	struct {
 		spinlock_t		lock;
@@ -102,12 +105,13 @@ typedef void (busy_tag_iter_fn)(struct request *, void *, bool);
 typedef int (poll_fn)(struct blk_mq_hw_ctx *, unsigned int);
 typedef int (map_queues_fn)(struct blk_mq_tag_set *set);
 
-
+// multi-queue 관련 함수
 struct blk_mq_ops {
 	/*
 	 * Queue request
 	 */
 	queue_rq_fn		*queue_rq;
+    // queue 되었던 struct request 를 처리
 
 	/*
 	 * Called on request timeout

@@ -486,6 +486,7 @@ enum elv_merge elv_merge(struct request_queue *q, struct request **req,
  *
  * Returns true if we merged, false otherwise
  */
+// rq를 기존의 request_queue 와 합칠 수 있는지 검사
 bool elv_attempt_insert_merge(struct request_queue *q, struct request *rq)
 {
 	struct request *__rq;

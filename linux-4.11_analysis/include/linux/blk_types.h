@@ -58,15 +58,17 @@ struct bio {
 	 * physical address coalescing is performed.
 	 */
 	unsigned int		bi_phys_segments;
-    // 현재 bio 관련 memory 영역의 segment 수 한 bio 에 여러 segment가 있을 수도 있고,
+    // 현재 bio 관련 memory 영역의 segment 수 
+    // 한 bio 에 여러 segment가 있을 수도 있고,
     // 단일 segment 가 있을수도 있다.
 	/*
 	 * To keep track of the max segment size, we account for the
 	 * sizes of the first and last mergeable segments in this bio.
 	 */
 	unsigned int		bi_seg_front_size;
+    //  
 	unsigned int		bi_seg_back_size;
-
+    // 
 	atomic_t		__bi_remaining;
 
 	bio_end_io_t		*bi_end_io;

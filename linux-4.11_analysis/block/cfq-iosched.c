@@ -162,9 +162,12 @@ struct cfq_queue {
  * IDLE is handled separately, so it has negative index
  */
 enum wl_class_t {
-	BE_WORKLOAD = 0,
+	BE_WORKLOAD = 0, 
+    // best effort(기본)
 	RT_WORKLOAD = 1,
+    // real time
 	IDLE_WORKLOAD = 2,
+    // idle
 	CFQ_PRIO_NR,
 };
 
@@ -173,8 +176,11 @@ enum wl_class_t {
  */
 enum wl_type_t {
 	ASYNC_WORKLOAD = 0,
+    // normal write 에 해당(O_SYNC 없는)
 	SYNC_NOIDLE_WORKLOAD = 1,
+    // random read 에 해당 
 	SYNC_WORKLOAD = 2
+    // sequential read 에 해당 
 };
 
 struct cfqg_stats {
@@ -4842,6 +4848,22 @@ static struct elv_fs_entry cfq_attrs[] = {
 	__ATTR_NULL
 };
 
+// Complete Fairness Queueing I/O scheduler 관련 함수 
+//  - I/O 요청을 best effort, real time, idle 로 나누고 다시 
+//    sync/async 여부에 따라 SYNC_WORKLOAD, SYNC_NOIDLE_WORKLOAD, 
+//    ASYNC_WORKLOAD 로 구분하여 I/O 를 요청한 process 에 해당하는 
+//    queue 별로 요청 관리
+//    (ASYNC_WORKLOAD 의 경우 process 단위 구분 안함)
+//     * SYNC_WORKLOAD : sequential read
+//     * SYNC_NOIDLE_WORKLOAD : random read 
+//     * ASYNC_WORKLOAD : normal write
+//
+//  - process 단위로 I/O time slice 를 할당하거나, cgroup이 설정되어 
+//    있는 경우, cgroup 단위로 time slice 할당 
+//
+//  - 별도 설정 없을 경우 time slice 가 종료되어도 SYNC_WORKLOAD 의 경우 
+//    일정시간 대기(다른 device idle 유지) 
+//
 static struct elevator_type iosched_cfq = {
 	.ops.sq = {
 		.elevator_merge_fn = 		cfq_merge,

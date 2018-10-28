@@ -102,7 +102,10 @@ struct elevator_mq_ops {
 	struct request *(*get_request)(struct request_queue *, unsigned int, struct blk_mq_alloc_data *);
 	void (*put_request)(struct request *);
 	void (*insert_requests)(struct blk_mq_hw_ctx *, struct list_head *, bool);
+    // struct request 들의 list 를 software tagging queue 에 추가 
 	struct request *(*dispatch_request)(struct blk_mq_hw_ctx *);
+    // software tagging queue 로부터 hardware queue 인 blk_mq_hw_ctx 로 전송할 
+    // struct request 를 선택 
 	bool (*has_work)(struct blk_mq_hw_ctx *);
 	void (*completed_request)(struct blk_mq_hw_ctx *, struct request *);
 	void (*started_request)(struct request *);
@@ -134,12 +137,17 @@ struct elevator_type
 	/* fields provided by elevator implementation */
 	union {
 		struct elevator_ops sq;
+        // single queue 연산 
 		struct elevator_mq_ops mq;
+        // multi queue 연산 
 	} ops;
+    // io scheduler operation 으로 각 scheduler 에 따라 달라짐
 	size_t icq_size;	/* see iocontext.h */
 	size_t icq_align;	/* ditto */
 	struct elv_fs_entry *elevator_attrs;
+    // elevator 속성 정보
 	char elevator_name[ELV_NAME_MAX];
+    // /sys/block/sda/queue/scheduler 에 보이는 io scheduler 이름 
 	struct module *elevator_owner;
 	bool uses_mq;
 
@@ -160,7 +168,11 @@ struct request *elv_rqhash_find(struct request_queue *q, sector_t offset);
  */
 struct elevator_queue
 {
-	struct elevator_type *type;
+	struct elevator_type *type; 
+    // io scheduler 들에 따른 ops, attr, name 등 정보 (type 에따라 다르게 설정)
+    // * noop io scheduler : elevator_noop
+    // * deadline io scheduler : elevator_deadline
+    // * cfq io scheduler : elevator_cfq
 	void *elevator_data;
 	struct kobject kobj;
 	struct mutex sysfs_lock;

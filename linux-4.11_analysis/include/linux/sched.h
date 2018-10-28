@@ -1016,6 +1016,7 @@ struct task_struct {
 #ifdef CONFIG_BLOCK
 	/* Stack plugging: */
 	struct blk_plug			*plug;
+    // block layer plugging 을 위한 변수
 #endif
 
 	/* VM state: */

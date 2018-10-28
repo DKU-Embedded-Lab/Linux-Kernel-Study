@@ -433,7 +433,11 @@ static struct elv_fs_entry deadline_attrs[] = {
 	DD_ATTR(fifo_batch),
 	__ATTR_NULL
 };
-
+// deadline I/O scheduler 관련 함수 
+//  - read/write 별로 request 들을 모아 batch 단위로 device 에 내려보냄 
+//  - batch 내에서 request 들은 요청 주소단위 sort 됨 
+//  - batch 가 최대 size에 도달하거나, expire time 에 도달하게 되면 
+//    device 에 내려보냄  
 static struct elevator_type iosched_deadline = {
 	.ops.sq = {
 		.elevator_merge_fn = 		deadline_merge,

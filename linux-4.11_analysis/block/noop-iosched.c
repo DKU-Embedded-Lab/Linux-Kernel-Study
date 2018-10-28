@@ -91,6 +91,7 @@ static void noop_exit_queue(struct elevator_queue *e)
 	kfree(nd);
 }
 
+// noop I/O scheduler 관련함수
 static struct elevator_type elevator_noop = {
 	.ops.sq = {
 		.elevator_merge_req_fn		= noop_merged_requests,

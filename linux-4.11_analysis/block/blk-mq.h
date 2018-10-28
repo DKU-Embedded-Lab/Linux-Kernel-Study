@@ -5,6 +5,9 @@
 
 struct blk_mq_tag_set;
 
+// 
+// multi-queue layer 에서 사용되는 software tagging queue 
+// per-CPU 또는 per-NUMA node 로 할당
 struct blk_mq_ctx {
 	struct {
 		spinlock_t		lock;

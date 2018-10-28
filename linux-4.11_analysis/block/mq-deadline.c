@@ -421,6 +421,8 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	}
 }
 
+// request 를 software staging queue 가 아닌  read/write 로 구분된 
+// time-ordered queue, ordered queue 로 보냄
 static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 			       struct list_head *list, bool at_head)
 {
@@ -517,10 +519,16 @@ static struct elv_fs_entry deadline_attrs[] = {
 	__ATTR_NULL
 };
 
+// multi-queue layer io scheduler 함수
 static struct elevator_type mq_deadline = {
 	.ops.mq = {
 		.insert_requests	= dd_insert_requests,
+                              // request 를 software staging queue 가 아닌 
+                              // read/write 로 구분된 time-ordered queue, 
+                              // ordered queue 로 보냄 
+                              // (single-queue deadline 과 동일)
 		.dispatch_request	= dd_dispatch_request,
+                              // queue 에서 top element 를 빼님
 		.next_request		= elv_rb_latter_request,
 		.former_request		= elv_rb_former_request,
 		.bio_merge		= dd_bio_merge,

@@ -82,6 +82,8 @@ static inline unsigned get_max_io_size(struct request_queue *q,
 	return sectors;
 }
 
+// bio 가 bi_io_vec 에 가진 bio_vec 이 BIO_MAX_PAGES 를 넘거나 request_queue 에서 
+// 처리할 수 있는 max segment 를 넘지 않도록 split 해줌
 static struct bio *blk_bio_segment_split(struct request_queue *q,
 					 struct bio *bio,
 					 struct bio_set *bs,
@@ -94,9 +96,13 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 	bool do_split = true;
 	struct bio *new = NULL;
 	const unsigned max_sectors = get_max_io_size(q, bio);
+    // bi_sector 이후 I/O 할수 있는 최대 sector 주소
 	unsigned bvecs = 0;
 
 	bio_for_each_segment(bv, bio, iter) {
+        // iter 의 segment 들을 순회하여 bio_vec 를 가져오는 loop 
+        // bio_vec : bio_vec 에서 현재 수행중인 bio_vec  
+
 		/*
 		 * With arbitrary bio size, the incoming bio may be very
 		 * big. We have to split the bio into small bios so that
@@ -115,8 +121,10 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 		 * TODO: deal with bio bounce's bio_clone() gracefully
 		 * and convert the global limit into per-queue limit.
 		 */
+
 		if (bvecs++ >= BIO_MAX_PAGES)
 			goto split;
+            // bio 가 가진 bio_vec 이 256개를 넘는다면 split 해줌
 
 		/*
 		 * If the queue doesn't support SG gaps and adding this
@@ -126,12 +134,17 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 			goto split;
 
 		if (sectors + (bv.bv_len >> 9) > max_sectors) {
+            // 현재 bio_vec 처리가 logical block 내의 가능한 최대 sector 주소를 넘어간다면 
+
 			/*
 			 * Consider this a new segment if we're splitting in
 			 * the middle of this vector.
 			 */
 			if (nsegs < queue_max_segments(q) &&
 			    sectors < max_sectors) {
+                // request_queue 에서 max segment 수를 넘지 않고  
+                // sectors 가 max_sectors 보다 작아서 bio_vec 이 
+                // 쪼개진 후 처리가 가능하다면
 				nsegs++;
 				sectors = max_sectors;
 			}
@@ -177,6 +190,7 @@ split:
 
 	if (do_split) {
 		new = bio_split(bio, sectors, GFP_NOIO, bs);
+        // bio 를 sector 까지와 나머지로 split 해줌
 		if (new)
 			bio = new;
 	}
@@ -208,6 +222,7 @@ void blk_queue_split(struct request_queue *q, struct bio **bio,
 		break;
 	default:
 		split = blk_bio_segment_split(q, *bio, q->bio_split, &nsegs);
+        // bio 처리 전, bio 를 수행중가능 크기로 split 해줌
 		break;
 	}
 

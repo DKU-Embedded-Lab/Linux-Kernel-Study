@@ -45,6 +45,7 @@
 
 #define bio_iter_iovec(bio, iter)				\
 	bvec_iter_bvec((bio)->bi_io_vec, (iter))
+// bio_iter_iovec : bvl 인 bio_vec 을 bvec_iter 의 bi_idx 번째 bio_vec의 내용으로 채움 
 
 #define bio_iter_page(bio, iter)				\
 	bvec_iter_page((bio)->bi_io_vec, (iter))
@@ -164,11 +165,12 @@ static inline void *bio_data(struct bio *bio)
 #define bio_for_each_segment_all(bvl, bio, i)				\
 	for (i = 0, bvl = (bio)->bi_io_vec; i < (bio)->bi_vcnt; i++, bvl++)
 
+// I/O 완료된 크기인 bytes 를 기반으로 bvec 을 관리하는 bvec_iter 을 update 해줌
 static inline void bio_advance_iter(struct bio *bio, struct bvec_iter *iter,
 				    unsigned bytes)
 {
 	iter->bi_sector += bytes >> 9;
-
+    // 다음 write 해줄 sector 주소 update
 	if (bio_no_advance_iter(bio))
 		iter->bi_size -= bytes;
 	else
@@ -180,6 +182,10 @@ static inline void bio_advance_iter(struct bio *bio, struct bvec_iter *iter,
 	     (iter).bi_size &&						\
 		((bvl = bio_iter_iovec((bio), (iter))), 1);		\
 	     bio_advance_iter((bio), &(iter), (bvl).bv_len))
+
+// bio_iter_iovec : bvl 인 bio_vec 을 bvec_iter 의 bi_idx 번째 bio_vec의 내용으로 채움 
+// bio_advance_iter : 
+
 
 #define bio_for_each_segment(bvl, bio, iter)				\
 	__bio_for_each_segment(bvl, bio, iter, (bio)->bi_iter)
@@ -307,15 +313,17 @@ enum bip_flags {
 /*
  * bio integrity payload
  */
+// 
 struct bio_integrity_payload {
 	struct bio		*bip_bio;	/* parent bio */
-
+    // bio_integrity_payload 가 덧붙여질 bio
 	struct bvec_iter	bip_iter;
-
+    // bio_integrity_payload 와 관련된 integrity metadata 들의 정보 별도 관리 용도
 	bio_end_io_t		*bip_end_io;	/* saved I/O completion fn */
 
 	unsigned short		bip_slab;	/* slab the bip came from */
 	unsigned short		bip_vcnt;	/* # of integrity bio_vecs */
+    // integrity metadata vector 인 bio_vec 수
 	unsigned short		bip_max_vcnt;	/* integrity bio_vec slots */
 	unsigned short		bip_flags;	/* control flags */
 
@@ -323,6 +331,7 @@ struct bio_integrity_payload {
 
 	struct bio_vec		*bip_vec;
 	struct bio_vec		bip_inline_vecs[0];/* embedded bvec array */
+    // kmalloc 으로 bio_integrity_payload 할당 시 사용
 };
 
 #if defined(CONFIG_BLK_DEV_INTEGRITY)

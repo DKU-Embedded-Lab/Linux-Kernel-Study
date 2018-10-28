@@ -161,11 +161,14 @@ struct badblocks;
 
 #if defined(CONFIG_BLK_DEV_INTEGRITY)
 
+// io 시, 
 struct blk_integrity {
 	struct blk_integrity_profile	*profile;
 	unsigned char			flags;
 	unsigned char			tuple_size;
+    // 덧붙여질 integrity metadata 의크기
 	unsigned char			interval_exp;
+    // integrity metadata 가 저장될 byte 단위 크기의 2승수
 	unsigned char			tag_size;
 };
 

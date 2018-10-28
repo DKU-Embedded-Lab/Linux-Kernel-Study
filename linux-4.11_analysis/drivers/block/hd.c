@@ -651,7 +651,7 @@ repeat:
 		break;
 	}
 }
-
+// request 처리 함수 (request_queue 의 request_fn 에 등록되는 함수)
 static void do_hd_request(struct request_queue *q)
 {
 	hd_request();
@@ -701,6 +701,8 @@ static int __init hd_init(void)
 		return -1;
 
 	hd_queue = blk_init_queue(do_hd_request, &hd_lock);
+    // driver 에서 사용 할 request_queue 를 할당 및 request 처리 함수인
+    // do_hd_request 를 request_queue 에 등록
 	if (!hd_queue) {
 		unregister_blkdev(HD_MAJOR, "hd");
 		return -ENOMEM;

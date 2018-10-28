@@ -1640,8 +1640,10 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
 	unsigned int wb_acct;
 
 	blk_queue_bounce(q, &bio);
-
+    // 필요시 mempool 에서 추가 page 할당
 	if (bio_integrity_enabled(bio) && bio_integrity_prep(bio)) {
+        // blk integrity 검사 여부 확인 및 현재 bio 가 I/O 하려는 page 들에 대해 
+        // integrity metadata 를 할당
 		bio_io_error(bio);
 		return BLK_QC_T_NONE;
 	}

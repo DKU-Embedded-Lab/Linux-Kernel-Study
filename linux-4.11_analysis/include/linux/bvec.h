@@ -37,12 +37,12 @@ struct bio_vec {
 
 struct bvec_iter {
 	sector_t		bi_sector;	/* device address in 512 byte sectors */
-    // io 를 진행한 sector 수
+    // io 를 진행할 device 내의 sector 주소
 	unsigned int		bi_size;	/* residual I/O count */
     // struct bio 내의 i/o 가 수행되어야 할 전체 byte단위 크기 
     // 즉 각 bvec 들의 bv_len 들을 합한 값
 	unsigned int		bi_idx;		/* current index into bvl_vec */
-    // 
+    // bvec_iter 에서 다음 처리할 bio_vec의 index
 	unsigned int            bi_bvec_done;	/* number of bytes completed in
 						   current bvec */
     // 현재 bvec 에서 i/o complete 된 byte 수
@@ -60,10 +60,14 @@ struct bvec_iter {
 #define bvec_iter_len(bvec, iter)				\
 	min((iter).bi_size,					\
 	    __bvec_iter_bvec((bvec), (iter))->bv_len - (iter).bi_bvec_done)
+// 남은 I/O size 와 현재 bvec 내에서 남은 I/O 크기중 최소값 가져옴 
 
 #define bvec_iter_offset(bvec, iter)				\
 	(__bvec_iter_bvec((bvec), (iter))->bv_offset + (iter).bi_bvec_done)
 
+// bvec_iter 의 bi_bvec_done 을 bvec 의 기존 값에 더해가며 
+// page내의 offset인 bv_offset 을 update(기존 + 완료),
+// bvec 에서 I/O 할 남은 크기(byte 단위)를 update(기존 - 완료) 
 #define bvec_iter_bvec(bvec, iter)				\
 ((struct bio_vec) {						\
 	.bv_page	= bvec_iter_page((bvec), (iter)),	\
@@ -71,6 +75,7 @@ struct bvec_iter {
 	.bv_offset	= bvec_iter_offset((bvec), (iter)),	\
 })
 
+// I/O 완료된 크기인 bytes 를 기반으로 bvec 을 관리하는 bvec_iter 을 update 해줌
 static inline void bvec_iter_advance(const struct bio_vec *bv,
 				     struct bvec_iter *iter,
 				     unsigned bytes)
@@ -79,15 +84,22 @@ static inline void bvec_iter_advance(const struct bio_vec *bv,
 		  "Attempted to advance past end of bvec iter\n");
 
 	while (bytes) {
+        // I/O 를 수행하여 byte가 0이 아니라면
 		unsigned iter_len = bvec_iter_len(bv, *iter);
+        // 현재 bvec 내의 I/O 가 아직 다 안끝났을 수 있으므로 
+        // 현재 bvec 내에서 남은 I/O 크기 가져옴
 		unsigned len = min(bytes, iter_len);
 
 		bytes -= len;
 		iter->bi_size -= len;
+        // I/O 수행끝난 byte 수를 기존의 bi_size 즉은 남은 I/O 크기에서 빼줌
 		iter->bi_bvec_done += len;
-
+        // 현재 bvec loop 내에서 I/O 완료된 byte 를 증가
 		if (iter->bi_bvec_done == __bvec_iter_bvec(bv, *iter)->bv_len) {
+            // 현재 bvec 내에서 수행한 I/O 크기가 bvec 내에서 수행할 크기와 같다면 현재 
+            // bvec 끝난 것.
 			iter->bi_bvec_done = 0;
+            // 다음 loop 로 넘어갈 것이므로 bi_bvec_done 다시 0으로 초기화
 			iter->bi_idx++;
 		}
 	}
