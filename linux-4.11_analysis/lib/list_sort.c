@@ -15,7 +15,56 @@
  * Returns a list organized in an intermediate format suited
  * to chaining of merge() calls: null-terminated, no reserved or
  * sentinel head node, "prev" links not maintained.
- */
+ */ 
+//  
+//  e.g. struct request list 들의 sort 라고 할 때... 
+//   
+//  Step 1.
+//   a
+//   |
+//  rq(q:5) <-> rq(q:7) <-> rq(q:25) <-> rq(q:27)
+//  rq(q:10) <-> rq(q:15) <-> rq(q:30) <-> rq(q:33)
+//   |
+//   b
+//
+//  head 
+//   |
+//  tail 
+//
+//  Step 2. 
+//                a
+//                |
+//  rq(q:5) <-> rq(q:7) <-> rq(q:25) <-> rq(q:27)
+//  rq(q:10) <-> rq(q:15) <-> rq(q:30) <-> rq(q:33)
+//   |
+//   b
+//
+//  head -> rq(q:5)
+//            |
+//           tail
+//
+//  Step 4.                     a
+//                              |
+//  rq(q:5) <-> rq(q:7) <-> rq(q:25) <-> rq(q:27)
+//  rq(q:10) <-> rq(q:15) <-> rq(q:30) <-> rq(q:33)
+//   |
+//   b
+//
+//  head -> rq(q:5) -> rq(q:7)
+//                       |
+//                      tail
+//  Step 5.                     a
+//                              |
+//  rq(q:5) <-> rq(q:7) <-> rq(q:25) <-> rq(q:27)
+//  rq(q:10) <-> rq(q:15) <-> rq(q:30) <-> rq(q:33)
+//                 |
+//                 b
+//
+//  head -> rq(q:5) -> rq(q:7) -> rq(q:10)
+//                                    |
+//                                   tail
+//
+//  ...
 static struct list_head *merge(void *priv,
 				int (*cmp)(void *priv, struct list_head *a,
 					struct list_head *b),
@@ -44,7 +93,9 @@ static struct list_head *merge(void *priv,
  * runs faster than the tidier alternatives of either a separate final
  * prev-link restoration pass, or maintaining the prev links
  * throughout.
- */
+ */ 
+
+// merge 해주고, doubly-linked list로 만들어줌
 static void merge_and_restore_back_links(void *priv,
 				int (*cmp)(void *priv, struct list_head *a,
 					struct list_head *b),
@@ -80,11 +131,13 @@ static void merge_and_restore_back_links(void *priv,
 			(*cmp)(priv, tail->next, tail->next);
 
 		tail->next->prev = tail;
+        // tail 의 next node의 prev 를 자신으로 설정
 		tail = tail->next;
 	} while (tail->next);
 
 	tail->next = head;
 	head->prev = tail;
+    // head 와 doubly-linked list 구성
 }
 
 /**
@@ -101,31 +154,58 @@ static void merge_and_restore_back_links(void *priv,
  * @b. If @a and @b are equivalent, and their original relative
  * ordering is to be preserved, @cmp must return 0.
  */
+// 
+// O(nlog(n)) 시간복잡도의 merge sort 함수로 
+// cmp 기준에 따라 list 를 sort 수행
 void list_sort(void *priv, struct list_head *head,
 		int (*cmp)(void *priv, struct list_head *a,
 			struct list_head *b))
 {
 	struct list_head *part[MAX_LIST_LENGTH_BITS+1]; /* sorted partial lists
 						-- last slot is a sentinel */
+    // merge sort 에 사용 할 21 개의 list_head 생성
 	int lev;  /* index into part[] */
 	int max_lev = 0;
 	struct list_head *list;
 
 	if (list_empty(head))
 		return;
+        // 정렬할 list 가 없다면 종료
 
 	memset(part, 0, sizeof(part));
 
-	head->prev->next = NULL;
+	head->prev->next = NULL; 
+    // 뒤의 while 문이 종료 될 수 있도록 
 	list = head->next;
-
+    // 
+    //              
+    //   --------------------------------------------------
+    //   | dummy head     rq-a        rq-b         rq-c   |
+    //   |  --------    --------    --------    --------  |
+    //   -->| next-|--->| next-|--->| next-|--->| next-|---
+    //   ---|-prev |<---|-prev |<---|-prev |<---|-prev |<--
+    //   |  --------    --------    --------    --------  |
+    //   -------------------------------------------------- 
+    //
+    //   =>   dummy head      rq          rq         rq    
+    //         --------    --------    --------    --------
+    //         | next-|--->| next-|    | next-|    | next-|-> ... -> NULL
+    //         |-prev |<---|-prev |<---|-prev |<---|-prev |
+    //         --------    --------    --------    --------
+    //                       cur         list 
+    //                                   cur        list
+    //
 	while (list) {
+        // 각 part 마다 2^n 만큼의 정렬 결과를 담음
 		struct list_head *cur = list;
 		list = list->next;
 		cur->next = NULL;
 
 		for (lev = 0; part[lev]; lev++) {
-			cur = merge(priv, cmp, part[lev], cur);
+			cur = merge(priv, cmp, part[lev], cur); 
+            // part[lev] 와 cur 을 합병정렬한 후의 첫 list_head 를 반환 
+            // 0 - 넘어감 
+            // 1 - 0 과 1 합병정렬하여 cur 에 설정
 			part[lev] = NULL;
 		}
 		if (lev > max_lev) {
@@ -141,8 +221,12 @@ void list_sort(void *priv, struct list_head *head,
 	for (lev = 0; lev < max_lev; lev++)
 		if (part[lev])
 			list = merge(priv, cmp, part[lev], list);
+            // max_lev 전에 아직 part 에 남은 merge 되었던 list 가 있다면  
+            // list 에 담아 둠
 
 	merge_and_restore_back_links(priv, cmp, head, part[max_lev], list);
+    // 완성된 part[max_lev] 과, 남은 merge list 인 list 간 merge 수행하고  
+    // doubly-linked list 로 구성하여 head 에 담음
 }
 EXPORT_SYMBOL(list_sort);
 

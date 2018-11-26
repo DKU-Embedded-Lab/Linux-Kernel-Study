@@ -155,7 +155,7 @@ struct request {
     // 현재 request 가 처리하는 data의 길이(byte 단위)
 	int tag;
 	sector_t __sector;		/* sector cursor */
-    // 현재 request 가 접근하려는 disk 상의 위치
+    // 현재 request 가 I/O하려는 disk 상의 위치
 	struct bio *bio;
 	struct bio *biotail;
 
@@ -1029,6 +1029,7 @@ static inline struct request_queue *bdev_get_queue(struct block_device *bdev)
  * blk_rq_sectors()		: sectors left in the entire request
  * blk_rq_cur_sectors()		: sectors left in the current segment
  */
+// 현재 request 가 I/O 하려는 sector 주소
 static inline sector_t blk_rq_pos(const struct request *rq)
 {
 	return rq->__sector;
@@ -1046,6 +1047,7 @@ static inline int blk_rq_cur_bytes(const struct request *rq)
 
 extern unsigned int blk_rq_err_bytes(const struct request *rq);
 
+// 현재 request 의 I/O 양을 sector 단위로 반환
 static inline unsigned int blk_rq_sectors(const struct request *rq)
 {
 	return blk_rq_bytes(rq) >> 9;
@@ -1312,18 +1314,26 @@ struct blk_plug {
 	struct list_head list; /* requests */
     // strut request 들의 list
 	struct list_head mq_list; /* blk-mq requests */
+    // multi-queue 를 사용할 경우의 struct request 들이 list
 	struct list_head cb_list; /* md requires an unplug callback */
-    // struct blk_plug_cb 들의 list
+    // struct blk_plug_cb 들의 list 
 };
 #define BLK_MAX_REQUEST_COUNT 16
 #define BLK_PLUG_FLUSH_SIZE (128 * 1024)
 
 struct blk_plug_cb;
 typedef void (*blk_plug_cb_fn)(struct blk_plug_cb *, bool);
+// blk_plug_cb 가 blk_plug 의 cb_list 에서 제거 될 때마다 호출될 callback 함수 
+// e.g mm_unplug, raid1_unplug, raid5_unplug, raid10_unplug 등이 있음
 struct blk_plug_cb {
 	struct list_head list;
+    // blk_plug_cb 와 연결된 list
 	blk_plug_cb_fn callback;
+    // blk_plug_cb 가 blk_plug 의 cb_list 에서 제거 될 때마다 호출될 callback 함수
 	void *data;
+    // callback 함수에서 사용될 data 로 
+    // btrfs_plug_cb, blk_plug_cb, raid1_plug_cb, raid5_plug_cb 등 
+    // 각 block driver 마다의 구조체 가짐
 };
 extern struct blk_plug_cb *blk_check_plugged(blk_plug_cb_fn unplug,
 					     void *data, int size);

@@ -816,6 +816,8 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 	return true;
 }
 
+// bio 가 request 에 merge 될 수 있는지 검사 및 어떤 merge 가 되어야 
+// 하는지 검사
 enum elv_merge blk_try_merge(struct request *rq, struct bio *bio)
 {
 	if (req_op(rq) == REQ_OP_DISCARD &&
@@ -823,7 +825,14 @@ enum elv_merge blk_try_merge(struct request *rq, struct bio *bio)
 		return ELEVATOR_DISCARD_MERGE;
 	else if (blk_rq_pos(rq) + blk_rq_sectors(rq) == bio->bi_iter.bi_sector)
 		return ELEVATOR_BACK_MERGE;
+        // 현재 request 의 I/O 하려는 sector 위치 + I/O 하려는 sector 수 결과의
+        // sector 주소가 bio 가 써질 sector 주소와 같다면 뒤로 merge 이므로 
+        // ELEVATOR_BACK_MERGE 수행
 	else if (blk_rq_pos(rq) - bio_sectors(bio) == bio->bi_iter.bi_sector)
 		return ELEVATOR_FRONT_MERGE;
+        // 현재 request 의 I/O 하려는 sector 위치 - bio 가 I/O 하려는 sector 수
+        // 결고가 bio 가 써질 sector 주소와 같다면 
+        // ELEVATOR_FRONT_MERGE 수행
 	return ELEVATOR_NO_MERGE;
+        // 해당 request 에 merge 안됨
 }

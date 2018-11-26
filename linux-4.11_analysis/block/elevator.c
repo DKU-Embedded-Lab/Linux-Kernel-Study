@@ -486,7 +486,7 @@ enum elv_merge elv_merge(struct request_queue *q, struct request **req,
  *
  * Returns true if we merged, false otherwise
  */
-// rq를 기존의 request_queue 와 합칠 수 있는지 검사
+// rq를 request_queue 의 기존 request 오 합칠 수 있는지 검사 및 merge
 bool elv_attempt_insert_merge(struct request_queue *q, struct request *rq)
 {
 	struct request *__rq;
@@ -494,12 +494,14 @@ bool elv_attempt_insert_merge(struct request_queue *q, struct request *rq)
 
 	if (blk_queue_nomerges(q))
 		return false;
+        // no_merge flag 설정시 바로 종료
 
 	/*
 	 * First try one-hit cache.
 	 */
 	if (q->last_merge && blk_attempt_req_merge(q, q->last_merge, rq))
 		return true;
+        // cache 된 last merge 가 있다면 최근 cache 된 request 와 merge 수행
 
 	if (blk_queue_noxmerges(q))
 		return false;
@@ -637,6 +639,7 @@ void __elv_add_request(struct request_queue *q, struct request *rq, int where)
 	trace_block_rq_insert(q, rq);
 
 	blk_pm_add_request(q, rq);
+    // power management 관련으로 pass.. 
 
 	rq->q = q;
 
@@ -656,12 +659,15 @@ void __elv_add_request(struct request_queue *q, struct request *rq, int where)
 	case ELEVATOR_INSERT_FRONT:
 		rq->rq_flags |= RQF_SOFTBARRIER;
 		list_add(&rq->queuelist, &q->queue_head);
+        // insert front 일 경우 request list 의 맨 앞에 넣음
 		break;
 
 	case ELEVATOR_INSERT_BACK:
 		rq->rq_flags |= RQF_SOFTBARRIER;
 		elv_drain_elevator(q);
 		list_add_tail(&rq->queuelist, &q->queue_head);
+        // insert front 일 경우 request list 의 맨 뒤에 넣음
+
 		/*
 		 * We kick the queue here for the following reasons.
 		 * - The elevator might have returned NULL previously

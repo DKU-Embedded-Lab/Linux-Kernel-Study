@@ -1440,6 +1440,7 @@ void blk_put_request(struct request *req)
 }
 EXPORT_SYMBOL(blk_put_request);
 
+// bio를 req 에 front merge 수행
 bool bio_attempt_back_merge(struct request_queue *q, struct request *req,
 			    struct bio *bio)
 {
@@ -1455,7 +1456,9 @@ bool bio_attempt_back_merge(struct request_queue *q, struct request *req,
 
 	req->biotail->bi_next = bio;
 	req->biotail = bio;
+    // request 의 bio list 에 추가
 	req->__data_len += bio->bi_iter.bi_size;
+    // request 의 I/O 크기를 bio 만큼 증가
 	req->ioprio = ioprio_best(req->ioprio, bio_prio(bio));
 
 	blk_account_io_start(req, false);
@@ -1549,11 +1552,14 @@ bool blk_attempt_plug_merge(struct request_queue *q, struct bio *bio,
 		plug_list = &plug->mq_list;
 	else
 		plug_list = &plug->list;
+    // blk_mq 에서 request 들의 list들을 가져옴
 
 	list_for_each_entry_reverse(rq, plug_list, queuelist) {
 		bool merged = false;
 
 		if (rq->q == q) {
+            // multi queue 인 겨우는 request queue 가 여러개 있기 때문에 
+            // 위와 같은 검사 수행 single queue 의 경우 request queue 는 한개
 			(*request_count)++;
 			/*
 			 * Only blk-mq multiple hardware queues case checks the
@@ -1566,8 +1572,13 @@ bool blk_attempt_plug_merge(struct request_queue *q, struct bio *bio,
 
 		if (rq->q != q || !blk_rq_merge_ok(rq, bio))
 			continue;
+            // multi-queue 에서 다른 request_queue 로의 request 라면 merge가능 한지 check
 
 		switch (blk_try_merge(rq, bio)) {
+            // plugged list 들의 request list 에서
+            // bio 가 merge 될 수 있는 request 를 찾은 후 
+            //
+            // merge 가 가능하다면 front, back merge 수행
 		case ELEVATOR_BACK_MERGE:
 			merged = bio_attempt_back_merge(q, rq, bio);
 			break;
@@ -3328,6 +3339,8 @@ EXPORT_SYMBOL(kblockd_schedule_delayed_work_on);
  *   plug. By flushing the pending I/O when the process goes to sleep, we avoid
  *   this kind of deadlock.
  */
+
+// plugging 정보를 task_struct 에 담기 위한 함수
 void blk_start_plug(struct blk_plug *plug)
 {
 	struct task_struct *tsk = current;
@@ -3337,10 +3350,13 @@ void blk_start_plug(struct blk_plug *plug)
 	 */
 	if (tsk->plug)
 		return;
-
+        // plugging 이 이미 있다면 종료
 	INIT_LIST_HEAD(&plug->list);
+    // single-queue 용도의 struct request list
 	INIT_LIST_HEAD(&plug->mq_list);
+    // multi-queue 용도의 struc request list
 	INIT_LIST_HEAD(&plug->cb_list);
+    // blk_plug_cb 들의 list
 	/*
 	 * Store ordering should not be needed here, since a potential
 	 * preempt will imply a full memory barrier
@@ -3349,6 +3365,11 @@ void blk_start_plug(struct blk_plug *plug)
 }
 EXPORT_SYMBOL(blk_start_plug);
 
+// a 가 속한 struct request 와 b 가 속한 struct request 를 비교하여 
+// rqa 와 rqb 의 request_queue 가 다르면 false
+// 같은 request_queue 라도 rqb가 write 하려는 sector 주소가 rqa 보다 크다면 false   
+// => rqa <  rqb 라면 0 
+//    rqa >= rqb 라면 1
 static int plug_rq_cmp(void *priv, struct list_head *a, struct list_head *b)
 {
 	struct request *rqa = container_of(a, struct request, queuelist);
@@ -3377,18 +3398,20 @@ static void queue_unplugged(struct request_queue *q, unsigned int depth,
 	spin_unlock(q->queue_lock);
 }
 
+// plug 의 cb_list 로부터 하나씩 blk_plug_cb 를 제거하며 callback 함수를 수행
 static void flush_plug_callbacks(struct blk_plug *plug, bool from_schedule)
 {
 	LIST_HEAD(callbacks);
-
+    // list_head 생성
 	while (!list_empty(&plug->cb_list)) {
 		list_splice_init(&plug->cb_list, &callbacks);
-
+        // cb_list 를 callback 으로 옮기고, cb_list 를 다시 init 수행
 		while (!list_empty(&callbacks)) {
 			struct blk_plug_cb *cb = list_first_entry(&callbacks,
 							  struct blk_plug_cb,
 							  list);
 			list_del(&cb->list);
+            // list 의 앞에 있는 blk_plug_cb 한개를 가져와 callback 함수 수행
 			cb->callback(cb, from_schedule);
 		}
 	}
@@ -3419,25 +3442,34 @@ struct blk_plug_cb *blk_check_plugged(blk_plug_cb_fn unplug, void *data,
 }
 EXPORT_SYMBOL(blk_check_plugged);
 
+// blk_plug 에 쌓인 request 들 처리하며 schedule 로 인해 pluging 이 종료된 경우에는 
+// from_schedule 에 true 설정
 void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 {
 	struct request_queue *q;
 	unsigned long flags;
 	struct request *rq;
 	LIST_HEAD(list);
+    // list 라는 list_head 생성
 	unsigned int depth;
 
 	flush_plug_callbacks(plug, from_schedule);
+    // plug 된 list 의 cb_list 에서 blk_plug_cb 를 제거하며 미리 설정된 
+    // callback 함수 수행 (각 raid 에 따라 다른 callback 수행)
 
 	if (!list_empty(&plug->mq_list))
 		blk_mq_flush_plug_list(plug, from_schedule);
-
+    
 	if (list_empty(&plug->list))
 		return;
+        // queue 된 struct request 가 없다면 종료
 
 	list_splice_init(&plug->list, &list);
+    // plug->list 의 내용을 list로 옮기고 초기화 수행
 
 	list_sort(NULL, &list, plug_rq_cmp);
+    // plug 된 struct request 들의 list 들을 
+    // request 가 써질 sector 순으로 merge 정렬 수행
 
 	q = NULL;
 	depth = 0;
@@ -3449,7 +3481,9 @@ void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 	local_irq_save(flags);
 	while (!list_empty(&list)) {
 		rq = list_entry_rq(list.next);
+        // list 에서 rq 가져옴
 		list_del_init(&rq->queuelist);
+        // rquest list 에서 제거
 		BUG_ON(!rq->q);
 		if (rq->q != q) {
 			/*
@@ -3477,6 +3511,7 @@ void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 			__elv_add_request(q, rq, ELEVATOR_INSERT_FLUSH);
 		else
 			__elv_add_request(q, rq, ELEVATOR_INSERT_SORT_MERGE);
+            // rq 를 q 에 넣음
 
 		depth++;
 	}
@@ -3490,13 +3525,17 @@ void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 	local_irq_restore(flags);
 }
 
+// device plugging 종료 함수
 void blk_finish_plug(struct blk_plug *plug)
 {
 	if (plug != current->plug)
 		return;
+        // plug 가 현재 task 의 plug 인지 검사
 	blk_flush_plug_list(plug, false);
+    // plug 된 request 들을 merge sort 수행 후, request_quee 에 넘김
 
 	current->plug = NULL;
+    // plugging 종료
 }
 EXPORT_SYMBOL(blk_finish_plug);
 

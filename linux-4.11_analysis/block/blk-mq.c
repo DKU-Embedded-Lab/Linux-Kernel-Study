@@ -1641,7 +1641,8 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
 
 	blk_queue_bounce(q, &bio);
     // 필요시 mempool 에서 추가 page 할당
-	if (bio_integrity_enabled(bio) && bio_integrity_prep(bio)) {
+	
+    if (bio_integrity_enabled(bio) && bio_integrity_prep(bio)) {
         // blk integrity 검사 여부 확인 및 현재 bio 가 I/O 하려는 page 들에 대해 
         // integrity metadata 를 할당
 		bio_io_error(bio);
@@ -1651,8 +1652,13 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
 	blk_queue_split(q, &bio, q->bio_split);
 
 	if (!is_flush_fua && !blk_queue_nomerges(q)) {
+        // QUEUE_FLAG_NOMERGES 가 설정되어 있지 않다면 
+        // (sysfs를 통해 /sys/block/sda/queue/nomerges 에서 merge 여부를 설정할 수 있다.)
+        // blk_attempt_plug_merge 를 통해 
+        // 현재 process 의 plugged list와bio 가 merge 가능한지 검사 및 merge 수행
 		if (blk_attempt_plug_merge(q, bio, &request_count, NULL))
 			return BLK_QC_T_NONE;
+            // merge 가능하다면 front 나 back merge 수행
 	} else
 		request_count = blk_plug_queued_count(q);
 

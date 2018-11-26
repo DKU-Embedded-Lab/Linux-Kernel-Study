@@ -37,7 +37,7 @@ struct bio_vec {
 
 struct bvec_iter {
 	sector_t		bi_sector;	/* device address in 512 byte sectors */
-    // io 를 진행할 device 내의 sector 주소
+    // io 를 수행할 device 내의 sector 주소
 	unsigned int		bi_size;	/* residual I/O count */
     // struct bio 내의 i/o 가 수행되어야 할 전체 byte단위 크기 
     // 즉 각 bvec 들의 bv_len 들을 합한 값
