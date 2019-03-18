@@ -787,23 +787,25 @@ int blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 
 	return 0;
 }
-
+// bio 가 rq 에merge 가 가능한지 검사
 bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 {
 	if (!rq_mergeable(rq) || !bio_mergeable(bio))
 		return false;
-
+        // request, bio 각각의 merge 가능 상태 검사
 	if (req_op(rq) != bio_op(bio))
 		return false;
 
 	/* different data direction or already started, don't merge */
 	if (bio_data_dir(bio) != rq_data_dir(rq))
 		return false;
+        // 현재 bio 의 operation 과 request 의 operation 이 같아야 merge 가능 
+        // e.g. WRITE 와 WRITE 
 
 	/* must be same device and not a special request */
 	if (rq->rq_disk != bio->bi_bdev->bd_disk || req_no_special_merge(rq))
 		return false;
-
+        // 같은 gendisk 인지 검사
 	/* only merge integrity protected bio into ditto rq */
 	if (blk_integrity_merge_bio(rq->q, rq, bio) == false)
 		return false;

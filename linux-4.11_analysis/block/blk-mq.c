@@ -1658,13 +1658,17 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
         // 현재 process 의 plugged list와bio 가 merge 가능한지 검사 및 merge 수행
 		if (blk_attempt_plug_merge(q, bio, &request_count, NULL))
 			return BLK_QC_T_NONE;
-            // merge 가능하다면 front 나 back merge 수행
+            // merge 가능하다면 front 나 back merge 수행 
+            // plug list 에 merge 가 되었다면 종료 
+            // plug 에 merge 가 되지 않았다면 merge 해줄 request 를 찾으러 계속
 	} else
 		request_count = blk_plug_queued_count(q);
-
+        // blk plug 된 request 수 설정
+        
 	if (blk_mq_sched_bio_merge(q, bio))
 		return BLK_QC_T_NONE;
-
+        // request queue 내의 request cache 와 merge 및 
+        // merge 가능한 reques 찾음
 	wb_acct = wbt_wait(q->rq_wb, bio, NULL);
 
 	trace_block_getrq(q, bio, bio->bi_opf);

@@ -144,6 +144,7 @@ struct request {
 
 	int cpu;
 	unsigned int cmd_flags;		/* op and common flags */
+    // operation flag 로써 READ, WRITE 등 연산 종류 기록
 	req_flags_t rq_flags;
 
 	int internal_tag;
@@ -245,6 +246,7 @@ struct request {
 	struct request *next_rq;
 };
 
+// 현재 request 가 SCSI pass through 요청이니 검사
 static inline bool blk_rq_is_scsi(struct request *rq)
 {
 	return req_op(rq) == REQ_OP_SCSI_IN || req_op(rq) == REQ_OP_SCSI_OUT;
@@ -445,8 +447,10 @@ struct request_queue {
 	const struct blk_mq_ops	*mq_ops;
     // multi-queue 관련 함수
 	unsigned int		*mq_map;
-
-	/* sw queues */
+    // multi queue 에서 각 core number 에 해당되는 
+    // hw queue number 를 저장하는 배열
+	
+    /* sw queues */
 	struct blk_mq_ctx __percpu	*queue_ctx;
     // multi-queue layer 에서 사용되는 software tagging queue(submission queue)
     //  - per-CPU 또는 per-NUMA node 로 할당 되어 각 CPU가 자신의 queue 에 
@@ -831,12 +835,15 @@ static inline bool rq_mergeable(struct request *rq)
 {
 	if (blk_rq_is_passthrough(rq))
 		return false;
+        // SCSI pass through 요청인 경우
 
 	if (req_op(rq) == REQ_OP_FLUSH)
 		return false;
+        // flsh 요청인 경우 
 
 	if (req_op(rq) == REQ_OP_WRITE_ZEROES)
 		return false;
+        // zero-filled write 인 경우 
 
 	if (rq->cmd_flags & REQ_NOMERGE_FLAGS)
 		return false;

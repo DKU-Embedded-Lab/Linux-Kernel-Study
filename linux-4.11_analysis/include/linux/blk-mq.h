@@ -111,7 +111,7 @@ struct blk_mq_ops {
 	 * Queue request
 	 */
 	queue_rq_fn		*queue_rq;
-    // queue 되었던 struct request 를 처리
+    // queue 된 struct request 를 low level block layer 로 보냄
 
 	/*
 	 * Called on request timeout
@@ -147,6 +147,7 @@ struct blk_mq_ops {
 	reinit_request_fn	*reinit_request;
 
 	map_queues_fn		*map_queues;
+    // core 별로 존재하는 blk_mq_ctx 를 blk_mq_hw_ctx 에 map 해줌
 };
 
 enum {

@@ -179,6 +179,8 @@ struct elevator_queue
 	unsigned int registered:1;
 	unsigned int uses_mq:1;
 	DECLARE_HASHTABLE(hash, ELV_HASH_BITS);
+    // request_queue 내의 request 들을 write 해줄 offset(sector 주소)를 
+    // 기준으로 정렬한 hash table
 };
 
 /*

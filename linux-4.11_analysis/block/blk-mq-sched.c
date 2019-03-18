@@ -278,9 +278,11 @@ bool __blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio)
 	struct elevator_queue *e = q->elevator;
 
 	if (e->type->ops.mq.bio_merge) {
+        // multi queue 인 경우 bio merge 연산 수행
 		struct blk_mq_ctx *ctx = blk_mq_get_ctx(q);
+        // 현재 core 에서의 software queue 가져옴
 		struct blk_mq_hw_ctx *hctx = blk_mq_map_queue(q, ctx->cpu);
-
+        // 현재 core 에서의 hardware queue 가져옴
 		blk_mq_put_ctx(ctx);
 		return e->type->ops.mq.bio_merge(hctx, bio);
 	}

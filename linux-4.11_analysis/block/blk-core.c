@@ -1609,12 +1609,13 @@ unsigned int blk_plug_queued_count(struct request_queue *q)
 	plug = current->plug;
 	if (!plug)
 		goto out;
-
+        // blk plug 된 request 가 없다면 종료
 	if (q->mq_ops)
 		plug_list = &plug->mq_list;
 	else
 		plug_list = &plug->list;
 
+    // 현재 request_queue 에 해당되는 request 수를 반환
 	list_for_each_entry(rq, plug_list, queuelist) {
 		if (rq->q == q)
 			ret++;

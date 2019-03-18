@@ -49,6 +49,9 @@ blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio)
 
 	if (!e || blk_queue_nomerges(q) || !bio_mergeable(bio))
 		return false;
+        // request_queue 에 설정된 elevator_queue 가 없거나(io-scheduler 설정 안됨)
+        // request_queue 에 flag 를 통해 merge 되지 않도록 설정되거나  
+        // 처리하려는 bio 가 flag 를 통해 nomerge 로 설정된 경우(cache flush, FUA ...)
 
 	return __blk_mq_sched_bio_merge(q, bio);
 }

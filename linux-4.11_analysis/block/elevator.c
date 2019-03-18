@@ -310,6 +310,8 @@ struct request *elv_rqhash_find(struct request_queue *q, sector_t offset)
 
 		if (rq_hash_key(rq) == offset)
 			return rq;
+            // 찾은 request 가 현재 bio merge 가능인지 검사 
+            // (request 가 쓸 위치 + request 가 쓸양 == bio 가 쓸 위치)
 	}
 
 	return NULL;
@@ -456,16 +458,21 @@ enum elv_merge elv_merge(struct request_queue *q, struct request **req,
 		if (ret != ELEVATOR_NO_MERGE) {
 			*req = q->last_merge;
 			return ret;
+            // request cache 와 정사억으로 merge 가 되었다면 
+            // 종료하고 cahce 와 merge 가 안되었다면 
+            // merge 해줄 request 찾음
 		}
 	}
 
 	if (blk_queue_noxmerges(q))
 		return ELEVATOR_NO_MERGE;
-
+        // request_queue 에 sysfs 를 통해 merge 하지 말라는 flag 가
+        // 설정되었는지 검사
 	/*
 	 * See if our hash lookup can find a potential backmerge.
 	 */
 	__rq = elv_rqhash_find(q, bio->bi_iter.bi_sector);
+    // request hash table 를 대상으로 bio 와 back merge 가능한 request 를 찾음
 	if (__rq && elv_bio_merge_ok(__rq, bio)) {
 		*req = __rq;
 		return ELEVATOR_BACK_MERGE;

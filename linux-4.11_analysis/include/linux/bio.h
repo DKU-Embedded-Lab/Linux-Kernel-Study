@@ -95,6 +95,9 @@ static inline bool bio_no_advance_iter(struct bio *bio)
 	       bio_op(bio) == REQ_OP_WRITE_ZEROES;
 }
 
+// BIO 가 nomerge 인지 검사 
+//  e.g. I/O 수행 전 cache flush 시에 설정됨
+//       디스크 내부 cache 를 거치지 않고 write 되는 FUA 연산시 설정됨
 static inline bool bio_mergeable(struct bio *bio)
 {
 	if (bio->bi_opf & REQ_NOMERGE_FLAGS)

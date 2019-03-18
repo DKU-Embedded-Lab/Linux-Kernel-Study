@@ -71,6 +71,7 @@ void blk_mq_disable_hotplug(void);
  */
 extern int blk_mq_hw_queue_to_node(unsigned int *map, unsigned int);
 
+// 현재 core 의 sw queue 와 map 된 hw queue 를 가져옴
 static inline struct blk_mq_hw_ctx *blk_mq_map_queue(struct request_queue *q,
 		int cpu)
 {
