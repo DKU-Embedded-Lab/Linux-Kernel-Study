@@ -1667,7 +1667,7 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
         
 	if (blk_mq_sched_bio_merge(q, bio))
 		return BLK_QC_T_NONE;
-        // request queue 내의 request cache 와 merge 및 
+        // request queue 내의 request cache 와 hash table 에서 merge 및 
         // merge 가능한 reques 찾음
 	wb_acct = wbt_wait(q->rq_wb, bio, NULL);
 

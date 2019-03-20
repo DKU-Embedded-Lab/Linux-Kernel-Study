@@ -1440,7 +1440,7 @@ void blk_put_request(struct request *req)
 }
 EXPORT_SYMBOL(blk_put_request);
 
-// bio를 req 에 front merge 수행
+// bio를 req 에 back merge 수행
 bool bio_attempt_back_merge(struct request_queue *q, struct request *req,
 			    struct bio *bio)
 {

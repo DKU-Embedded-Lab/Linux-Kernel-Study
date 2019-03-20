@@ -350,11 +350,13 @@ void elv_rb_del(struct rb_root *root, struct request *rq)
 }
 EXPORT_SYMBOL(elv_rb_del);
 
+// io-schedluer 에 정렬된 request rb tree 에서 sector 주소로 시작하는 
+// struct request 를 찾음
 struct request *elv_rb_find(struct rb_root *root, sector_t sector)
 {
 	struct rb_node *n = root->rb_node;
 	struct request *rq;
-
+    // BST 방식을 통해 struct request 찾음
 	while (n) {
 		rq = rb_entry(n, struct request, rb_node);
 
@@ -433,7 +435,8 @@ void elv_dispatch_add_tail(struct request_queue *q, struct request *rq)
 EXPORT_SYMBOL(elv_dispatch_add_tail);
 
 // bio 를 request_queue 에 queue 된 기존의 request 들에 merge 할 수 
-// 있는지 검사 및 merge 수행
+// 있는지 검사하여 back merge 대상을 찾고, back merge 대상이 없을 경우
+// io-scheduler 를 통해 front merge 대상 찾음
 enum elv_merge elv_merge(struct request_queue *q, struct request **req,
 		struct bio *bio)
 {
@@ -460,7 +463,8 @@ enum elv_merge elv_merge(struct request_queue *q, struct request **req,
 			return ret;
             // request cache 와 정사억으로 merge 가 되었다면 
             // 종료하고 cahce 와 merge 가 안되었다면 
-            // merge 해줄 request 찾음
+            // merge 해줄 request 찾음 
+            // 찾을 경우 종료
 		}
 	}
 
@@ -474,14 +478,21 @@ enum elv_merge elv_merge(struct request_queue *q, struct request **req,
 	__rq = elv_rqhash_find(q, bio->bi_iter.bi_sector);
     // request hash table 를 대상으로 bio 와 back merge 가능한 request 를 찾음
 	if (__rq && elv_bio_merge_ok(__rq, bio)) {
+        // back merge 가능한 request 를 찾았을 경우, sector 주소 외에도 설정된 flag 
+        // 값이 request, bio 모두 merge 가능한 상태인지 검사
 		*req = __rq;
 		return ELEVATOR_BACK_MERGE;
+        // backmerge 대상 찾았으므로 종료
 	}
 
+    // back merge 대상을 못찾을 경우, io-scheduler 의 각 merge 함수를 통해 
+    // front merge 대상 찾음(sysfs 에서 front merge 설정된 경우)
 	if (e->uses_mq && e->type->ops.mq.request_merge)
 		return e->type->ops.mq.request_merge(q, req, bio);
 	else if (!e->uses_mq && e->type->ops.sq.elevator_merge_fn)
 		return e->type->ops.sq.elevator_merge_fn(q, req, bio);
+        // e.g. deadline - deadline_merge
+        //      cfq - cfq_merge
 
 	return ELEVATOR_NO_MERGE;
 }

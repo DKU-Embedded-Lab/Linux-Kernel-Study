@@ -99,7 +99,7 @@ struct bio {
 	atomic_t		__bi_cnt;	/* pin count */
 
 	struct bio_vec		*bi_io_vec;	/* the actual vec list */
-
+    // bio 와 연관된 bio_vec 배열로 I/O 를 수행해줄 page 위치
 	struct bio_set		*bi_pool;
 
 	/*

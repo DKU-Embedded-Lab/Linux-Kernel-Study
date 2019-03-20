@@ -45,7 +45,7 @@
 
 #define bio_iter_iovec(bio, iter)				\
 	bvec_iter_bvec((bio)->bi_io_vec, (iter))
-// bio_iter_iovec : bvl 인 bio_vec 을 bvec_iter 의 bi_idx 번째 bio_vec의 내용으로 채움 
+// bvec_iter 의 bi_idx 번째 bio_vec의 내용을 반환
 
 #define bio_iter_page(bio, iter)				\
 	bvec_iter_page((bio)->bi_io_vec, (iter))

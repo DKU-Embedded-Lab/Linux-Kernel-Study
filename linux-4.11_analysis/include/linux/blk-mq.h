@@ -10,7 +10,8 @@ struct blk_flush_queue;
 
 // 
 // multi-queue layer 에서 사용되는 hardware dispatch queue 
-// 1~2048 개 까지 할당 가능
+// 1~2048 개 까지 할당 가능 
+// request_queue 와 관련된 h/w context 정보를 나타냄
 struct blk_mq_hw_ctx {
 	struct {
 		spinlock_t		lock;
@@ -34,6 +35,7 @@ struct blk_mq_hw_ctx {
 	struct sbitmap		ctx_map;
 
 	struct blk_mq_ctx	**ctxs;
+    // completion queue 에 map 된 submission queue 들
 	unsigned int		nr_ctx;
 
 	wait_queue_t		dispatch_wait;

@@ -32,12 +32,16 @@ struct deadline_data {
 	 * requests (deadline_rq s) are present on both sort_list and fifo_list
 	 */
 	struct rb_root sort_list[2];	
+    // read, write 각각의 sector 순서로 정렬된 struct request 들의 sort tree
+    // 0:READ, 1:WRITE
 	struct list_head fifo_list[2];
-
+    // read, write 각각의 struct request 가 들어온 순서로 정렬된 list
+    // 0:READ, 1:WRITE
 	/*
 	 * next in sort order. read, write or both are NULL
 	 */
 	struct request *next_rq[2];
+    // read, write 각각의 다음 처리될 request
 	unsigned int batching;		/* number of sequential requests made */
 	unsigned int starved;		/* times reads have starved writes */
 
@@ -48,6 +52,7 @@ struct deadline_data {
 	int fifo_batch;
 	int writes_starved;
 	int front_merges;
+    // front merge 수행 여부 
 };
 
 static void deadline_move_request(struct deadline_data *, struct request *);
@@ -130,16 +135,20 @@ deadline_merge(struct request_queue *q, struct request **req, struct bio *bio)
 	 * check for front merge
 	 */
 	if (dd->front_merges) {
+        // deadline scheduler 의 front merge 허용 시 
 		sector_t sector = bio_end_sector(bio);
-
+        // front merge 대상을 찾을때 사용하기 위해 bio 가 merge 될 수 있는
+        // request 의 시작 sector 를 계산
 		__rq = elv_rb_find(&dd->sort_list[bio_data_dir(bio)], sector);
-		if (__rq) {
+        // front merge 가 가능한 request 를 찾음
+		if (__rq) {            
 			BUG_ON(sector != blk_rq_pos(__rq));
-
+            
 			if (elv_bio_merge_ok(__rq, bio)) {
 				*req = __rq;
 				return ELEVATOR_FRONT_MERGE;
 			}
+            // front merge 대상 찾았을 경우 종료
 		}
 	}
 

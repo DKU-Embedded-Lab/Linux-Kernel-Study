@@ -141,6 +141,7 @@ struct request {
 	struct request_queue *q;
     // 현재 requset 가 전달 될 queue
 	struct blk_mq_ctx *mq_ctx;
+    // multiqueue 에서의 submission queue
 
 	int cpu;
 	unsigned int cmd_flags;		/* op and common flags */
@@ -158,8 +159,9 @@ struct request {
 	sector_t __sector;		/* sector cursor */
     // 현재 request 가 I/O하려는 disk 상의 위치
 	struct bio *bio;
+    // bio 첫번째 것.
 	struct bio *biotail;
-
+    // bio 마지막 것
 	/*
 	 * The hash is used inside the scheduler, and killed once the
 	 * request reaches the dispatch list. The ipi_list is only used
@@ -449,6 +451,12 @@ struct request_queue {
 	unsigned int		*mq_map;
     // multi queue 에서 각 core number 에 해당되는 
     // hw queue number 를 저장하는 배열
+    // N:M mapping  
+    // core-0   core-1  core-2  core-3  core-4 ...
+    //   |        |       |        |
+    //   ----------       ----------
+    //       |                |
+    // blk_mq_hw_ctx     blk_mq_hw_ctx   blk_mq_hw_ctx ...
 	
     /* sw queues */
 	struct blk_mq_ctx __percpu	*queue_ctx;
@@ -1738,12 +1746,16 @@ static inline bool bios_segs_mergeable(struct request_queue *q,
 	return true;
 }
 
+// back merge 대상인 request 인 prev_rq 의 마지막 bio인 prev 에 next 를 
+// merge 하기 위한 검사
 static inline bool bio_will_gap(struct request_queue *q,
 				struct request *prev_rq,
 				struct bio *prev,
 				struct bio *next)
 {
 	if (bio_has_data(prev) && queue_virt_boundary(q)) {
+        // bio 에 bvec 이 담겨있어야 하고, virtual boundary 검사를 위한 
+        // flag 가 설정되있어야 한다.
 		struct bio_vec pb, nb;
 
 		/*

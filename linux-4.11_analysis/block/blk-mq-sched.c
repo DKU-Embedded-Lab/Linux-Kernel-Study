@@ -242,16 +242,20 @@ void blk_mq_sched_move_to_dispatch(struct blk_mq_hw_ctx *hctx,
 	} while (1);
 }
 EXPORT_SYMBOL_GPL(blk_mq_sched_move_to_dispatch);
-
+// request_queue 의 request cache, request hash table 에서 request 찾아 
+// bio 와 merge 해줌
 bool blk_mq_sched_try_merge(struct request_queue *q, struct bio *bio,
 			    struct request **merged_request)
 {
 	struct request *rq;
 
 	switch (elv_merge(q, &rq, bio)) {
+    // request_queue 의 cache, hash table, ios-scueduler 에서 찾음
 	case ELEVATOR_BACK_MERGE:
+        // back merge - request_queue 의 cache, hash list 에서 찾은 결과
 		if (!blk_mq_sched_allow_merge(q, rq, bio))
 			return false;
+        // multi-queue 에서 completion queue 인 blk_mq_hw_ctx 의 merge flag 검사
 		if (!bio_attempt_back_merge(q, rq, bio))
 			return false;
 		*merged_request = attempt_back_merge(q, rq);
@@ -259,6 +263,7 @@ bool blk_mq_sched_try_merge(struct request_queue *q, struct bio *bio,
 			elv_merged_request(q, rq, ELEVATOR_BACK_MERGE);
 		return true;
 	case ELEVATOR_FRONT_MERGE:
+        // front merge - io scheduler 에서 찾은 결과
 		if (!blk_mq_sched_allow_merge(q, rq, bio))
 			return false;
 		if (!bio_attempt_front_merge(q, rq, bio))
@@ -284,6 +289,7 @@ bool __blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio)
 		struct blk_mq_hw_ctx *hctx = blk_mq_map_queue(q, ctx->cpu);
         // 현재 core 에서의 hardware queue 가져옴
 		blk_mq_put_ctx(ctx);
+        // per-cpu data 인 core 별 blk_mq_ctx 값을 가져왔으므로 put_cpu 수행
 		return e->type->ops.mq.bio_merge(hctx, bio);
 	}
 
