@@ -366,7 +366,10 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 
 	return ELEVATOR_NO_MERGE;
 }
-
+// blk_mq_hw_ctx 의 request_queue 에 있는 request cache, request hash list 
+// 를 통해 bio 의 back merge 대상을 찾아 merge 해주거나 
+// io scheduler 별 가지고 있는 rb tree 를 통해 front merge 대상을 찾아 
+// front merge 를 해주는 함수
 static bool dd_bio_merge(struct blk_mq_hw_ctx *hctx, struct bio *bio)
 {
 	struct request_queue *q = hctx->queue;
