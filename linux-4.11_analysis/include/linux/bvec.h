@@ -29,23 +29,24 @@
 // 하나의 bio 를 구성하는 요소들 bio 내에서 array로 존재
 struct bio_vec {
 	struct page	*bv_page;
+    // i/o 할 page 
 	unsigned int	bv_len;
     // i/o 할 byte 단위 크기
 	unsigned int	bv_offset;
     // i/o 할 page frame 내의 위치
 };
-
+// bio_vec 의 순회용 자료구졸 로서, bio는 변화 없고, bvec_iter 만 변동 
 struct bvec_iter {
 	sector_t		bi_sector;	/* device address in 512 byte sectors */
-    // io 를 수행할 device 내의 sector 주소
+    // 다음 io 를 수행할 device 내의 sector 주소
 	unsigned int		bi_size;	/* residual I/O count */
     // struct bio 내의 i/o 가 수행되어야 할 전체 byte단위 크기 
     // 즉 각 bvec 들의 bv_len 들을 합한 값
 	unsigned int		bi_idx;		/* current index into bvl_vec */
-    // bvec_iter 에서 다음 처리할 bio_vec의 index
+    // 현재 bvec 의  bio 에서의 index 
 	unsigned int            bi_bvec_done;	/* number of bytes completed in
 						   current bvec */
-    // 현재 bvec 에서 i/o complete 된 byte 수
+    // 현재 bio_vec 에서 i/o complete 된 byte 수
 };
 
 /*
@@ -53,14 +54,19 @@ struct bvec_iter {
  * on highmem page vectors
  */
 #define __bvec_iter_bvec(bvec, iter)	(&(bvec)[(iter).bi_idx])
+// bio 의 bi_io_vec 이라는 bio_vec 에서 bio 의 iterate 용 struct 인 bvec_iter 의 
+// bi_idx 를 활용하여 bi_idx 번째 bio_vec를 가져옴
 
 #define bvec_iter_page(bvec, iter)				\
 	(__bvec_iter_bvec((bvec), (iter))->bv_page)
+    // __bvec_iter_bvec 를 통해 가져온 bio_vec 에서 page 즉 io 할 page 가져옴 
 
 #define bvec_iter_len(bvec, iter)				\
 	min((iter).bi_size,					\
 	    __bvec_iter_bvec((bvec), (iter))->bv_len - (iter).bi_bvec_done)
-// 남은 I/O size 와 현재 bvec 내에서 남은 I/O 크기중 최소값 가져옴 
+// bvec_iter 를 통해 알 수 있는 남은 I/O size 와 
+// 현재 bio_vec 내에서 원래 수행해야될 IO byte 수 - iter 결과 수행한 I/O byte 수
+// 중 최소값을 가져옴
 
 #define bvec_iter_offset(bvec, iter)				\
 	(__bvec_iter_bvec((bvec), (iter))->bv_offset + (iter).bi_bvec_done)

@@ -598,6 +598,7 @@ static int ll_merge_requests_fn(struct request_queue *q, struct request *req,
 	if ((blk_rq_sectors(req) + blk_rq_sectors(next)) >
 	    blk_rq_get_max_sectors(req, blk_rq_pos(req)))
 		return 0;
+        // 최대 sector 수 검사
 
 	total_phys_segments = req->nr_phys_segments + next->nr_phys_segments;
 	if (blk_phys_contig_segment(q, req->biotail, next->bio)) {
@@ -610,6 +611,7 @@ static int ll_merge_requests_fn(struct request_queue *q, struct request *req,
 
 	if (total_phys_segments > queue_max_segments(q))
 		return 0;
+        // 최대 segment 수 검사
 
 	if (blk_integrity_merge_rq(q, req, next) == false)
 		return 0;
@@ -670,25 +672,32 @@ static void blk_account_io_merge(struct request *req)
  * For non-mq, this has to be called with the request spinlock acquired.
  * For mq with scheduling, the appropriate queue wide lock should be held.
  */
+// req 뒤에 next 를 merge 해주고, bio 가 옮겨져 의미가 없어진 next를 반환
 static struct request *attempt_merge(struct request_queue *q,
 				     struct request *req, struct request *next)
 {
 	if (!rq_mergeable(req) || !rq_mergeable(next))
 		return NULL;
-
+        // req, next 의 merge flag 검사 
 	if (req_op(req) != req_op(next))
 		return NULL;
-
+        // operation flag 가 같지 않다면 종료
 	/*
 	 * not contiguous
 	 */
 	if (blk_rq_pos(req) + blk_rq_sectors(req) != blk_rq_pos(next))
 		return NULL;
-
+        // req 가 i/o 할 위치 + req 의 i/o 크기 결과가 
+        // next 의 i/o 위치와 일치하는지 검사 
+        // next 붙일수 없다면 종료
 	if (rq_data_dir(req) != rq_data_dir(next)
 	    || req->rq_disk != next->rq_disk
 	    || req_no_special_merge(next))
 		return NULL;
+        // data direction 즉 두 reques 모두 WRITE 이거나 모두 READ 가 
+        // 아니라면 종료
+        // 같은 I/O 장치(gendisk) 로의 request 가 아니라면 종료
+        //
 
 	if (req_op(req) == REQ_OP_WRITE_SAME &&
 	    !blk_write_same_mergeable(req->bio, next->bio))
@@ -702,7 +711,8 @@ static struct request *attempt_merge(struct request_queue *q,
 	 */
 	if (!ll_merge_requests_fn(q, req, next))
 		return NULL;
-
+        // req 와 next 가 합쳐져도 되는지
+        // max sector, max segment 등 검사
 	/*
 	 * If failfast settings disagree or any of the two is already
 	 * a mixed merge, mark both as mixed before proceeding.  This
@@ -727,11 +737,12 @@ static struct request *attempt_merge(struct request_queue *q,
 
 	req->biotail->bi_next = next->bio;
 	req->biotail = next->biotail;
-
+    // next 의 bio를 req로 옮김
 	req->__data_len += blk_rq_bytes(next);
-
+    // req 의 data 크기 next 만큼 증가
 	elv_merge_requests(q, req, next);
-
+    // io-scheduler 에서 next 관련 entry 제거 및 
+    // request_queue 의 request hash update, cache update 
 	/*
 	 * 'next' is going away, so update stats accordingly
 	 */
@@ -746,6 +757,7 @@ static struct request *attempt_merge(struct request_queue *q,
 	 * the caller to free
 	 */
 	next->bio = NULL;
+    // next 에서 bio 연결 끊음
 	return next;
 }
 
@@ -769,6 +781,7 @@ struct request *attempt_front_merge(struct request_queue *q, struct request *rq)
 	return NULL;
 }
 
+// rq 뒤에 next 를 merge 수행
 int blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 			  struct request *next)
 {
@@ -778,9 +791,19 @@ int blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 	if (!e->uses_mq && e->type->ops.sq.elevator_allow_rq_merge_fn)
 		if (!e->type->ops.sq.elevator_allow_rq_merge_fn(q, rq, next))
 			return 0;
+            // io-scheduler 별 request 가 merge 가능한지 검사하는 함수 수행.
+            // io-scheduler 별로 해당 함수 기능을 제공할 수도, 안할수도 있음.  
+            // cfq 는 같은 proces 로 부터 요청된 request 인지 검사
+            // e.g. deadline 은 i/o offset 정렬 queue, 요청순서정렬 queue 의 
+            //      두개만 가지고 있어 별도 정렬 검사가 필요 없지만 
+            //      cfq 의 경우, process/cgroup 별로 queue 를 가지고 있어 
+            //      검사 필요
 
-	free = attempt_merge(q, rq, next);
+	free = attempt_merge(q, rq, next); 
+    // request_queue hash/cache update, next 를 io-scheduler 에서 제거, 
+    // next 의 bio 연결 끊음 등 next 의 정보를 삭제, rq 로 옮김
 	if (free) {
+        // 틀뿐인 next 를 제거 후 종료
 		__blk_put_request(q, free);
 		return 1;
 	}

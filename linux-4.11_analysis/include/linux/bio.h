@@ -147,7 +147,17 @@ static inline void *bio_data(struct bio *bio)
 /* Default implementation of BIOVEC_PHYS_MERGEABLE */
 #define __BIOVEC_PHYS_MERGEABLE(vec1, vec2)	\
 	((bvec_to_phys((vec1)) + (vec1)->bv_len) == bvec_to_phys((vec2)))
-
+    // 앞 bio_vec 의 page frame 물리 주소에 offset 을 더한 i/o 해줄 data 의 시작 위치 
+    //  + i/o 양 이 다음 bio_vec 의 시작 위치와 같아야 한다.
+    /*
+     *         ---|---------------------|---------------------|----
+     *             ******^$$$$$$$$$$$$$$$$$$$$         
+     *              |    |      |        *****^$$$$$$$$$$$
+     * bvec1->bv_offset  | bvec1->bv_len   |  |   |      
+     *                   |   bvec1->bv_offset | bvec2->bv_len
+     *           bvec_to_phys(vec1)           |
+     *                                  bvec_to_phys(vec2)
+     */
 /*
  * allow arch override, for eg virtualized architectures (put in asm/io.h)
  */
@@ -168,7 +178,7 @@ static inline void *bio_data(struct bio *bio)
 #define bio_for_each_segment_all(bvl, bio, i)				\
 	for (i = 0, bvl = (bio)->bi_io_vec; i < (bio)->bi_vcnt; i++, bvl++)
 
-// I/O 완료된 크기인 bytes 를 기반으로 bvec 을 관리하는 bvec_iter 을 update 해줌
+// I/O 크기인 bytes 를 기반으로 bvec 을 관리하는 bvec_iter 을 update 해줌
 static inline void bio_advance_iter(struct bio *bio, struct bvec_iter *iter,
 				    unsigned bytes)
 {
@@ -284,12 +294,16 @@ static inline void bio_get_last_bvec(struct bio *bio, struct bio_vec *bv)
 	int idx;
 
 	if (unlikely(!bio_multiple_segments(bio))) {
+        // bio 에 segment 가 하나뿐이라면 즉 bio_vec 이 하나 뿐이라 
+        // bvec_iter 의 bi_size 와 bio_vec 의 bv_len 이 같다면 
 		*bv = bio_iovec(bio);
 		return;
+        // 처번째 것이 어차피 마지막 것이므로 반환
 	}
 
 	bio_advance_iter(bio, &iter, iter.bi_size);
-
+    // bvec 끝까지 다 돈 경우, bi_idx 는 bio_vec 의 수 +1
+    // 중간에 끝난 경우, index 는 그다음 bio_vec 의 index
 	if (!iter.bi_bvec_done)
 		idx = iter.bi_idx - 1;
 	else	/* in the middle of bvec */

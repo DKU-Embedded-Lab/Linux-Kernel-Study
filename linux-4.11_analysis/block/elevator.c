@@ -278,22 +278,27 @@ void elv_rqhash_del(struct request_queue *q, struct request *rq)
 }
 EXPORT_SYMBOL_GPL(elv_rqhash_del);
 
+// hash table 에 request 추가
 void elv_rqhash_add(struct request_queue *q, struct request *rq)
 {
 	struct elevator_queue *e = q->elevator;
 
 	BUG_ON(ELV_ON_HASH(rq));
 	hash_add(e->hash, &rq->hash, rq_hash_key(rq));
+    // rq 의 위치 + 크기 정보 즉 rq 이후에 다음 쓰여질 위치 offset 값을 
+    // key 로 request hash table 에 추가
 	rq->rq_flags |= RQF_HASHED;
 }
 EXPORT_SYMBOL_GPL(elv_rqhash_add);
 
+// rq 를 hash 에서 제거 후 다시 추가
 void elv_rqhash_reposition(struct request_queue *q, struct request *rq)
 {
 	__elv_rqhash_del(rq);
 	elv_rqhash_add(q, rq);
 }
-
+// request_queue 의 hash table 에서 기존 request 의 io 끝나는 지점이 offset 
+// 과 일치하여 기존 request의 뒤에 merge 가능한 request 를 찾아 반환
 struct request *elv_rqhash_find(struct request_queue *q, sector_t offset)
 {
 	struct elevator_queue *e = q->elevator;
@@ -519,7 +524,7 @@ bool elv_attempt_insert_merge(struct request_queue *q, struct request *rq)
 	 */
 	if (q->last_merge && blk_attempt_req_merge(q, q->last_merge, rq))
 		return true;
-        // cache 된 last merge 가 있다면 최근 cache 된 request 와 merge 수행
+        // cache 된 last merge 가 있다면 최근 cache 된 request 와 merge 수행 후 종료
 
 	if (blk_queue_noxmerges(q))
 		return false;
@@ -530,12 +535,17 @@ bool elv_attempt_insert_merge(struct request_queue *q, struct request *rq)
 	 */
 	while (1) {
 		__rq = elv_rqhash_find(q, blk_rq_pos(rq));
+        // request_queue 의 hash table 에서 back merge 가능한 request 를 검색
 		if (!__rq || !blk_attempt_req_merge(q, __rq, rq))
 			break;
+            // hash table 에서 back merge 가능한 대상을 못찾았다면 break 
+            // 찾았어도 __rq 에 rq 를 merge 하지 못했다면 break
 
 		/* The merged request could be merged with others, try again */
 		ret = true;
 		rq = __rq;
+        // 맨처음 시도 시, rq 를 __rq 에 merge 하고도 계속 merge 할 수 있는 
+        // request 가 있나 검사
 	}
 
 	return ret;
@@ -556,7 +566,9 @@ void elv_merged_request(struct request_queue *q, struct request *rq,
 
 	q->last_merge = rq;
 }
-
+// next 를 rq 에 합치는 과정에서 io-scheduler 별 merge 후, 수행되어야 할 function 수행 
+//  - io-scheduler 에서 next 관련 entry 제거
+// request hash 에 rq 제 추가 및 hash update
 void elv_merge_requests(struct request_queue *q, struct request *rq,
 			     struct request *next)
 {
@@ -569,16 +581,20 @@ void elv_merge_requests(struct request_queue *q, struct request *rq,
 		next_sorted = (__force bool)(next->rq_flags & RQF_SORTED);
 		if (next_sorted)
 			e->type->ops.sq.elevator_merge_req_fn(q, rq, next);
+            // request 들의 queue 상에서 next 가 먼저라면 req 를 next 위치 옮기고 
+            // io-scheduler 에 있는 next 의 entry 삭제 
+            // e.g. deadline 의 경우 fifo quue,  offset rbtree 에서 next 제거
 	}
 
 	elv_rqhash_reposition(q, rq);
-
+    // rq 의 크기가 변경되었으므로 request_queue 의 request hash 에서 재추가
 	if (next_sorted) {
 		elv_rqhash_del(q, next);
 		q->nr_sorted--;
 	}
 
 	q->last_merge = rq;
+    // request cahce update
 }
 
 void elv_bio_merged(struct request_queue *q, struct request *rq,
@@ -651,7 +667,7 @@ void elv_drain_elevator(struct request_queue *q)
 		       q->elevator->type->elevator_name, q->nr_sorted);
 	}
 }
-
+// rq 를 q 에 추가
 void __elv_add_request(struct request_queue *q, struct request *rq, int where)
 {
 	trace_block_rq_insert(q, rq);
@@ -707,14 +723,19 @@ void __elv_add_request(struct request_queue *q, struct request *rq, int where)
 		 */
 		if (elv_attempt_insert_merge(q, rq))
 			break;
+            // request 가 request_queue 의 hash table 에서 
+            // 검색되어 back merge 로 merge 되었다면 break  
+         // merge 가능한 request 가 없다면 일반 insert 로 수행
 	case ELEVATOR_INSERT_SORT:
 		BUG_ON(blk_rq_is_passthrough(rq));
 		rq->rq_flags |= RQF_SORTED;
 		q->nr_sorted++;
 		if (rq_mergeable(rq)) {
 			elv_rqhash_add(q, rq);
+            // request hash table 에 rq 추가 
 			if (!q->last_merge)
 				q->last_merge = rq;
+                // request cache 없다면 추가
 		}
 
 		/*
@@ -724,6 +745,10 @@ void __elv_add_request(struct request_queue *q, struct request *rq, int where)
 		 */
 		q->elevator->type->ops.sq.elevator_add_req_fn(q, rq);
 		break;
+        // io scheduler 별로 request 추가 동작 수행
+        // e.g. deadlin 
+        //   - rq 의 만료시간 update 및 READ/WRITE 별 fifo queue 에 추가
+        //   - rq 의 io offset 기준 rb tree 에 추가
 
 	case ELEVATOR_INSERT_FLUSH:
 		rq->rq_flags |= RQF_SOFTBARRIER;

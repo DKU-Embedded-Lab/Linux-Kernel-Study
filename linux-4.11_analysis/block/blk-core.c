@@ -3406,7 +3406,7 @@ static void flush_plug_callbacks(struct blk_plug *plug, bool from_schedule)
     // list_head 생성
 	while (!list_empty(&plug->cb_list)) {
 		list_splice_init(&plug->cb_list, &callbacks);
-        // cb_list 를 callback 으로 옮기고, cb_list 를 다시 init 수행
+        // cb_list 를 callback list 에 덧붙이고, cb_list 를 다시 init 수행
 		while (!list_empty(&callbacks)) {
 			struct blk_plug_cb *cb = list_first_entry(&callbacks,
 							  struct blk_plug_cb,
@@ -3455,22 +3455,26 @@ void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 	unsigned int depth;
 
 	flush_plug_callbacks(plug, from_schedule);
-    // plug 된 list 의 cb_list 에서 blk_plug_cb 를 제거하며 미리 설정된 
-    // callback 함수 수행 (각 raid 에 따라 다른 callback 수행)
+    // plug 된 request list 중 driver 의 callback 이 필요한 list 의 경우 plug->cb_list 에서 
+    // blk_plug_cb 를 제거하며 미리 설정된 callback 함수 수행 
+    // (callback 함수 내에서 generic_make_request(bio) 를 통해 각 bio 처리)
+    // (callback 이 필요한 경우 - 일반 bio 처리가 아닌 raid 처리 등...)
 
 	if (!list_empty(&plug->mq_list))
 		blk_mq_flush_plug_list(plug, from_schedule);
+        // multi-queue 의 plugging 처리
     
 	if (list_empty(&plug->list))
 		return;
-        // queue 된 struct request 가 없다면 종료
+        // queue 된 struct request 가 없다면 종료 
 
 	list_splice_init(&plug->list, &list);
     // plug->list 의 내용을 list로 옮기고 초기화 수행
 
 	list_sort(NULL, &list, plug_rq_cmp);
     // plug 된 struct request 들의 list 들을 
-    // request 가 써질 sector 순으로 merge 정렬 수행
+    // request 가 써질 sector 순으로 merge 정렬 수행하여
+    // list 에 다시 넣어줌
 
 	q = NULL;
 	depth = 0;
@@ -3482,7 +3486,7 @@ void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 	local_irq_save(flags);
 	while (!list_empty(&list)) {
 		rq = list_entry_rq(list.next);
-        // list 에서 rq 가져옴
+        // list 의 다음 entry 인 request 가 속한 request_quee 가져옴
 		list_del_init(&rq->queuelist);
         // rquest list 에서 제거
 		BUG_ON(!rq->q);
@@ -3512,7 +3516,8 @@ void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 			__elv_add_request(q, rq, ELEVATOR_INSERT_FLUSH);
 		else
 			__elv_add_request(q, rq, ELEVATOR_INSERT_SORT_MERGE);
-            // rq 를 q 에 넣음
+            // rq 를 q 에 넣음 
+            // insert 하며 cache/hash table 에 있는지 검색 수행
 
 		depth++;
 	}

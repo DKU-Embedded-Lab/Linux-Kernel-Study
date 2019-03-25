@@ -66,9 +66,9 @@ struct bio {
 	 * sizes of the first and last mergeable segments in this bio.
 	 */
 	unsigned int		bi_seg_front_size;
-    //  
+    // bio 의 맨 처음 bi_vec segment 의 크기
 	unsigned int		bi_seg_back_size;
-    // 
+    // bio 의 맨 마지막 bi_vec segment 의 크기 
 	atomic_t		__bi_remaining;
 
 	bio_end_io_t		*bi_end_io;

@@ -194,7 +194,8 @@ void list_sort(void *priv, struct list_head *head,
     //         --------    --------    --------    --------
     //                       cur         list 
     //                                   cur        list
-    //
+    // 
+    // e.g. list : 10 - 5 - 7 - 20 - 12 - 15 - 22 - 30
 	while (list) {
         // 각 part 마다 2^n 만큼의 정렬 결과를 담음
 		struct list_head *cur = list;
@@ -216,6 +217,60 @@ void list_sort(void *priv, struct list_head *head,
 			max_lev = lev;
 		}
 		part[lev] = cur;
+        // step1    list : 5 - 7 - 20 - 12 - 15 - 22 - 30
+        //          max_lev : 0 / len : 0
+        //          part[0] - 10
+        //          part[1] - NULL
+        //          part[2] - NULL
+        //          ...
+        // step2    list : 7 - 20 - 12 - 15 - 22 - 30
+        //          max_lev : 1 / len : 1
+        //          part[0] - NULL  
+        //          part[1] - 5-10
+        //          part[2] - NULL;
+        //          ...
+        // step3    list : 20 - 12 - 15 - 22 - 30
+        //          max_lev : 1 / len : 0
+        //          part[0] - 7
+        //          part[1] - 5-10
+        //          part[2] - NULL;
+        //          ...
+        // step4    list : 12 - 15 - 22 - 30
+        //          max_lev : 2 / len : 2
+        //          part[0] - NULL
+        //          part[1] - NULL
+        //          part[2] - 5-7-10-20;
+        //          part[3] - NULL
+        //          ...
+        // step5    list : 15 - 22 - 30
+        //          max_lev : 2 / len : 0
+        //          part[0] - 12
+        //          part[1] - NULL
+        //          part[2] - 5-7-10-20;
+        //          part[3] - NULL
+        //          ...
+        // step6    list : 22 - 30
+        //          max_lev : 2 / len : 1
+        //          part[0] - NULL
+        //          part[1] - 12-15
+        //          part[2] - 5-7-10-20;
+        //          part[3] - NULL
+        //          ...
+        // step7    list : 30
+        //          max_lev : 2 / len : 0
+        //          part[0] - 22
+        //          part[1] - 12-15
+        //          part[2] - 5-7-10-20;
+        //          part[3] - NULL
+        //          ...
+        // step8    list : NULL
+        //          max_lev : 3 / len : 3
+        //          part[0] - NULL
+        //          part[1] - NULL 
+        //          part[2] - NULL 
+        //          part[3] - 5-7-10-12-15-20-22-30        
+        //          part[4] - NULL
+        //          ...
 	}
 
 	for (lev = 0; lev < max_lev; lev++)

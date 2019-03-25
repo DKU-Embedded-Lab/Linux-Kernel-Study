@@ -136,6 +136,8 @@ struct request {
 	union {
 		struct call_single_data csd;
 		u64 fifo_time;
+        // io 만료 시간 
+        // (deadline ioscheduler 에서 사용)
 	};
 
 	struct request_queue *q;
@@ -199,6 +201,8 @@ struct request {
 		struct {
 			struct io_cq		*icq;
 			void			*priv[2];
+            // 0 : process 별로 존재하는 cfq_queue 용도 
+            // 1 : cgroup 별로 존재하는 cfq_group 용도
 		} elv;
 
 		struct {
@@ -221,6 +225,7 @@ struct request {
 	 * physical address coalescing is performed.
 	 */
 	unsigned short nr_phys_segments;
+    // request 의 bio 의 bio_vec 들의 segment 수
 #if defined(CONFIG_BLK_DEV_INTEGRITY)
 	unsigned short nr_integrity_segments;
 #endif
@@ -334,6 +339,7 @@ struct queue_limits {
 	unsigned int		chunk_sectors;
 	unsigned int		max_sectors;
 	unsigned int		max_segment_size;
+    // bio_vec 에 담을 수 있는 최대 연속된 page 수
 	unsigned int		physical_block_size;
 	unsigned int		alignment_offset;
 	unsigned int		io_min;
@@ -561,6 +567,7 @@ struct request_queue {
 	struct list_head	tag_busy_list;
 
 	unsigned int		nr_sorted;
+    // plugging 에서 flush 될 시, merge sort 되 수
 	unsigned int		in_flight[2];
 
 	struct blk_rq_stat	rq_stats[2];
@@ -838,20 +845,23 @@ static inline void blk_clear_rl_full(struct request_list *rl, bool sync)
 
 	rl->flags &= ~flag;
 }
-
+// merge 가능 여부 flas 검사
 static inline bool rq_mergeable(struct request *rq)
 {
 	if (blk_rq_is_passthrough(rq))
 		return false;
         // SCSI pass through 요청인 경우
+        // merge 하지 않음
 
 	if (req_op(rq) == REQ_OP_FLUSH)
 		return false;
-        // flsh 요청인 경우 
+        // flush 요청인 경우
+        // merge 하지 않음 
 
 	if (req_op(rq) == REQ_OP_WRITE_ZEROES)
 		return false;
         // zero-filled write 인 경우 
+        // merge 하지 않음
 
 	if (rq->cmd_flags & REQ_NOMERGE_FLAGS)
 		return false;
@@ -1344,7 +1354,12 @@ struct blk_plug_cb {
 	struct list_head list;
     // blk_plug_cb 와 연결된 list
 	blk_plug_cb_fn callback;
-    // blk_plug_cb 가 blk_plug 의 cb_list 에서 제거 될 때마다 호출될 callback 함수
+    // blk_plug_cb 가 blk_plug 의 cb_list 에서 제거 될 때마다 호출될 callback 함수 
+    // 각 driver 마다 다르게 설정됨 
+    // e.g. raid1 : raid1_unplug
+    //      raid5 : raid5_unplug 
+    //      raid10 : raid10_unplug
+    //
 	void *data;
     // callback 함수에서 사용될 data 로 
     // btrfs_plug_cb, blk_plug_cb, raid1_plug_cb, raid5_plug_cb 등 
@@ -1732,17 +1747,23 @@ static inline bool bvec_gap_to_prev(struct request_queue *q,
  * If yes, no need to check gap between the two bios since the 1st bio
  * and the 1st bvec in the 2nd bio can be handled in one segment.
  */
+// prev_last_bv 와 next_first_bv 가 하나의 segment 로 합쳐질 수 있는지 검사
 static inline bool bios_segs_mergeable(struct request_queue *q,
 		struct bio *prev, struct bio_vec *prev_last_bv,
 		struct bio_vec *next_first_bv)
 {
 	if (!BIOVEC_PHYS_MERGEABLE(prev_last_bv, next_first_bv))
 		return false;
+        // prev_last_bv 와 next_first_bv 의 page 와 i/o 될 위치가 
+        // 물리적으로 연속이어서 merge 가 가능한지 확인한다.
 	if (!BIOVEC_SEG_BOUNDARY(q, prev_last_bv, next_first_bv))
 		return false;
+        // 
 	if (prev->bi_seg_back_size + next_first_bv->bv_len >
 			queue_max_segment_size(q))
 		return false;
+        // 하나의 segment 로 합쳐질 두 bi_vec 의 크기가 최대 page 수 
+        // 제한을 넘지 않는지 확인
 	return true;
 }
 
@@ -1770,7 +1791,8 @@ static inline bool bio_will_gap(struct request_queue *q,
 			bio_get_first_bvec(prev, &pb);
 		if (pb.bv_offset)
 			return true;
-
+            // 첫번째 bio 가 이미 io가 일부 수행되거나 page 냉 0 offset 으로 
+            // 시작하지 않는다면 종료
 		/*
 		 * We don't need to worry about the situation that the
 		 * merged segment ends in unaligned virt boundary:
@@ -1781,10 +1803,16 @@ static inline bool bio_will_gap(struct request_queue *q,
 		 *   merge with 'pb'
 		 */
 		bio_get_last_bvec(prev, &pb);
+        // 그전 bio 의 마지막 bvec 를 가져옴 
 		bio_get_first_bvec(next, &nb);
+        // 현재 bio 의 첫 bvec 를 가져옴
 
+        // pb, nb 가 연속된 page 로 존재해서 하나의 segment 로
+        // 합쳐질 수 있는지 검사
 		if (!bios_segs_mergeable(q, prev, &pb, &nb))
 			return __bvec_gap_to_prev(q, &pb, nb.bv_offset);
+            // 합쳐질 수 없다면 ...
+            // TODO vitual boundray?...
 	}
 
 	return false;

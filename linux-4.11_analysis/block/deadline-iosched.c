@@ -49,6 +49,8 @@ struct deadline_data {
 	 * settings that change how the i/o scheduler behaves
 	 */
 	int fifo_expire[2];
+    // 각 연산별 expire time
+    // 0:READ, 1:WRITE
 	int fifo_batch;
 	int writes_starved;
 	int front_merges;
@@ -99,19 +101,25 @@ deadline_del_rq_rb(struct deadline_data *dd, struct request *rq)
 /*
  * add rq to rbtree and fifo
  */
+// rq 를 deadline scheduler 에 추가하는 함수 
+// fifo queue 추가 및 만료시간 udpate 
+// io offset 기준 rb tree 에 추가
 static void
 deadline_add_request(struct request_queue *q, struct request *rq)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
 	const int data_dir = rq_data_dir(rq);
-
+    // read queue , write queue 에 넣을지 구분. 
+    // 0 : READ / 1 : WRITE
 	deadline_add_rq_rb(dd, rq);
-
+    // rq 의 io 수행 위치를 key 로 rb tree 에 추가
 	/*
 	 * set expire time and add to fifo list
 	 */
 	rq->fifo_time = jiffies + dd->fifo_expire[data_dir];
+    // request 의 만료시간 설정
 	list_add_tail(&rq->queuelist, &dd->fifo_list[data_dir]);
+    // request 를 fifo list 의 마지막에 추가 
 }
 
 /*
@@ -180,8 +188,15 @@ deadline_merged_requests(struct request_queue *q, struct request *req,
 	if (!list_empty(&req->queuelist) && !list_empty(&next->queuelist)) {
 		if (time_before((unsigned long)next->fifo_time,
 				(unsigned long)req->fifo_time)) {
+            // next 의 만료시간 보다  req 의 만료시간이 더 크다면 즉 많이 남았다면 
+            // 즉 next 가 req 보다 만료시간이 얼마 안남아 곧 수행될 놈이라면 
+            // req 의 수행 순서 update
+            // ... - next - ...  - req - ...           
 			list_move(&req->queuelist, &next->queuelist);
+            // req 를 next 위치에 옮김
+            // ... - req - ... - ... - ...
 			req->fifo_time = next->fifo_time;
+            // req 의 만료 시간 update
 		}
 	}
 
@@ -189,6 +204,7 @@ deadline_merged_requests(struct request_queue *q, struct request *req,
 	 * kill knowledge of next, this one is a goner
 	 */
 	deadline_remove_request(q, next);
+    // dealine 의 fifo queue, offset rb tree 에서 next 를 지움
 }
 
 /*
