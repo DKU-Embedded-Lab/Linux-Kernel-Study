@@ -75,7 +75,8 @@ struct bio_integrity_payload *bio_integrity_alloc(struct bio *bio,
 	memset(bip, 0, sizeof(*bip));
 
 	if (nr_vecs > inline_vecs) {
-        // bip를 mempool 로 할당한 경우 
+        // bip를 mempool 로 할당한 경우  
+        // page 의 수가 4page 보다 크다면
 		unsigned long idx = 0;
 
 		bip->bip_vec = bvec_alloc(gfp_mask, nr_vecs, &idx,
@@ -143,7 +144,7 @@ EXPORT_SYMBOL(bio_integrity_free);
  * Description: Attach a page containing integrity metadata to bio.
  */
 // 
-// integrity metadata 용도로 할당한 page에 
+// integrity metadata 용도로 할당한 page 의 offset 부터 len 만큼 bio 에 연결
 int bio_integrity_add_page(struct bio *bio, struct page *page,
 			   unsigned int len, unsigned int offset)
 {

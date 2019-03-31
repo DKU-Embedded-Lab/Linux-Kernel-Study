@@ -1448,6 +1448,7 @@ bool bio_attempt_back_merge(struct request_queue *q, struct request *req,
 
 	if (!ll_back_merge_fn(q, req, bio))
 		return false;
+    // req 의 segment, sector 수 검사 및 segment 수 update
 
 	trace_block_bio_backmerge(q, req, bio);
 
@@ -1623,7 +1624,7 @@ unsigned int blk_plug_queued_count(struct request_queue *q)
 out:
 	return ret;
 }
-
+// bio 의 data 로 req 초기화
 void init_request_from_bio(struct request *req, struct bio *bio)
 {
 	if (bio->bi_opf & REQ_RAHEAD)
@@ -1631,9 +1632,12 @@ void init_request_from_bio(struct request *req, struct bio *bio)
 
 	req->errors = 0;
 	req->__sector = bio->bi_iter.bi_sector;
+    // req 의 시작 sector 를 bio 의 sector 로 설정
 	if (ioprio_valid(bio_prio(bio)))
 		req->ioprio = bio_prio(bio);
+        // io priority 설정
 	blk_rq_bio_prep(req->q, req, bio);
+    // bio 를 req 에 연결
 }
 
 static blk_qc_t blk_queue_bio(struct request_queue *q, struct bio *bio)
@@ -3150,17 +3154,20 @@ bool __blk_end_request_err(struct request *rq, int error)
 }
 EXPORT_SYMBOL_GPL(__blk_end_request_err);
 
+// bio 를 rq 에 연결 및 segment, data 크기 정보 초기화
 void blk_rq_bio_prep(struct request_queue *q, struct request *rq,
 		     struct bio *bio)
 {
 	if (bio_has_data(bio))
 		rq->nr_phys_segments = bio_phys_segments(q, bio);
-
+        // 연속적 page들 수 초기화
 	rq->__data_len = bio->bi_iter.bi_size;
+    // bio 의 data size 로 rq 초기화
 	rq->bio = rq->biotail = bio;
-
+    // rq 에 bio 연결
 	if (bio->bi_bdev)
 		rq->rq_disk = bio->bi_bdev->bd_disk;
+        // block device mapping 정보 초기화
 }
 
 #if ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE

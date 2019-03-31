@@ -343,7 +343,8 @@ static int dd_init_queue(struct request_queue *q, struct elevator_type *e)
 	q->elevator = eq;
 	return 0;
 }
-
+// bio 가 front merge 될 수 있는 request 를 찾아 req 에 담음  
+// search 과정은 single queue deadline 와 동일
 static int dd_request_merge(struct request_queue *q, struct request **rq,
 			    struct bio *bio)
 {
@@ -379,6 +380,7 @@ static bool dd_bio_merge(struct blk_mq_hw_ctx *hctx, struct bio *bio)
 
 	spin_lock(&dd->lock);
 	ret = blk_mq_sched_try_merge(q, bio, &free);
+    // bio 를 기존 request 에 back or front merge
 	spin_unlock(&dd->lock);
 
 	if (free)

@@ -491,7 +491,7 @@ enum elv_merge elv_merge(struct request_queue *q, struct request **req,
 	}
 
     // back merge 대상을 못찾을 경우, io-scheduler 의 각 merge 함수를 통해 
-    // front merge 대상 찾음(sysfs 에서 front merge 설정된 경우)
+    // front merge 될 수 있는 request 를 찾아 req 에 담음(sysfs 에서 front merge 설정된 경우)
 	if (e->uses_mq && e->type->ops.mq.request_merge)
 		return e->type->ops.mq.request_merge(q, req, bio);
 	else if (!e->uses_mq && e->type->ops.sq.elevator_merge_fn)
@@ -560,11 +560,18 @@ void elv_merged_request(struct request_queue *q, struct request *rq,
 		e->type->ops.mq.request_merged(q, rq, type);
 	else if (!e->uses_mq && e->type->ops.sq.elevator_merged_fn)
 		e->type->ops.sq.elevator_merged_fn(q, rq, type);
+    // io-scheduler 별 merge 후 처리 
+    // e.g. deadline 의 경우, io 될 sector 주소 기준으로 rbtree 관리하므로 
+    //      front merge 일 경우에만 tree update
 
 	if (type == ELEVATOR_BACK_MERGE)
 		elv_rqhash_reposition(q, rq);
+        // request_queue 의 hash table 은 request 의 시작주소+크기 를 
+        // key 값으로 하므로, back merge 일 경우 merge 되어 크기가 
+        // 변경된 rq 의 정보 update
 
 	q->last_merge = rq;
+    // merge cache 수정
 }
 // next 를 rq 에 합치는 과정에서 io-scheduler 별 merge 후, 수행되어야 할 function 수행 
 //  - io-scheduler 에서 next 관련 entry 제거
@@ -1225,7 +1232,8 @@ struct request *elv_rb_latter_request(struct request_queue *q,
 				      struct request *rq)
 {
 	struct rb_node *rbnext = rb_next(&rq->rb_node);
-
+    // sector 기준 정렬된 rb tree 에서의 바로 다음 request 가져옴 
+    // (right child 의 leftest child)
 	if (rbnext)
 		return rb_entry_rq(rbnext);
 

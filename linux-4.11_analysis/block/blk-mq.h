@@ -12,6 +12,7 @@ struct blk_mq_ctx {
 	struct {
 		spinlock_t		lock;
 		struct list_head	rq_list;
+        // request list
 	}  ____cacheline_aligned_in_smp;
 
 	unsigned int		cpu;
@@ -141,7 +142,7 @@ static inline void blk_mq_put_ctx(struct blk_mq_ctx *ctx)
 {
 	put_cpu();
 }
-
+// request 할당시 사용되는 struct
 struct blk_mq_alloc_data {
 	/* input parameter */
 	struct request_queue *q;

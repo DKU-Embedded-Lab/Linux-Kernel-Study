@@ -174,6 +174,8 @@ struct elevator_queue
     // * deadline io scheduler : elevator_deadline
     // * cfq io scheduler : elevator_cfq
 	void *elevator_data;
+    // 각 io-scheduler 알고리즘 별 data 
+    // e.g. deadline_data, cfq_data
 	struct kobject kobj;
 	struct mutex sysfs_lock;
 	unsigned int registered:1;

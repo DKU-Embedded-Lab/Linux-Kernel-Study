@@ -502,9 +502,10 @@ static inline int ll_new_hw_segment(struct request_queue *q,
 				    struct bio *bio)
 {
 	int nr_phys_segs = bio_phys_segments(q, bio);
-
+    // bio 의 물리적으로 연속된 page 들의 수인 segment 가 몇개인지 가져옴
 	if (req->nr_phys_segments + nr_phys_segs > queue_max_segments(q))
 		goto no_merge;
+        // 최대 segment 수 초과여부 검사
 
 	if (blk_integrity_merge_bio(q, req, bio) == false)
 		goto no_merge;
@@ -531,6 +532,8 @@ int ll_back_merge_fn(struct request_queue *q, struct request *req,
 		return 0;
 	if (blk_rq_sectors(req) + bio_sectors(bio) >
 	    blk_rq_get_max_sectors(req, blk_rq_pos(req))) {
+        // req 가 io 될 sector 수 와 bio 가 io 될 secot 수가 
+        // 최대 sector 수 넘는지 검사
 		req_set_nomerge(q, req);
 		return 0;
 	}
@@ -540,6 +543,7 @@ int ll_back_merge_fn(struct request_queue *q, struct request *req,
 		blk_recount_segments(q, bio);
 
 	return ll_new_hw_segment(q, req, bio);
+    // req 의 segment 수 update
 }
 
 int ll_front_merge_fn(struct request_queue *q, struct request *req,
@@ -760,24 +764,29 @@ static struct request *attempt_merge(struct request_queue *q,
     // next 에서 bio 연결 끊음
 	return next;
 }
-
+// io-scheduler 상 정렬된 바로 다음 request 를 가져와 
+// rq 의 뒤에 merge 가능한지 검사
 struct request *attempt_back_merge(struct request_queue *q, struct request *rq)
 {
 	struct request *next = elv_latter_request(q, rq);
-
+    // io-scheduler 상 정렬된 바로 다음 request 를 가져옴
+    // (right child의 leftest child)
 	if (next)
 		return attempt_merge(q, rq, next);
-
+        // rq 뒤에 next 를 merge 시도
 	return NULL;
 }
-
+// io-scheduler 상 정렬된 바로 전 request 를 가져와 
+// rq 의 앞에 merge 가능한지 검사
 struct request *attempt_front_merge(struct request_queue *q, struct request *rq)
 {
 	struct request *prev = elv_former_request(q, rq);
+    // io-scheduler 상 정렬된 바로 전 request 를 가져옴
+    // (left child의 rightest child)
 
 	if (prev)
 		return attempt_merge(q, prev, rq);
-
+        // rq 의 앞에 next 를 merge 시도
 	return NULL;
 }
 

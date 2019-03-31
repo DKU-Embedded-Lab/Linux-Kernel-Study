@@ -116,8 +116,10 @@ struct request *blk_mq_sched_get_request(struct request_queue *q,
 	data->q = q;
 	if (likely(!data->ctx))
 		data->ctx = blk_mq_get_ctx(q);
+        // 현재 core 의 blk_mq_ctx를 설정
 	if (likely(!data->hctx))
 		data->hctx = blk_mq_map_queue(q, data->ctx->cpu);
+        // blk_mq_ctx 에 map 된 blk_mq_hw_ctx를 설정
 
 	if (e) {
 		data->flags |= BLK_MQ_REQ_INTERNAL;
@@ -250,20 +252,28 @@ bool blk_mq_sched_try_merge(struct request_queue *q, struct bio *bio,
 	struct request *rq;
 
 	switch (elv_merge(q, &rq, bio)) {
-    // request_queue 의 cache, hash table, ios-scueduler 에서 찾음
+    // request_queue 의 cache, hash table, io-scueduler 에서 bio 가 merge 될 수 있는 request 찾음
 	case ELEVATOR_BACK_MERGE:
-        // back merge - request_queue 의 cache, hash list 에서 찾은 결과
+        // back merge - request_queue 의 cache, hash list 에서 back merge 대상 찾은 경우
 		if (!blk_mq_sched_allow_merge(q, rq, bio))
 			return false;
-        // multi-queue 에서 completion queue 인 blk_mq_hw_ctx 의 merge flag 검사
+            // multi-queue 에서 completion queue 인 blk_mq_hw_ctx 의 merge flag 검사
 		if (!bio_attempt_back_merge(q, rq, bio))
 			return false;
+            // bio 를 rq 에 연결.
 		*merged_request = attempt_back_merge(q, rq);
+        // bio 가 merge 된 rq 와 
+        // io-scheduler 상 이미 있던 바로 다음 sector 주소의 request 와 merge 시도 
+        // 성공시, merge 된 request 
+        // 실패시, NULL
 		if (!*merged_request)
 			elv_merged_request(q, rq, ELEVATOR_BACK_MERGE);
+            // 다음 request 와 merge 성공 했다면 이미 elevator, hash, cache 정보 
+            // update 되었지만 bio merge 로 종료된 경우, elv_merged_request 를 통해
+            // elevator, hash, cache 정보 update
 		return true;
 	case ELEVATOR_FRONT_MERGE:
-        // front merge - io scheduler 에서 찾은 결과
+        // front merge - io scheduler 에서 front merge 대상 찾은 결과
 		if (!blk_mq_sched_allow_merge(q, rq, bio))
 			return false;
 		if (!bio_attempt_front_merge(q, rq, bio))
@@ -287,10 +297,12 @@ bool __blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio)
 		struct blk_mq_ctx *ctx = blk_mq_get_ctx(q);
         // 현재 core 에서의 software queue 가져옴
 		struct blk_mq_hw_ctx *hctx = blk_mq_map_queue(q, ctx->cpu);
-        // 현재 core 에서의 hardware queue 가져옴
+        // 현재 core 에서 map 된 hardware queue 가져옴
 		blk_mq_put_ctx(ctx);
         // per-cpu data 인 core 별 blk_mq_ctx 값을 가져왔으므로 put_cpu 수행
 		return e->type->ops.mq.bio_merge(hctx, bio);
+        // bio 를 기존 request 에 front or back merge 
+        // (merge cache, request hash, io-scheduler tree 등)
 	}
 
 	return false;

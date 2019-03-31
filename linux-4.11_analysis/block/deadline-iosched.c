@@ -132,7 +132,7 @@ static void deadline_remove_request(struct request_queue *q, struct request *rq)
 	rq_fifo_clear(rq);
 	deadline_del_rq_rb(dd, rq);
 }
-
+// bio 가 front merge 될 수 있는 request 를 찾아 req 에 담음
 static enum elv_merge
 deadline_merge(struct request_queue *q, struct request **req, struct bio *bio)
 {
@@ -145,8 +145,8 @@ deadline_merge(struct request_queue *q, struct request **req, struct bio *bio)
 	if (dd->front_merges) {
         // deadline scheduler 의 front merge 허용 시 
 		sector_t sector = bio_end_sector(bio);
-        // front merge 대상을 찾을때 사용하기 위해 bio 가 merge 될 수 있는
-        // request 의 시작 sector 를 계산
+        // front merge 대상을 찾을때 사용하기 위해 bio 의 끝주소 계산
+        // front merge 될 request 의 시작 sector == bio 의 끝 sector 이어야 함
 		__rq = elv_rb_find(&dd->sort_list[bio_data_dir(bio)], sector);
         // front merge 가 가능한 request 를 찾음
 		if (__rq) {            
@@ -162,7 +162,7 @@ deadline_merge(struct request_queue *q, struct request **req, struct bio *bio)
 
 	return ELEVATOR_NO_MERGE;
 }
-
+ 
 static void deadline_merged_request(struct request_queue *q,
 				    struct request *req, enum elv_merge type)
 {
@@ -172,6 +172,8 @@ static void deadline_merged_request(struct request_queue *q,
 	 * if the merge was a front merge, we need to reposition request
 	 */
 	if (type == ELEVATOR_FRONT_MERGE) {
+        // deadline 의 rbtree 는 io 될 sector 를 key 로 가지므로 
+        // front merge 되어 io sector 위치가 변경된 req 의 정보 update
 		elv_rb_del(deadline_rb_root(dd, req), req);
 		deadline_add_rq_rb(dd, req);
 	}

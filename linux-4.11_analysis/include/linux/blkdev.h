@@ -214,6 +214,7 @@ struct request {
 
 	struct gendisk *rq_disk;
 	struct hd_struct *part;
+    // request 가 io 될 partition 정보
 	unsigned long start_time;
 	struct blk_issue_stat issue_stat;
 #ifdef CONFIG_BLK_CGROUP

@@ -1315,6 +1315,7 @@ static inline void __blk_mq_insert_req_list(struct blk_mq_hw_ctx *hctx,
 		list_add(&rq->queuelist, &ctx->rq_list);
 	else
 		list_add_tail(&rq->queuelist, &ctx->rq_list);
+    // submission queue 에 rq 추가
 }
 
 void __blk_mq_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
@@ -1323,6 +1324,7 @@ void __blk_mq_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	struct blk_mq_ctx *ctx = rq->mq_ctx;
 
 	__blk_mq_insert_req_list(hctx, rq, at_head);
+    // submission queue 에 rq 추가
 	blk_mq_hctx_mark_pending(hctx, ctx);
 }
 
@@ -1409,8 +1411,9 @@ void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 static void blk_mq_bio_to_request(struct request *rq, struct bio *bio)
 {
 	init_request_from_bio(rq, bio);
-
+    // bio 를 rq 에 연결 및 bio 정보를 rq 에 초기화
 	blk_account_io_start(rq, true);
+    // rq 에 partition 정보 초기화
 }
 
 static inline bool hctx_allow_merges(struct blk_mq_hw_ctx *hctx)
@@ -1664,16 +1667,20 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
 	} else
 		request_count = blk_plug_queued_count(q);
         // blk plug 된 request 수 설정
-        
+       
+    // bio write 요청시, plugging merge 가 불가능 한 경우... 
 	if (blk_mq_sched_bio_merge(q, bio))
 		return BLK_QC_T_NONE;
-        // request queue 내의 request cache 와 hash table 에서 merge 및 
-        // merge 가능한 reques 찾음
+        // bio 를 기존 request 에 front or back merge 
+        // (merge cache, request hash, io-scheduler tree 등)
 	wb_acct = wbt_wait(q->rq_wb, bio, NULL);
 
 	trace_block_getrq(q, bio, bio->bi_opf);
-
+    // bio 가 plug 에도 merge 될 수 없고, 
+    // merge cache, hash table 로 back merge 나 io-scheduler 로 front merge 될수 없을 경우 
 	rq = blk_mq_sched_get_request(q, bio, bio->bi_opf, &data);
+    // 새로 request 할당    
+    // FIXME : tag 관련 multi-queue 볼때 제대로
 	if (unlikely(!rq)) {
 		__wbt_done(q->rq_wb, wb_acct);
 		return BLK_QC_T_NONE;
@@ -1701,7 +1708,7 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
 		struct request *last = NULL;
 
 		blk_mq_bio_to_request(rq, bio);
-
+        // bio 정보로 rq 초기화 및 rq 를 bio 에 연결
 		/*
 		 * @request_count may become stale because of schedule
 		 * out, so check the list again.
@@ -1722,10 +1729,12 @@ static blk_qc_t blk_sq_make_request(struct request_queue *q, struct bio *bio)
 		}
 
 		list_add_tail(&rq->queuelist, &plug->mq_list);
+        // request 를 plug 에 추가
 		return cookie;
 	}
 
 	if (q->elevator) {
+        // io scheduler 있을 경우
 elv_insert:
 		blk_mq_put_ctx(data.ctx);
 		blk_mq_bio_to_request(rq, bio);
