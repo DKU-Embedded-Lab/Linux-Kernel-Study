@@ -459,10 +459,8 @@ struct request_queue {
     // multi queue 에서 각 core number 에 해당되는 
     // hw queue number 를 저장하는 배열
     // N:M mapping  
-    // core-0   core-1  core-2  core-3  core-4 ...
-    //   |        |       |        |
-    //   ----------       ----------
-    //       |                |
+    //     core-0           core-1           core-2  ...
+    //       |                |                |
     // blk_mq_hw_ctx     blk_mq_hw_ctx   blk_mq_hw_ctx ...
 	
     /* sw queues */
@@ -480,8 +478,10 @@ struct request_queue {
 
 	/* hw dispatch queues */
 	struct blk_mq_hw_ctx	**queue_hw_ctx; 
-    // multi-queue layer 에서 사용되는 hardware dispatch queue 
+    // multi-queue layer 에서 사용되는 hardware dispatch queue 로
+    // submission queue 에 map 될 completion queue 의 배열 
     // 1~2048 개 까지 할당 가능
+    // blk_init_allocated_queue 에서 core 수만큼 할당됨 
 
 	unsigned int		nr_hw_queues;
 

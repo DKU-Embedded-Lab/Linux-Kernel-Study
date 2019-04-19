@@ -31,7 +31,7 @@ struct cpu_entry_area {
 	struct tss_struct tss;
 
 	char entry_trampoline[PAGE_SIZE];
-
+    // system call 위한 공간
 #ifdef CONFIG_X86_64
 	/*
 	 * Exception stacks used for IST entries.

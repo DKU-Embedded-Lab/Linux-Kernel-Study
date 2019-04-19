@@ -16,6 +16,7 @@ struct blk_mq_ctx {
 	}  ____cacheline_aligned_in_smp;
 
 	unsigned int		cpu;
+    // 현재 submission queue 가 속한 core 번호
 	unsigned int		index_hw;
 
 	/* incremented at dispatch time */

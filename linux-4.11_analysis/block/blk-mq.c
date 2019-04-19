@@ -2316,10 +2316,12 @@ struct request_queue *blk_mq_init_queue(struct blk_mq_tag_set *set)
 	struct request_queue *uninit_q, *q;
 
 	uninit_q = blk_alloc_queue_node(GFP_KERNEL, set->numa_node);
+    // NUMA 일 경우 set 이 속한 NODE 에 request_queue 할당
 	if (!uninit_q)
 		return ERR_PTR(-ENOMEM);
 
 	q = blk_mq_init_allocated_queue(set, uninit_q);
+    // multi-queue 에 맞게 request_queue 초기화
 	if (IS_ERR(q))
 		blk_cleanup_queue(uninit_q);
 
@@ -2380,27 +2382,34 @@ static void blk_mq_realloc_hw_ctxs(struct blk_mq_tag_set *set,
 	q->nr_hw_queues = i;
 	blk_mq_sysfs_register(q);
 }
-
+// request_queue 구조체를 multi-queue 에 맞게 초기화 해줌. 
+// core 마다 submission queue 할당, core 수만큼 completion queue 할당
 struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 						  struct request_queue *q)
 {
 	/* mark the queue as mq asap */
 	q->mq_ops = set->ops;
-
+    // multi-queue operation 초기화
 	q->queue_ctx = alloc_percpu(struct blk_mq_ctx);
+    // submission queue 를 per-cpu area 에 할당 및 연결
 	if (!q->queue_ctx)
 		goto err_exit;
 
 	/* init q->mq_kobj and sw queues' kobjects */
 	blk_mq_sysfs_init(q);
-
+    // 각 core 의 submission queue 별 kobject 객체 설정
 	q->queue_hw_ctx = kzalloc_node(nr_cpu_ids * sizeof(*(q->queue_hw_ctx)),
 						GFP_KERNEL, set->numa_node);
-	if (!q->queue_hw_ctx)
+    // submission queue 에 map 될 hw dispatch queue 를 core 수만큼 할당
+	
+    if (!q->queue_hw_ctx)
 		goto err_percpu;
 
 	q->mq_map = set->mq_map;
-
+    // blk_mq_tag_set 의 blk_mq_hw_ctx 배열 가져옴
+    // (driver 에서 호출되는 blk_mq_alloc_tag_set 에서 blk_mq_hw_ctx 가 
+    //  cpu 수만큼 할당되며 blk_mq_update_queue_map 에 의해 각 core num 을 
+    //  의미하는 배열 entry 마다 blk_mq_hw_ctx 가 map 됨)
 	blk_mq_realloc_hw_ctxs(set, q);
 	if (!q->nr_hw_queues)
 		goto err_hctxs;
