@@ -233,24 +233,37 @@ struct swap_cluster_list {
  */
 struct swap_info_struct {
 	unsigned long	flags;		/* SWP_USED etc: see above */
+    // swap 영역(file or partition) 의 현재 상태
+    // e.g. SWP_USED : swap_info 배열에서 해당 entry 가 사용중임
 	signed short	prio;		/* swap priority of this type */
-	struct plist_node list;		/* entry in swap_active_head */
+    // swap device priority 로 positive, negative 모두 가능, 클수록 우선순위 좋음
+    struct plist_node list;		/* entry in swap_active_head */
 	signed char	type;		/* strange name for an index */
 	unsigned int	max;		/* extent of the swap_map */
+    // swap area 내의 최대 수용 가능 page 수
 	unsigned char *swap_map;	/* vmalloc'ed array of usage counts */
+    // swap area 내의 page slot 의 수 크기 배열로 각 page slot 의 access count 용도
 	struct swap_cluster_info *cluster_info; /* cluster info. Only for SSD */
 	struct swap_cluster_list free_clusters; /* free clusters list */
 	unsigned int lowest_bit;	/* index of first free in swap_map */
+    // free page slot 의 최소 번호
 	unsigned int highest_bit;	/* index of last free in swap_map */
+    // free page slot 의 최대 번호 
+    // => swap devices 에서 free page slot 은 lowest_bit 와 highest_bit 사이에 있음.
+    //
 	unsigned int pages;		/* total of usable pages of swap */
+    // swap area 내의 usuable page slot 수
 	unsigned int inuse_pages;	/* number of those currently in use */
 	unsigned int cluster_next;	/* likely index for next allocation */
+    // swap area 의 cluster 내 어떤 page slot 이 다음에 사용될 것인지 검사
 	unsigned int cluster_nr;	/* countdown to next cluster search */
+    
 	struct percpu_cluster __percpu *percpu_cluster; /* per cpu's swap location */
 	struct swap_extent *curr_swap_extent;
 	struct swap_extent first_swap_extent;
 	struct block_device *bdev;	/* swap device or bdev of swap file */
 	struct file *swap_file;		/* seldom referenced */
+    // device file 또는 file
 	unsigned int old_block_size;	/* seldom referenced */
 #ifdef CONFIG_FRONTSWAP
 	unsigned long *frontswap_map;	/* frontswap in-use, one bit per page */

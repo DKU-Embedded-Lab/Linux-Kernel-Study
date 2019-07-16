@@ -108,18 +108,23 @@ static pte_t * __init one_page_table_init(pmd_t *pmd)
 pmd_t * __init populate_extra_pmd(unsigned long vaddr)
 {
 	int pgd_idx = pgd_index(vaddr);
+    // pgd 내에서 vaddr 이 몇번째 entry 인지
 	int pmd_idx = pmd_index(vaddr);
-
+    // pmd 내에서 vaddr 이 몇번째 entry 인지
 	return one_md_table_init(swapper_pg_dir + pgd_idx) + pmd_idx;
 }
 
 pte_t * __init populate_extra_pte(unsigned long vaddr)
 {
 	int pte_idx = pte_index(vaddr);
+    // page table 안에서 vaddr 이 몇번째 entry 인지 구함
 	pmd_t *pmd;
 
 	pmd = populate_extra_pmd(vaddr);
+    // pmd entry 에 담긴 값을 구함(*pmd 는 page table)
 	return one_page_table_init(pmd) + pte_idx;
+    // one_page_table_init 을 통해 pmd 가 가리키는 page table 을 가져와
+    // pte_idx 를 통해 해당 page 참조값 가져옴
 }
 
 static unsigned long __init

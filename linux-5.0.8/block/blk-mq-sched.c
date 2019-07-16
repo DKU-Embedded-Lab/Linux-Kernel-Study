@@ -322,6 +322,7 @@ bool __blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio)
 	struct elevator_queue *e = q->elevator;
 	struct blk_mq_ctx *ctx = blk_mq_get_ctx(q);
 	struct blk_mq_hw_ctx *hctx = blk_mq_map_queue(q, bio->bi_opf, ctx->cpu);
+    // submission queue 가 map 된 hw queue 가져옴
 	bool ret = false;
 	enum hctx_type type;
 

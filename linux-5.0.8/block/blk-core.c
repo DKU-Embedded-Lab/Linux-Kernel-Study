@@ -1004,6 +1004,7 @@ end_io:
  * a lower device by calling into generic_make_request recursively, which
  * means the bio should NOT be touched after the call to ->make_request_fn.
  */
+// bio 에 대해 request 를 생성하고 request queue 에 추가하는 i/o 작업 수행
 blk_qc_t generic_make_request(struct bio *bio)
 {
 	/*
@@ -1032,6 +1033,10 @@ blk_qc_t generic_make_request(struct bio *bio)
 
 	if (!generic_make_request_checks(bio))
 		goto out;
+    //  - block device 의 가용 sector 넘는지 검사
+    //  - i/o option 마다 값 설정 
+    //  - partition 일 경우, sector 재설정 및 block_device 를 
+    //    control  block_device 가리키도록 재설정
 
 	/*
 	 * We only want one ->make_request_fn to be active at a time, else
@@ -1044,6 +1049,10 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * should be added at the tail
 	 */
 	if (current->bio_list) {
+        // task_struct 에 bio_list 가 설정되어 있다면 make_request_fn 함수를 통해
+        // i/o 중에 또다른 sub function 으로 make_request_fn 이 호출된 상황
+        // 즉 이미 bio recursive 호출을 막기 위해 기존 현재 task 가 처리하던 bio 
+        // 가 있을 경우, 처리하던 bio가 종료될 때 까지 미룸
 		bio_list_add(&current->bio_list[0], bio);
 		goto out;
 	}
@@ -1062,6 +1071,134 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * of the top of the list (no pretending) and so remove it from
 	 * bio_list, and call into ->make_request() again.
 	 */
+
+    /*
+     * Step 1. submit_bio 함수를 통해 bio-1 처리 전송 되어 request layer 에서 처리
+     *
+     *  task_struct                   bio-1
+     * -------------                --------
+     * | bio_list--|-----           |      |
+     * -------------    |           --------
+     *                  |        request_queue 
+     *                  |          에서 처리중... 
+     *                  |
+     *              bio_list[2]
+     *             ------------
+     *             | *head----|-> NULL
+     *             | *tail----|-> NULL
+     *             ------------
+     *             | *head----|-> NULL
+     *             | *tail----|-> NULL
+     *             ------------
+     *
+     * Step 2. submit_bio 함수를 통해 bio-1 처리하는 make_request_fn 에서 
+     *         recursive 로 generic_make_request 호출되어 bio-2, bio-3 bio-4 를 
+     *         request layer 로 내려보내려 하며 bio-2, bio-3 는 bio-1 과 같은 
+     *         request_queue 이고, bio-4 는 다른 request_queue 인 상태에서 
+     *         task_struct 의 bio_list 에 추가만 하고 종료
+     *
+     *  task_struct                   bio-1    
+     * -------------                -----------
+     * | bio_list--|-----           | bi_next |
+     * -------------    |           -----------
+     *                  |          request_queue 
+     *                  |          에서 처리중... 
+     *                  |
+     *              bio_list[2]        
+     *             ------------       bio-2           bio-4          bio-3
+     *             | *head----|---> -----------     -----------    -----------
+     *             |          |     | bi_next-|---> | bi_next-|--> | bi_next-|-NULL
+     *             |          |     -----------     -----------    -----------
+     *             |          |                                         |
+     *             | *tail----|------------------------------------------
+     *             ------------        
+     *             | *head----|-> NULL
+     *             | *tail----|-> NULL
+     *             ------------
+     *            
+     * Step 3-1. bio-1 처리 완료 후, task_struct 에 쌓아두었던 bio list 를 같은
+     *           request_queue 로 가는 bio 와 다른 request_queue 로 가는 bio 로 
+     *           구분 후, 같은 bio 먼저 처리할 수 있도로록 merge
+     *
+     *  task_struct                   bio-1    
+     * -------------                -----------
+     * | bio_list--|-----           | bi_next |
+     * -------------    |           -----------
+     *                  |          request_queue 
+     *                  |          에서 처리완료
+     *                  |
+     *              bio_list[2]        
+     *             ------------         
+     *             | *head----|-> NULL     
+     *             | *tail----|-> NULL
+     *             ------------        
+     *             | *head----|-> NULL
+     *             | *tail----|-> NULL
+     *             ------------ 
+     *                                  bio-2           bio-3    
+     *               same        -->  -----------     -----------
+     *             ------------  |    | bi_next-|---> | bi_next-|->NULL
+     *             | *head----|--     -----------     -----------
+     *             |          |                           |
+     *             | *tail----|----------------------------
+     *             ------------
+     *
+     *                                  bio-4       
+     *               lower       -->  -----------   
+     *             ------------  |    | bi_next-|->NULL
+     *             | *head----|--     -----------   
+     *             |          |           |
+     *             | *tail----|------------
+     *             ------------
+     *
+     *
+     *  task_struct                   bio-1    
+     * -------------                -----------
+     * | bio_list--|-----           | bi_next |
+     * -------------    |           -----------
+     *                  |          request_queue 
+     *                  |          에서 처리완료 
+     *                  |
+     *              bio_list[2]        
+     *             ------------       bio-2           bio-3          bio-4
+     *             | *head----|---> -----------     -----------    -----------
+     *             |          |     | bi_next-|---> | bi_next-|--> | bi_next-|-NULL
+     *             |          |     -----------     -----------    -----------
+     *             |          |                                         |
+     *             | *tail----|------------------------------------------
+     *             ------------        
+     *             | *head----|-> NULL
+     *             | *tail----|-> NULL
+     *             ------------
+     *
+     * Step 3-2. bio_list 의 다음 bio 인 bio-2 를 처리중이며 bio-2 처리 중 bio-5 와 
+     *           bio-6 새로 들어옴
+     *
+     *  task_struct                   bio-2
+     * -------------                -----------
+     * | bio_list--|-----           | bi_next |
+     * -------------    |           -----------
+     *                  |          request_queue 
+     *                  |          에서 처리중...
+     *                  |
+     *              bio_list[2]
+     *             ------------       bio-5           bio-6    
+     *             | *head----|---> -----------     -----------
+     *             |          |     | bi_next-|---> | bi_next-|->NULL
+     *             |          |     -----------     -----------
+     *             |          |                           |  
+     *             | *tail----|----------------------------
+     *             ------------        
+     *             |          |         bio-3          bio-4
+     *             | *head----|---> -----------    -----------
+     *             |          |     | bi_next-|--> | bi_next-|-NULL
+     *             |          |     -----------    -----------
+     *             |          |                         |
+     *             | *tail----|-------------------------- 
+     *             ------------
+
+     */
+
 	BUG_ON(bio->bi_next);
 	bio_list_init(&bio_list_on_stack[0]);
 	current->bio_list = bio_list_on_stack;
@@ -1082,12 +1219,16 @@ blk_qc_t generic_make_request(struct bio *bio)
 		}
 
 		if (enter_succeeded) {
-			struct bio_list lower, same;
-
-			/* Create a fresh bio_list for all subordinate requests */
+            struct bio_list lower, same;
+            // same : 같은 request_queue 로 들어갈 bio들 
+            // lower : 다른 request_queue
+			
+            /* Create a fresh bio_list for all subordinate requests */
 			bio_list_on_stack[1] = bio_list_on_stack[0];
 			bio_list_init(&bio_list_on_stack[0]);
 			ret = q->make_request_fn(q, bio);
+            // single queue 의 경우 ->  block/blk-mq.c 의 blk_sq_make_request 호출 
+            // multi queue의 경우 -> block/blk-mq.c 의 blk_mq_make_request 호출
 
 			/* sort new bios into those for a lower level
 			 * and those for the same level
@@ -1099,9 +1240,14 @@ blk_qc_t generic_make_request(struct bio *bio)
 					bio_list_add(&same, bio);
 				else
 					bio_list_add(&lower, bio);
-			/* now assemble so we handle the lowest level first */
+            // bio list 를 같은 request_queue 인 same 과 다른 request_queue 인 lower 로
+            // 구분하여 분리
+
+            /* now assemble so we handle the lowest level first */
 			bio_list_merge(&bio_list_on_stack[0], &lower);
+            // 같은 request_queue 로 가는 bio list를 우선적으로 처리
 			bio_list_merge(&bio_list_on_stack[0], &same);
+            // 다른 request_queue 로 가는 bio list 나중에 처리
 			bio_list_merge(&bio_list_on_stack[0], &bio_list_on_stack[1]);
 		} else {
 			if (unlikely(!blk_queue_dying(q) &&

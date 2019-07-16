@@ -10,18 +10,23 @@ struct blk_mq_tag_set;
 struct blk_mq_ctxs {
 	struct kobject kobj;
 	struct blk_mq_ctx __percpu	*queue_ctx;
+    // blk_mq_ctx 의 per-cpu 공간
 };
 
 /**
  * struct blk_mq_ctx - State for a software queue facing the submitting CPUs
  */
+// multi-queue layer 에서 사용되는 software tagging queue 
+// per-CPU 또는 per-NUMA node 로 할당
 struct blk_mq_ctx {
 	struct {
 		spinlock_t		lock;
 		struct list_head	rq_lists[HCTX_MAX_TYPES];
+        // 현재 submission queue 의 request list  
 	} ____cacheline_aligned_in_smp;
 
 	unsigned int		cpu;
+    // 현재 submission queue 가 속한 core 번호
 	unsigned short		index_hw[HCTX_MAX_TYPES];
 
 	/* incremented at dispatch time */

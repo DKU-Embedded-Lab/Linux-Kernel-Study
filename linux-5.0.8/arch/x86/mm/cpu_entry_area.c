@@ -16,7 +16,7 @@ static DEFINE_PER_CPU_PAGE_ALIGNED(struct entry_stack_page, entry_stack_storage)
 static DEFINE_PER_CPU_PAGE_ALIGNED(char, exception_stacks
 	[(N_EXCEPTION_STACKS - 1) * EXCEPTION_STKSZ + DEBUG_STKSZ]);
 #endif
-
+// cpu 에 해당하는 cpu_entry_area
 struct cpu_entry_area *get_cpu_entry_area(int cpu)
 {
 	unsigned long va = CPU_ENTRY_AREA_PER_CPU + cpu * CPU_ENTRY_AREA_SIZE;
@@ -149,6 +149,7 @@ static void __init setup_cpu_entry_area(int cpu)
 
 static __init void setup_cpu_entry_area_ptes(void)
 {
+    // 32bit 일 경우
 #ifdef CONFIG_X86_32
 	unsigned long start, end;
 
@@ -156,11 +157,25 @@ static __init void setup_cpu_entry_area_ptes(void)
 	BUG_ON(CPU_ENTRY_AREA_BASE & ~PMD_MASK);
 
 	start = CPU_ENTRY_AREA_BASE;
+    // 32bit 의 경우...
+    // ((CPU수*40)+1)*4KB 의 PMD align 주소 ==> X
+    //                      FIXMAP 끝                   start
+    // ---|--------------------|--------------------------|
+    //            FIXMAP                     X 만큼 
 	end = start + CPU_ENTRY_AREA_MAP_SIZE;
+    //  => 4KB + (cpu_entry_area * cpu 수)
+    // e.g. 16 core
+    //                      FIXMAP 끝                   start:CPU_ENTRY_AREA_BASE
+    // ---|--------------------|-------|--cccccccccccccccc|
+    //            FIXMAP              end : 4KB + (cpu_entry_area * cpu 수)
+    //                                      c : 2MB 크기
 
 	/* Careful here: start + PMD_SIZE might wrap around */
 	for (; start < end && start >= CPU_ENTRY_AREA_BASE; start += PMD_SIZE)
 		populate_extra_pte(start);
+        // cpu_entry_area 크기가 2MB 이므로 PMD_SIZE 만큼 이동하며..
+        // TODO. 
+        //  - start 가 가리키는 page table 안의 page 위치 가져와서 뭘 어쩌겠단거임?        
 #endif
 }
 
@@ -169,7 +184,9 @@ void __init setup_cpu_entry_areas(void)
 	unsigned int cpu;
 
 	setup_cpu_entry_area_ptes();
-
+    // TODO. 
+    //  - setup_cpu_entry_area_ptes 에서 page 위치 가져오는 이유
+    //
 	for_each_possible_cpu(cpu)
 		setup_cpu_entry_area(cpu);
 

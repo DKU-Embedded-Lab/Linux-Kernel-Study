@@ -128,21 +128,28 @@ enum mq_rq_state {
  */
 struct request {
 	struct request_queue *q;
+    // 현재 requset 가 전달 될 queue
 	struct blk_mq_ctx *mq_ctx;
+    // multiqueue 에서의 submission queue
 	struct blk_mq_hw_ctx *mq_hctx;
 
 	unsigned int cmd_flags;		/* op and common flags */
+    // operation flag 로써 READ, WRITE 등 연산 종류 기록
 	req_flags_t rq_flags;
 
 	int internal_tag;
 
 	/* the following two fields are internal, NEVER access directly */
 	unsigned int __data_len;	/* total data len */
+    // 현재 request 가 처리하는 data의 길이(byte 단위)
 	int tag;
 	sector_t __sector;		/* sector cursor */
+    // 현재 request 가 I/O하려는 disk 상의 위치
 
 	struct bio *bio;
+    // bio 첫번째 것.
 	struct bio *biotail;
+    // bio 마지막 것
 
 	struct list_head queuelist;
 
@@ -155,8 +162,11 @@ struct request {
 	 */
 	union {
 		struct hlist_node hash;	/* merge hash */
+        // 새로운 bio 가 기존에 존재하는 request 들과 merge 가능한지
+        // 검사하기 위한queue
 		struct list_head ipi_list;
 	};
+
 
 	/*
 	 * The rb_node is only used inside the io scheduler, requests
@@ -165,6 +175,8 @@ struct request {
 	 */
 	union {
 		struct rb_node rb_node;	/* sort/lookup */
+        // I/O scheduler 에서 request 들을 red black tree 로 관리하고, 
+        // 정렬을 위해 사용
 		struct bio_vec special_vec;
 		void *completion_data;
 		int error_count; /* for legacy drivers, don't use */
@@ -180,6 +192,8 @@ struct request {
 		struct {
 			struct io_cq		*icq;
 			void			*priv[2];
+            // 0 : process 별로 존재하는 cfq_queue 용도 
+            // 1 : cgroup 별로 존재하는 cfq_group 용도
 		} elv;
 
 		struct {
@@ -191,6 +205,7 @@ struct request {
 
 	struct gendisk *rq_disk;
 	struct hd_struct *part;
+    // request 가 io 될 partition 정보
 	/* Time that I/O was submitted to the kernel. */
 	u64 start_time_ns;
 	/* Time that I/O was submitted to the device. */
@@ -387,30 +402,53 @@ static inline int blkdev_reset_zones_ioctl(struct block_device *bdev,
 
 #endif /* CONFIG_BLK_DEV_ZONED */
 
+// 각 block device specific request queue  
+// read/fetch request 시, 일부 data 를 queueing 및 rearrange 하여 성능 높임. 
+//
+//  - request_queue 에는 struct request 가 쌓여 있고 각 request 들에는
+//    관련있는 io 요청(struct bio)들이 모아져 있다.
+//  - request queue 에 있는 request 들에 대하여 merget/collapse/sorting 등의 작업을 
+//    elevator 에 따라 수행한다. 
+//  - multi-queue layer 에서는 struct request 가 pre-allocate 됨
 struct request_queue {
 	/*
 	 * Together with queue_head for cacheline sharing
 	 */
 	struct list_head	queue_head;
+    // 요청 들어온 read/fetch request 들에 대한 linked list
 	struct request		*last_merge;
+    // 다음 merge 대상인 request 로 최근 merge 된 request 
 	struct elevator_queue	*elevator;
-
+    // request 들을 rearrange 해줄 algorithm 
 	struct blk_queue_stats	*stats;
 	struct rq_qos		*rq_qos;
 
 	make_request_fn		*make_request_fn;
+    // new request를 생성하며 request_queue 에 추가함, device 가 load 될 때 등록됨 
 	dma_drain_needed_fn	*dma_drain_needed;
 
 	const struct blk_mq_ops	*mq_ops;
-
+    // multi-queue 관련 함수
 	/* sw queues */
 	struct blk_mq_ctx __percpu	*queue_ctx;
+    // multi-queue layer 에서 사용되는 software tagging queue(submission queue) 를 위한 per-cpu area
+    //  - per-CPU 또는 per-NUMA node 로 할당 되어 각 CPU가 자신의 queue 에 
+    //    I/O request 를 보냄(single-queue 에서의 lock contention 이 줄어듬)
+    //  - bfq, kyber, mq-deadline 의 별도 multi-queue 용 io scheduler 에서 관리  
+    //  - 이 queue 안에서 coalescing 수행 하며 reordering 은 수행안함.
+    //    (high performance storage 에서 reordering 은 효과 없으나 coalescing 
+    //    은 전체 I/O 수행 횟수를 줄여주므로 효과 있음)
 	unsigned int		nr_queues;
 
 	unsigned int		queue_depth;
 
 	/* hw dispatch queues */
 	struct blk_mq_hw_ctx	**queue_hw_ctx;
+    // multi-queue layer 에서 사용되는 hardware dispatch queue 로
+    // submission queue 에 map 될 completion queue 의 배열 
+    // 1~2048 개 까지 할당 가능
+    // blk_init_allocated_queue 에서 core 수만큼 할당됨 
+
 	unsigned int		nr_hw_queues;
 
 	struct backing_dev_info	*backing_dev_info;
@@ -469,6 +507,7 @@ struct request_queue {
 	 * queue settings
 	 */
 	unsigned long		nr_requests;	/* Max # of requests */
+    // queue 에 담을 수 있는 최대 reqeust 의 수
 
 	unsigned int		dma_drain_size;
 	void			*dma_drain_buffer;

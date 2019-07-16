@@ -50,6 +50,7 @@ static sector_t map_swap_entry(swp_entry_t, struct block_device**);
 
 DEFINE_SPINLOCK(swap_lock);
 static unsigned int nr_swapfiles;
+// alloc_swap_info 를 통해 swap_info 에 공간을 차지 할 때, 증가
 atomic_long_t nr_swap_pages;
 /*
  * Some modules use swappable objects and may try to swap them out under
@@ -87,6 +88,7 @@ PLIST_HEAD(swap_active_head);
 static PLIST_HEAD(swap_avail_head);
 static DEFINE_SPINLOCK(swap_avail_lock);
 
+// 사용가능한 swap 영역 정보
 struct swap_info_struct *swap_info[MAX_SWAPFILES];
 
 static DEFINE_MUTEX(swapon_mutex);
@@ -2437,7 +2439,7 @@ static int __init max_swapfiles_check(void)
 }
 late_initcall(max_swapfiles_check);
 #endif
-
+// swap 파일에 대한 정보를 나타낼 swap_info_struct 할당 및 swap_info 배열 정보 update
 static struct swap_info_struct *alloc_swap_info(void)
 {
 	struct swap_info_struct *p;
@@ -2452,14 +2454,21 @@ static struct swap_info_struct *alloc_swap_info(void)
 		if (!(swap_info[type]->flags & SWP_USED))
 			break;
 	}
+    // 가용 swap 영역 목록을 순차적으로 검사하여 
+    // 현재 사용중이지 않은 index 를 찾음
 	if (type >= MAX_SWAPFILES) {
+        // swap_info 의 끝까지 확인하였는데도 없다면, 
+        // 현재 map swap file 의 수를 모두 사용한 것임 
 		spin_unlock(&swap_lock);
 		kfree(p);
 		return ERR_PTR(-EPERM);
 	}
 	if (type >= nr_swapfiles) {
+        // 현재 swap 파일 수 보다 크다면 즉 
+        // 새로운 다음 swapfile 사용 시 
 		p->type = type;
 		swap_info[type] = p;
+        // 현재 할당한 swap_info_struct 설정
 		/*
 		 * Write swap_info[type] before nr_swapfiles, in case a
 		 * racing procfs swap_start() or swap_next() is reading them.
@@ -2467,8 +2476,11 @@ static struct swap_info_struct *alloc_swap_info(void)
 		 */
 		smp_wmb();
 		nr_swapfiles++;
+        // 현재 swap file 개수 증가
 	} else {
 		kfree(p);
+        // 이미 할당된 것을 사용하는 것이므로 
+        // 새로 할당한 p 를 free
 		p = swap_info[type];
 		/*
 		 * Do not memset this entry: a racing procfs swap_next()
@@ -2476,6 +2488,7 @@ static struct swap_info_struct *alloc_swap_info(void)
 		 */
 	}
 	INIT_LIST_HEAD(&p->first_swap_extent.list);
+    // swap_info_struct 의 swap info 연결해줄 list 초기화
 	plist_node_init(&p->list, 0);
 	plist_node_init(&p->avail_list, 0);
 	p->flags = SWP_USED;
@@ -2694,7 +2707,7 @@ static bool swap_discardable(struct swap_info_struct *si)
 
 	return true;
 }
-
+// sys_swapon systemcall 호출함수
 SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 {
 	struct swap_info_struct *p;
@@ -2720,6 +2733,16 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		return -EPERM;
 
 	p = alloc_swap_info();
+    // swap 파일에 대한 정보를 나타낼 swap_info_struct 할당 및 swap_info 배열 정보 update
+    //
+    // swap_info 
+    // --------------------
+    // | swap_info_struct |
+    // | swap_info_struct |
+    // | swap_info_struct |
+    // | ...              |
+    // --------------------
+    //
 	if (IS_ERR(p))
 		return PTR_ERR(p);
 

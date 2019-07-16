@@ -1934,18 +1934,37 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 	blk_qc_t cookie;
 
 	blk_queue_bounce(q, &bio);
+    // 필요시 mempool 에서 추가 page 할당
 
 	blk_queue_split(q, &bio);
+    // bio 가 split 이 필요한 경우, split 해주어 추가로 generic_make_request 수행
+    // TODO.
+    //  - 언제 bio split 해주는지 검사
 
 	if (!bio_integrity_prep(bio))
 		return BLK_QC_T_NONE;
+    // blk integrity 검사 여부 확인 및 현재 bio 가 I/O 하려는 page 들에 대해 
+    // integrity metadata 를 할당
+    // TODO.
+    //  - bio integrity
 
 	if (!is_flush_fua && !blk_queue_nomerges(q) &&
 	    blk_attempt_plug_merge(q, bio, &same_queue_rq))
 		return BLK_QC_T_NONE;
+    // QUEUE_FLAG_NOMERGES 가 설정되어 있지 않다면 
+    // (sysfs를 통해 /sys/block/sda/queue/nomerges 에서 merge 여부를 설정할 수 있다.)
+    // blk_attempt_plug_merge 를 통해 
+    // 현재 process 의 plugged list와bio 가 merge 가능한지 검사 및 merge 수행
+    // merge 가능하다면 front 나 back merge 수행 
+    // plug list 에 merge 가 되었다면 종료 
+    // plug 에 merge 가 되지 않았다면 merge 해줄 request 를 찾으러 계속 
+    // same_queue_rq 에 merge 된 request 를 반환
 
+    // bio write 요청시, plugging merge 가 불가능 한 경우... 
 	if (blk_mq_sched_bio_merge(q, bio))
 		return BLK_QC_T_NONE;
+        // bio 를 기존 request 에 front or back merge 
+        // (merge cache, request hash, io-scheduler tree 등)
 
 	rq_qos_throttle(q, bio);
 
@@ -2596,6 +2615,7 @@ static int blk_mq_alloc_ctxs(struct request_queue *q)
 	ctxs->queue_ctx = alloc_percpu(struct blk_mq_ctx);
 	if (!ctxs->queue_ctx)
 		goto fail;
+    // per-cpu 영역에 blk_mq_ctx 공간 할당
 
 	for_each_possible_cpu(cpu) {
 		struct blk_mq_ctx *ctx = per_cpu_ptr(ctxs->queue_ctx, cpu);
@@ -2638,15 +2658,18 @@ void blk_mq_release(struct request_queue *q)
 	blk_mq_sysfs_deinit(q);
 }
 
+// multi queue 초기화 함수 request queue 할당 및 초기화 수행
 struct request_queue *blk_mq_init_queue(struct blk_mq_tag_set *set)
 {
 	struct request_queue *uninit_q, *q;
 
 	uninit_q = blk_alloc_queue_node(GFP_KERNEL, set->numa_node);
+    // NUMA 일 경우 set 이 속한 NODE 에 request_queue 할당
 	if (!uninit_q)
 		return ERR_PTR(-ENOMEM);
 
 	q = blk_mq_init_allocated_queue(set, uninit_q);
+    // multi-queue 에 맞게 request_queue 초기화
 	if (IS_ERR(q))
 		blk_cleanup_queue(uninit_q);
 
@@ -2658,6 +2681,7 @@ EXPORT_SYMBOL(blk_mq_init_queue);
  * Helper for setting up a queue with mq ops, given queue depth, and
  * the passed in mq ops flags.
  */
+// legacy single queue 를 위한 multi queue 초기화 부분
 struct request_queue *blk_mq_init_sq_queue(struct blk_mq_tag_set *set,
 					   const struct blk_mq_ops *ops,
 					   unsigned int queue_depth,
@@ -2812,13 +2836,14 @@ static unsigned int nr_hw_queues(struct blk_mq_tag_set *set)
 
 	return max(set->nr_hw_queues, nr_cpu_ids);
 }
-
+// request_queue 구조체를 multi-queue 에 맞게 초기화 해줌. 
+// core 마다 submission queue 할당, core 수만큼 completion queue 할당
 struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 						  struct request_queue *q)
 {
 	/* mark the queue as mq asap */
 	q->mq_ops = set->ops;
-
+    // multi-queue operation 초기화
 	q->poll_cb = blk_stat_alloc_callback(blk_mq_poll_stats_fn,
 					     blk_mq_poll_stats_bkt,
 					     BLK_MQ_POLL_STATS_BKTS, q);
@@ -2827,13 +2852,17 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 
 	if (blk_mq_alloc_ctxs(q))
 		goto err_exit;
+    // blk_mq_ctx 를 위한 per-cpu area 할당 
 
 	/* init q->mq_kobj and sw queues' kobjects */
 	blk_mq_sysfs_init(q);
+    // 각 core 의 submission queue 별 kobject 객체 설정
 
 	q->nr_queues = nr_hw_queues(set);
 	q->queue_hw_ctx = kcalloc_node(q->nr_queues, sizeof(*(q->queue_hw_ctx)),
 						GFP_KERNEL, set->numa_node);
+    // submission queue 에 map 될 hw dispatch queue 를 node 수만큼 할당
+
 	if (!q->queue_hw_ctx)
 		goto err_sys_init;
 

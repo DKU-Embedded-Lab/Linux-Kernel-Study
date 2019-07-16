@@ -15,6 +15,8 @@
  * Every field is a virtual alias of some other allocated backing store.
  * There is no direct allocation of a struct cpu_entry_area.
  */
+// cpu 마다 가지고 있는 cpu_entry_area 구조체 
+// fixmap 다음 영역에 잡혀있음
 struct cpu_entry_area {
 	char gdt[PAGE_SIZE];
 
@@ -68,6 +70,8 @@ extern void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags);
 
 #define CPU_ENTRY_AREA_MAP_SIZE			\
 	(CPU_ENTRY_AREA_PER_CPU + CPU_ENTRY_AREA_TOT_SIZE - CPU_ENTRY_AREA_BASE)
+//  => CPU_ENTRY_AREA_BASE + 4KB + (cpu_entry_area * cpu 수) - CPU_ENTRY_AREA_BASE
+//  => 4KB + (cpu_entry_area * cpu 수)
 
 extern struct cpu_entry_area *get_cpu_entry_area(int cpu);
 

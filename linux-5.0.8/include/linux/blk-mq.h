@@ -12,6 +12,9 @@ struct blk_flush_queue;
 /**
  * struct blk_mq_hw_ctx - State for a hardware queue facing the hardware block device
  */
+// multi-queue layer 에서 사용되는 hardware dispatch queue 
+// 1~2048 개 까지 할당 가능 
+// request_queue 와 관련된 h/w context 정보를 나타냄
 struct blk_mq_hw_ctx {
 	struct {
 		spinlock_t		lock;

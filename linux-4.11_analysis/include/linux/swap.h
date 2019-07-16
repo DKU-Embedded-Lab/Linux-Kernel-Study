@@ -129,10 +129,29 @@ struct zone;
  */
 struct swap_extent {
 	struct list_head list;
+    // swap extent 들의 linked list
 	pgoff_t start_page;
+    // swap 내려줄 첫번째 page 위치  
 	pgoff_t nr_pages;
+    // swap 될 page 수
 	sector_t start_block;
+    // page 가 swap 될 block 위치
 };
+//                     4         14    45 
+//                     |         |     |
+//  memory        <----*******************----------->
+//                        |         |   |
+//                        |         |   -------------------
+//                        |         -----                 |
+//                        |             |                 |
+//               --swap_extent--   --swap_extent--    --swap_extent--
+//               |start_page:4 |   |start_page:19|    |start_page:45|
+//               |nr_pages:10  |   |nr_pages:6   |    |nr_pages:3   |
+//               |start_block:A|   |start_block:B|    |start_block:C|
+//               ---------------   ---------------    ---------------
+//  disk block        A              B              C
+//                    |              |              |
+//                 ---**********-----******---------***---
 
 /*
  * Max bad pages in the new format..
@@ -210,25 +229,59 @@ struct swap_cluster_list {
  */
 struct swap_info_struct {
 	unsigned long	flags;		/* SWP_USED etc: see above */
+    // swap 영역(file or partition) 의 현재 상태
+    // e.g. SWP_USED : swap_info 배열에서 해당 entry 가 사용중임
 	signed short	prio;		/* swap priority of this type */
-	struct plist_node list;		/* entry in swap_active_head */
+    // swap device priority 로 positive, negative 모두 가능, 클수록 우선순위 좋음
+    struct plist_node list;		/* entry in swap_active_head */
 	struct plist_node avail_list;	/* entry in swap_avail_head */
 	signed char	type;		/* strange name for an index */
+    // swap_info 배열에서 몇번째 index 인지 검사
 	unsigned int	max;		/* extent of the swap_map */
+    // swap area 내의 최대 수용 가능 page 수
 	unsigned char *swap_map;	/* vmalloc'ed array of usage counts */
+    // swap area 내의 page slot 의 수 크기 배열로 각 page slot 의 access count 용도
 	struct swap_cluster_info *cluster_info; /* cluster info. Only for SSD */
 	struct swap_cluster_list free_clusters; /* free clusters list */
 	unsigned int lowest_bit;	/* index of first free in swap_map */
+    // free page slot 의 최소 번호
 	unsigned int highest_bit;	/* index of last free in swap_map */
+    // free page slot 의 최대 번호 
+    // => swap area 에서 free page slot 은 lowest_bit 와 highest_bit 사이에 있음.
 	unsigned int pages;		/* total of usable pages of swap */
+    // swap area 내의 usuable page slot 수
 	unsigned int inuse_pages;	/* number of those currently in use */
 	unsigned int cluster_next;	/* likely index for next allocation */
+    // swap area 의 cluster 내 어떤 page slot 이 다음에 swap 될 것인지
 	unsigned int cluster_nr;	/* countdown to next cluster search */
+    // swap area 의 cluster 내 free page 수
 	struct percpu_cluster __percpu *percpu_cluster; /* per cpu's swap location */
 	struct swap_extent *curr_swap_extent;
-	struct swap_extent first_swap_extent;
+    // 연속적 page 집합인 swap slot 과 disk block 사이의 mapping 용도로 swap_extent 중 
+    // 현재까지 순회한 swap_extent 를 가리킴
+    //
+    // e.g. 
+    //                     4         14    45 
+    //                     |         |     |
+    //  memory        <----*******************----------->
+    //                        |         |   |
+    //                        |         |   -------------------
+    //                        |         -----                 |
+    //                        |             |                 |
+    //                  swap_extent      swap_extent       swap_extent
+    // start_page  :        4               19                45
+    // nr_pages    :        10              6                 3
+    // start_block :        A               B                 C
+    //
+    //  disk block        A              B              C
+    //                    |              |              |
+    //             -------**********-----******---------***------------
+    //
+    struct swap_extent first_swap_extent;
+    // swap extent 의 맨 처음
 	struct block_device *bdev;	/* swap device or bdev of swap file */
 	struct file *swap_file;		/* seldom referenced */
+    // device file 또는 file
 	unsigned int old_block_size;	/* seldom referenced */
 #ifdef CONFIG_FRONTSWAP
 	unsigned long *frontswap_map;	/* frontswap in-use, one bit per page */

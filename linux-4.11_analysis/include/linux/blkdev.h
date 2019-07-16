@@ -416,10 +416,9 @@ struct request_queue {
 	struct list_head	queue_head;
     // 요청 들어온 read/fetch request 들에 대한 linked list
 	struct request		*last_merge;
-    // 다음 merge 대상인 request
+    // 다음 merge 대상인 request 로 최근 merge 된 request 
 	struct elevator_queue	*elevator; 
     // request 들을 rearrange 해줄 algorithm 
-    //
 	int			nr_rqs[2];	/* # allocated [a]sync rqs */
 	int			nr_rqs_elvpriv;	/* # allocated rqs w/ elvpriv */
 
