@@ -65,55 +65,55 @@
  * For superblock
  */
 struct f2fs_device {
-	__u8 path[MAX_PATH_LEN];
-	__le32 total_segments;
+	__u8 path[MAX_PATH_LEN];                                                // 64
+	__le32 total_segments;                                                  // 4  68
 } __packed;
 
-struct f2fs_super_block {
-	__le32 magic;			/* Magic Number */
-	__le16 major_ver;		/* Major Version */
-	__le16 minor_ver;		/* Minor Version */
-	__le32 log_sectorsize;		/* log2 sector size in bytes */
-	__le32 log_sectors_per_block;	/* log2 # of sectors per block */
-	__le32 log_blocksize;		/* log2 block size in bytes */
-	__le32 log_blocks_per_seg;	/* log2 # of blocks per segment */
-	__le32 segs_per_sec;		/* # of segments per section */
-	__le32 secs_per_zone;		/* # of sections per zone */
-	__le32 checksum_offset;		/* checksum offset inside super block */
-	__le64 block_count;		/* total # of user blocks */
-	__le32 section_count;		/* total # of sections */
-	__le32 segment_count;		/* total # of segments */
-	__le32 segment_count_ckpt;	/* # of segments for checkpoint */
-	__le32 segment_count_sit;	/* # of segments for SIT */
-	__le32 segment_count_nat;	/* # of segments for NAT */
-	__le32 segment_count_ssa;	/* # of segments for SSA */
-	__le32 segment_count_main;	/* # of segments for main area */
-	__le32 segment0_blkaddr;	/* start block address of segment 0 */
-	__le32 cp_blkaddr;		/* start block address of checkpoint */
-	__le32 sit_blkaddr;		/* start block address of SIT */
-	__le32 nat_blkaddr;		/* start block address of NAT */
-	__le32 ssa_blkaddr;		/* start block address of SSA */
-	__le32 main_blkaddr;		/* start block address of main area */
-	__le32 root_ino;		/* root inode number */
-	__le32 node_ino;		/* node inode number */
-	__le32 meta_ino;		/* meta inode number */
-	__u8 uuid[16];			/* 128-bit uuid for volume */
-	__le16 volume_name[MAX_VOLUME_NAME];	/* volume name */
-	__le32 extension_count;		/* # of extensions below */
-	__u8 extension_list[F2FS_MAX_EXTENSION][8];	/* extension array */
-	__le32 cp_payload;
-	__u8 version[VERSION_LEN];	/* the kernel version */
-	__u8 init_version[VERSION_LEN];	/* the initial kernel version */
-	__le32 feature;			/* defined features */
-	__u8 encryption_level;		/* versioning level for encryption */
-	__u8 encrypt_pw_salt[16];	/* Salt used for string2key algorithm */
-	struct f2fs_device devs[MAX_DEVICES];	/* device list */
-	__u8 reserved[327];		/* valid reserved region */
-} __packed;
-
-/*
- * For checkpoint
- */
+struct f2fs_super_block {                                                   // 0x400
+	__le32 magic;			/* Magic Number */                              // 4    4               
+	__le16 major_ver;		/* Major Version */                             // 2    6
+	__le16 minor_ver;		/* Minor Version */                             // 2    8
+	__le32 log_sectorsize;		/* log2 sector size in bytes */             // 4    12              sector : 2^9            =>  512 byte 
+	__le32 log_sectors_per_block;	/* log2 # of sectors per block */       // 4    16   - 1        blocks : 2^3 sects      =>    8 sectors
+	__le32 log_blocksize;		/* log2 block size in bytes */              // 4    20              blksize : 2^12 byte     => 4096 bytes
+	__le32 log_blocks_per_seg;	/* log2 # of blocks per segment */          // 4    24              segment : 2^9 blocks    =>  512 blocks
+	__le32 segs_per_sec;		/* # of segments per section */             // 4    28              section : 2^1 segments  =>   2 segments
+	__le32 secs_per_zone;		/* # of sections per zone */                // 4    32   - 2        zone : 2^1 sections     =>   2 sections
+	__le32 checksum_offset;		/* checksum offset inside super block */    // 4    36              
+	__le64 block_count;		/* total # of user blocks */                    // 8    44              total blocks :       0x100000 blocks => 4 GB
+	__le32 section_count;		/* total # of sections */                   // 4    48   - 3        total sections :        0x7ed   
+	__le32 segment_count;		/* total # of segments */                   // 4    52              total segments :        0x7ff 
+	__le32 segment_count_ckpt;	/* # of segments for checkpoint */          // 4    56              CP    segments :          0x2 -|           =>    1024 blocks   =>   0x400000 bytes 
+	__le32 segment_count_sit;	/* # of segments for SIT */                 // 4    60              SIT   segments :          0x2  |           =>    1024 blocks   =>   0x400000 bytes
+	__le32 segment_count_nat;	/* # of segments for NAT */                 // 4    64   - 4        NAT   segments :          0xa  |-> 0x7ff   =>    5120 blocks   =>  0x1400000 bytes
+	__le32 segment_count_ssa;	/* # of segments for SSA */                 // 4    68              SSA   segments :          0x4  |           =>    2048 blocks   =>   0x800000 bytes
+	__le32 segment_count_main;	/* # of segments for main area */           // 4    72              MAIN  segments :        0x7ed -|           => 1038848 blocks   => 0xFDA00000 bytes
+	__le32 segment0_blkaddr;	/* start block address of segment 0 */      // 4    76              segment-0 blk addr :   0x0100 
+	__le32 cp_blkaddr;		/* start block address of checkpoint */         // 4    80   - 5        CP    blk addr :        0x100 blocks       =>  0x100000 bytes 
+	__le32 sit_blkaddr;		/* start block address of SIT */                // 4    84              SIT   blk addr :        0x500              =>  0x500000 bytes // ?
+	__le32 nat_blkaddr;		/* start block address of NAT */                // 4    88              NAT   blk addr :        0x900              =>  0x900000 bytes
+	__le32 ssa_blkaddr;		/* start block address of SSA */                // 4    92              SSA   blk addr :       0x1d00              => 0x1d00000 bytes // ?
+	__le32 main_blkaddr;		/* start block address of main area */      // 4    96   - 6        MAIN  blk addr :       0x2500              => 0x2500000 bytes // ?
+	__le32 root_ino;		/* root inode number */                         // 4    100             root inode :             0x03 
+	__le32 node_ino;		/* node inode number */                         // 4    104             node inode :             0x01 
+	__le32 meta_ino;		/* meta inode number */                         // 4    108             meta inode :             0x02
+	__u8 uuid[16];			/* 128-bit uuid for volume */                   // 16   124  - 7(128)
+	__le16 volume_name[MAX_VOLUME_NAME];	/* volume name */               // 1024 1148
+	__le32 extension_count;		/* # of extensions below */                 // 4    1152               -> 0x87c
+	__u8 extension_list[F2FS_MAX_EXTENSION][8];	/* extension array */       // 512  1664               -> 0x880
+	__le32 cp_payload;                                                      // 4    1668
+	__u8 version[VERSION_LEN];	/* the kernel version */                    // 256  1924               -> 0xa84
+	__u8 init_version[VERSION_LEN];	/* the initial kernel version */        // 256  2180               -> 0xb84
+	__le32 feature;			/* defined features */                          // 4    2184
+	__u8 encryption_level;		/* versioning level for encryption */       // 1    2185
+	__u8 encrypt_pw_salt[16];	/* Salt used for string2key algorithm */    // 16   2201
+	struct f2fs_device devs[MAX_DEVICES];	/* device list */               // 544  2745 
+	__u8 reserved[327];		/* valid reserved region */                     // 327  3072
+} __packed;                                                                 
+                                                                            
+/*                                                                          
+ * For checkpoint                                                           
+ */                                                                         
 #define CP_NAT_BITS_FLAG	0x00000080
 #define CP_CRC_RECOVERY_FLAG	0x00000040
 #define CP_FASTBOOT_FLAG	0x00000020
@@ -125,35 +125,35 @@ struct f2fs_super_block {
 
 #define F2FS_CP_PACKS		2	/* # of checkpoint packs */
 
-struct f2fs_checkpoint {
-	__le64 checkpoint_ver;		/* checkpoint block version number */
-	__le64 user_block_count;	/* # of user blocks */
-	__le64 valid_block_count;	/* # of valid blocks in main area */
-	__le32 rsvd_segment_count;	/* # of reserved segments for gc */
-	__le32 overprov_segment_count;	/* # of overprovision segments */
-	__le32 free_segment_count;	/* # of free segments in main area */
+struct f2fs_checkpoint {                                                    // -> 0x100000
+	__le64 checkpoint_ver;		/* checkpoint block version number */       // 8    8           checkpoint version          : 0x1 byte
+	__le64 user_block_count;	/* # of user blocks */                      // 8    16  - 1     user blocks                 : 0xed200 blocks
+	__le64 valid_block_count;	/* # of valid blocks in main area */        // 8    24          valid blocks in MAIN        : 0x2 blocks
+	__le32 rsvd_segment_count;	/* # of reserved segments for gc */         // 4    28          reserved segment            : 0x47 segments
+	__le32 overprov_segment_count;	/* # of overprovision segments */       // 4    32  - 2     overprovision segments      : 0x84 segments
+	__le32 free_segment_count;	/* # of free segments in main area */       // 4    36          free segment count in MAIN  : 0x7e7 segments
 
 	/* information of current node segments */
-	__le32 cur_node_segno[MAX_ACTIVE_NODE_LOGS];
-	__le16 cur_node_blkoff[MAX_ACTIVE_NODE_LOGS];
+	__le32 cur_node_segno[MAX_ACTIVE_NODE_LOGS];                            // 32   68          current node segments       : 0x7ec, 0x7eb, 0x7ea, 0xff..ff, ..., 0xff..ff
+	__le16 cur_node_blkoff[MAX_ACTIVE_NODE_LOGS];                           // 16   84          current node blk offset     : 0x01,  0x00,  0x00,  0x00
 	/* information of current data segments */
-	__le32 cur_data_segno[MAX_ACTIVE_DATA_LOGS];
-	__le16 cur_data_blkoff[MAX_ACTIVE_DATA_LOGS];
-	__le32 ckpt_flags;		/* Flags : umount and journal_present */
-	__le32 cp_pack_total_block_count;	/* total # of one cp pack */
-	__le32 cp_pack_start_sum;	/* start block number of data summary */
-	__le32 valid_node_count;	/* Total number of valid nodes */
-	__le32 valid_inode_count;	/* Total number of valid inodes */
-	__le32 next_free_nid;		/* Next free node number */
-	__le32 sit_ver_bitmap_bytesize;	/* Default value 64 */
-	__le32 nat_ver_bitmap_bytesize; /* Default value 256 */
-	__le32 checksum_offset;		/* checksum offset inside cp block */
-	__le64 elapsed_time;		/* mounted time */
+	__le32 cur_data_segno[MAX_ACTIVE_DATA_LOGS];                            // 32   116         current data segments       : 0x7e9, 0x01,  0x00,  0xff..ff, ..., 0xff..ff 
+	__le16 cur_data_blkoff[MAX_ACTIVE_DATA_LOGS];                           // 16   132         current data blk offset     : 0x01,  0x00,  0x00,  0x00
+	__le32 ckpt_flags;		/* Flags : umount and journal_present */        // 4    136         check point flags           : 0x05
+	__le32 cp_pack_total_block_count;	/* total # of one cp pack */        // 4    140         cp pack total block         : 0x06
+	__le32 cp_pack_start_sum;	/* start block number of data summary */    // 4    144         data summary block addr     : 0x01
+	__le32 valid_node_count;	/* Total number of valid nodes */           // 4    148         total valid node            : 0x01
+	__le32 valid_inode_count;	/* Total number of valid inodes */          // 4    152         total valid inode           : 0x01
+	__le32 next_free_nid;		/* Next free node number */                 // 4    156         next free node id           : 0x04
+	__le32 sit_ver_bitmap_bytesize;	/* Default value 64 */                  // 4    160         sit version bitmap          : 0x40
+	__le32 nat_ver_bitmap_bytesize; /* Default value 256 */                 // 4    164         nat version bitmap          : 0x140
+	__le32 checksum_offset;		/* checksum offset inside cp block */       // 4    168         checksum offset             : 0x0ffc 
+	__le64 elapsed_time;		/* mounted time */                          // 8    176         mounted time                : 0x00
 	/* allocation type of current segment */
-	unsigned char alloc_type[MAX_ACTIVE_LOGS];
+	unsigned char alloc_type[MAX_ACTIVE_LOGS];                              // 16   192         allocation type             
 
 	/* SIT and NAT version bitmap */
-	unsigned char sit_nat_version_bitmap[1];
+	unsigned char sit_nat_version_bitmap[1];                                // 1    193         sit, nat version bitmap     
 } __packed;
 
 /*
@@ -177,9 +177,9 @@ struct f2fs_orphan_block {
  * For NODE structure
  */
 struct f2fs_extent {
-	__le32 fofs;		/* start file offset of the extent */
-	__le32 blk;		/* start block address of the extent */
-	__le32 len;		/* lengh of the extent */
+	__le32 fofs;		/* start file offset of the extent */               // 4    4
+	__le32 blk;		/* start block address of the extent */                 // 4    8
+	__le32 len;		/* lengh of the extent */                               // 4    12
 } __packed;
 
 #define F2FS_NAME_LEN		255
@@ -208,44 +208,40 @@ struct f2fs_extent {
 #define MAX_INLINE_DATA		(sizeof(__le32) * (DEF_ADDRS_PER_INODE - \
 						F2FS_INLINE_XATTR_ADDRS - 1))
 
-struct f2fs_inode {
-	__le16 i_mode;			/* file mode */
-	__u8 i_advise;			/* file hints */
-	__u8 i_inline;			/* file inline flags */
-	__le32 i_uid;			/* user ID */
-	__le32 i_gid;			/* group ID */
-	__le32 i_links;			/* links count */
-	__le64 i_size;			/* file size in bytes */
-	__le64 i_blocks;		/* file size in blocks */
-	__le64 i_atime;			/* access time */
-	__le64 i_ctime;			/* change time */
-	__le64 i_mtime;			/* modification time */
-	__le32 i_atime_nsec;		/* access time in nano scale */
-	__le32 i_ctime_nsec;		/* change time in nano scale */
-	__le32 i_mtime_nsec;		/* modification time in nano scale */
-	__le32 i_generation;		/* file version (for NFS) */
-	__le32 i_current_depth;		/* only for directory depth */
-	__le32 i_xattr_nid;		/* nid to save xattr */
-	__le32 i_flags;			/* file attributes */
-	__le32 i_pino;			/* parent inode number */
-	__le32 i_namelen;		/* file name length */
-	__u8 i_name[F2FS_NAME_LEN];	/* file name for SPOR */
-	__u8 i_dir_level;		/* dentry_level for large dir */
+struct f2fs_inode { // -> root inode : 0xffd00000 
+	__le16 i_mode;			/* file mode */                                 // 2    2           inode mode          : 0x41ed  
+	__u8 i_advise;			/* file hints */                                // 1    3           file hints          : 0x00
+	__u8 i_inline;			/* file inline flags */                         // 1    4           file flag           : 0x00
+	__le32 i_uid;			/* user ID */                                   // 4    8           user id             : 0x00000000
+	__le32 i_gid;			/* group ID */                                  // 4    12          group id            : 0x00000000
+	__le32 i_links;			/* links count */                               // 4    16      -1  inode links         : 0x00000002
+	__le64 i_size;			/* file size in bytes */                        // 8    24          file size(byte)     : 0x00000000 00001000 bytes
+	__le64 i_blocks;		/* file size in blocks */                       // 8    32      -2  file size(blocks)   : 0x00000000 00000002 blocks
+	__le64 i_atime;			/* access time */                               // 8    40          access time         : 0x00000000 5d36b494
+	__le64 i_ctime;			/* change time */                               // 8    48      -3  create time         : 0x00000000 5d36b494
+	__le64 i_mtime;			/* modification time */                         // 8    56          modification time   : 0x00000000 5d36b494
+	__le32 i_atime_nsec;		/* access time in nano scale */             // 4    60          atime nano          : 0x00000000
+	__le32 i_ctime_nsec;		/* change time in nano scale */             // 4    64      -4  ctime nano          : 0x00000000
+	__le32 i_mtime_nsec;		/* modification time in nano scale */       // 4    68          mtime nano          : 0x00000000
+	__le32 i_generation;		/* file version (for NFS) */                // 4    72          i generation 
+	__le32 i_current_depth;		/* only for directory depth */              // 4    76          dir depth           : 0x00000001
+	__u8 i_name[F2FS_NAME_LEN];	/* file name for SPOR */                    // 255  347
+	__u8 i_dir_level;		/* dentry_level for large dir */                // 1    348
 
-	struct f2fs_extent i_ext;	/* caching a largest extent */
+	struct f2fs_extent i_ext;	/* caching a largest extent */              // 12   360
 
-	__le32 i_addr[DEF_ADDRS_PER_INODE];	/* Pointers to data blocks */
+	__le32 i_addr[DEF_ADDRS_PER_INODE];	/* Pointers to data blocks */       // 3692 4052        data block addr     : 0x000ff700 blocks => 0xff700000 bytes
 
-	__le32 i_nid[DEF_NIDS_PER_INODE];	/* direct(2), indirect(2),
+	__le32 i_nid[DEF_NIDS_PER_INODE];	/* direct(2), indirect(2),          // 20   4072
 						double_indirect(1) node id */
 } __packed;
 
 struct direct_node {
-	__le32 addr[ADDRS_PER_BLOCK];	/* array of data block address */
+	__le32 addr[ADDRS_PER_BLOCK];	/* array of data block address */       // 4072(4*1018)
 } __packed;
 
 struct indirect_node {
-	__le32 nid[NIDS_PER_BLOCK];	/* array of data block address */
+	__le32 nid[NIDS_PER_BLOCK];	/* array of data block address */           // 4072(4*1018)
 } __packed;
 
 enum {
@@ -258,12 +254,17 @@ enum {
 #define OFFSET_BIT_MASK		(0x07)	/* (0x01 << OFFSET_BIT_SHIFT) - 1 */
 
 struct node_footer {
-	__le32 nid;		/* node id */
-	__le32 ino;		/* inode nunmber */
-	__le32 flag;		/* include cold/fsync/dentry marks and offset */
-	__le64 cp_ver;		/* checkpoint version */
-	__le32 next_blkaddr;	/* next node page block address */
-} __packed;
+	__le32 nid;		/* node id */                                           // 4    4
+	__le32 ino;		/* inode nunmber */                                     // 4    8
+	__le32 flag;		/* include cold/fsync/dentry marks and offset */    // 4    12
+	__le64 cp_ver;		/* checkpoint version */                            // 8    20
+	__le32 next_blkaddr;	/* next node page block address */              // 4    24
+} __packed;     
+
+/*
+ * ffd00fe0: 00000000 00000000 03000000 03000000  ................
+ * ffd00ff0: 00000000 01000000 00000000 01fd0f00  ................
+ */
 
 struct f2fs_node {
 	/* can be one of three types: inode, direct, and indirect types */
@@ -271,9 +272,9 @@ struct f2fs_node {
 		struct f2fs_inode i;
 		struct direct_node dn;
 		struct indirect_node in;
-	};
-	struct node_footer footer;
-} __packed;
+	};                                                                      // 4072 4072
+	struct node_footer footer;                                              // 24   4096
+} __packed;// 4KB
 
 /*
  * For NAT entries
@@ -281,15 +282,25 @@ struct f2fs_node {
 #define NAT_ENTRY_PER_BLOCK (PAGE_SIZE / sizeof(struct f2fs_nat_entry))
 #define NAT_ENTRY_BITMAP_SIZE	((NAT_ENTRY_PER_BLOCK + 7) / 8)
 
-struct f2fs_nat_entry {
-	__u8 version;		/* latest version of cached nat entry */
-	__le32 ino;		/* inode number */
-	__le32 block_addr;	/* block address */
+struct f2fs_nat_entry { /// -> 0x900000
+	__u8 version;		/* latest version of cached nat entry */            // 1    1
+	__le32 ino;		/* inode number */                                      // 4    5   
+	__le32 block_addr;	/* block address */                                 // 4    9
 } __packed;
 
-struct f2fs_nat_block {
+struct f2fs_nat_block { // -> 0x900000
 	struct f2fs_nat_entry entries[NAT_ENTRY_PER_BLOCK];
 } __packed;
+/*
+ *  ver ino      blkaddr
+ *  00  00000000 00000000 
+ *  00  01000000 01000000 -> node inode
+ *  00  02000000 01000000 -> meta inode
+ *  00  03000000 00fd0f00 -> root inode : 0xffd00000 
+ *  00  00000000 00000000
+ *  ... 
+ *  CP 의 next_free_nid 는 0x04
+ */
 
 /*
  * For SIT entries
@@ -314,14 +325,14 @@ struct f2fs_nat_block {
 	((le16_to_cpu((raw_sit)->vblocks) & ~SIT_VBLOCKS_MASK)	\
 	 >> SIT_VBLOCKS_SHIFT)
 
-struct f2fs_sit_entry {
-	__le16 vblocks;				/* reference above */
-	__u8 valid_map[SIT_VBLOCK_MAP_SIZE];	/* bitmap for valid blocks */
-	__le64 mtime;				/* segment age for cleaning */
+struct f2fs_sit_entry { // -> 0x500000
+	__le16 vblocks;				/* reference above */                       // 2    2
+	__u8 valid_map[SIT_VBLOCK_MAP_SIZE];	/* bitmap for valid blocks */   // 64   66
+	__le64 mtime;				/* segment age for cleaning */              // 8    74
 } __packed;
 
-struct f2fs_sit_block {
-	struct f2fs_sit_entry entries[SIT_ENTRY_PER_BLOCK];
+struct f2fs_sit_block {     // -> 0x500000
+	struct f2fs_sit_entry entries[SIT_ENTRY_PER_BLOCK];                     // 4K/sizeof(f2fs_sit_entry)
 } __packed;
 
 /*
@@ -479,20 +490,20 @@ typedef __le32	f2fs_hash_t;
 
 /* One directory entry slot representing F2FS_SLOT_LEN-sized file name */
 struct f2fs_dir_entry {
-	__le32 hash_code;	/* hash code of file name */
-	__le32 ino;		/* inode number */
-	__le16 name_len;	/* lengh of file name */
-	__u8 file_type;		/* file type */
+	__le32 hash_code;	/* hash code of file name */                    // 4    4
+	__le32 ino;		/* inode number */                                  // 4    8
+	__le16 name_len;	/* lengh of file name */                        // 2    10
+	__u8 file_type;		/* file type */                                 // 1    11
 } __packed;
 
 /* 4KB-sized directory entry block */
 struct f2fs_dentry_block {
 	/* validity bitmap for directory entries in each block */
-	__u8 dentry_bitmap[SIZE_OF_DENTRY_BITMAP];
-	__u8 reserved[SIZE_OF_RESERVED];
-	struct f2fs_dir_entry dentry[NR_DENTRY_IN_BLOCK];
-	__u8 filename[NR_DENTRY_IN_BLOCK][F2FS_SLOT_LEN];
-} __packed;
+	__u8 dentry_bitmap[SIZE_OF_DENTRY_BITMAP];                          // 27       27
+	__u8 reserved[SIZE_OF_RESERVED];                                    // 3        30
+	struct f2fs_dir_entry dentry[NR_DENTRY_IN_BLOCK];                   // 2354     2384
+	__u8 filename[NR_DENTRY_IN_BLOCK][F2FS_SLOT_LEN];                   // 1712     4096
+} __packed;                                             
 
 /* for inline dir */
 #define NR_INLINE_DENTRY	(MAX_INLINE_DATA * BITS_PER_BYTE / \

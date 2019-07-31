@@ -658,9 +658,12 @@ struct f2fs_sm_info {
 
 	unsigned int segment_count;	/* total # of segments */
 	unsigned int main_segments;	/* # of segments in main area */
+    // node, data 영역내의 segment 수
 	unsigned int reserved_segments;	/* # of reserved segments */
+    // reserved segment 의 수 
+    // reserved segment 에는 뭐가 있나?
 	unsigned int ovp_segments;	/* # of overprovision segments */
-
+    // overprovision 용도 segment 수
 	/* a threshold to reclaim prefree segments */
 	unsigned int rec_prefree_segments;
 

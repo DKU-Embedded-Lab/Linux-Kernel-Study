@@ -24,15 +24,20 @@
 
 struct f2fs_gc_kthread {
 	struct task_struct *f2fs_gc_task;
+    // gc 수행하는 thread 
 	wait_queue_head_t gc_wait_queue_head;
-
+    // GC job wait-queue
 	/* for gc sleep time */
 	unsigned int min_sleep_time;
 	unsigned int max_sleep_time;
 	unsigned int no_gc_sleep_time;
+    // gc 를 일정시간 쉬었다가 다시 해주어야 될경우? 어떨때 사용?
 
 	/* for changing gc mode */
 	unsigned int gc_idle;
+    // gc_mode 를 나타냄 
+    //  - 1 면 GC_CB
+    //  - 2 면 GC_GREEDY
 };
 
 struct gc_inode_list {

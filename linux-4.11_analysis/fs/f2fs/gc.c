@@ -23,6 +23,7 @@
 #include "gc.h"
 #include <trace/events/f2fs.h>
 
+// GC 핵심 함수
 static int gc_thread_func(void *data)
 {
 	struct f2fs_sb_info *sbi = data;
@@ -36,7 +37,7 @@ static int gc_thread_func(void *data)
 		if (try_to_freeze())
 			continue;
 		else
-			wait_event_interruptible_timeout(*wq,
+	wait_event_interruptible_timeout(*wq,
 						kthread_should_stop(),
 						msecs_to_jiffies(wait_ms));
 		if (kthread_should_stop())
@@ -53,6 +54,7 @@ static int gc_thread_func(void *data)
 			f2fs_stop_checkpoint(sbi, false);
 		}
 #endif
+        // F2Fs fault injection 이란?
 
 		/*
 		 * [GC triggering condition]
@@ -67,8 +69,14 @@ static int gc_thread_func(void *data)
 		 * invalidated soon after by user update or deletion.
 		 * So, I'd like to wait some time to collect dirty segments.
 		 */
+        // gc 동작 조건 
+        //  1. 현재 GC가 수행중이지 않아야 함. 
+        //  - dirty segment 가 충분히 있어야 함.
+        //  - IO device 가 idle 상태여야 함.
+
 		if (!mutex_trylock(&sbi->gc_mutex))
 			continue;
+            // 1. gc_mutex 가 잡혀 있어 GC가 수행중이라면 종료 
 
 		if (!is_idle(sbi)) {
 			increase_sleep_time(gc_th, &wait_ms);
@@ -110,15 +118,19 @@ int start_gc_thread(struct f2fs_sb_info *sbi)
 	}
 
 	gc_th->min_sleep_time = DEF_GC_THREAD_MIN_SLEEP_TIME;
+    // gc thread 최소 sleep 시간으로 30 초(30000 ms)
 	gc_th->max_sleep_time = DEF_GC_THREAD_MAX_SLEEP_TIME;
+    // gc thread 최대 sleep 시간으로 60 초(60000 ms) 
 	gc_th->no_gc_sleep_time = DEF_GC_THREAD_NOGC_SLEEP_TIME;
 
 	gc_th->gc_idle = 0;
-
+    // gc 모드 설정 
+    //  - 0 이면 뭐임?
 	sbi->gc_thread = gc_th;
 	init_waitqueue_head(&sbi->gc_thread->gc_wait_queue_head);
 	sbi->gc_thread->f2fs_gc_task = kthread_run(gc_thread_func, sbi,
 			"f2fs_gc-%u:%u", MAJOR(dev), MINOR(dev));
+    // gc_thread_func 작업 수행하는 thread 생성
 	if (IS_ERR(gc_th->f2fs_gc_task)) {
 		err = PTR_ERR(gc_th->f2fs_gc_task);
 		kfree(gc_th);
@@ -1005,10 +1017,14 @@ void build_gc_manager(struct f2fs_sb_info *sbi)
 
 	/* threshold of # of valid blocks in a section for victims of FG_GC */
 	main_count = SM_I(sbi)->main_segments << sbi->log_blocks_per_seg;
+    // ndoe, data 영역에 있는 block 의 총 수 
+    // section > segment > block
 	resv_count = SM_I(sbi)->reserved_segments << sbi->log_blocks_per_seg;
+    // reserved block 의 수
 	ovp_count = SM_I(sbi)->ovp_segments << sbi->log_blocks_per_seg;
+    // overprovision 영역의 block 수
 	blocks_per_sec = sbi->blocks_per_seg * sbi->segs_per_sec;
-
+    // section 당 block 의 수
 	sbi->fggc_threshold = div64_u64((main_count - ovp_count) * blocks_per_sec,
 					(main_count - resv_count));
 }
